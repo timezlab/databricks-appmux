@@ -1,0 +1,4 @@
+command: ["node", "server.js"]
+env:
+  - name: APP_GREETING
+    value: "Hello from node-stream"

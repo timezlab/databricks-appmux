@@ -1,21 +1,24 @@
 # Example child apps
 
-Three small apps, each a **standard Databricks App** (`app.yaml`, source, `requirements.txt`),
-written in different stacks so you can register them in appmux by hand, once as an **app admin**
-(register, update, roll back, change config, share) and once as an **end user** (open `/<slug>/`).
+Four small apps, each a **standard Databricks App** (`app.yaml` and source, plus `requirements.txt`
+for the Python ones), written in different stacks so you can register them in appmux by hand, once
+as an **app admin** (register, update, roll back, change config, share) and once as an **end user**
+(open `/<slug>/`).
 
 Nothing in these folders knows about appmux, knows its slug, or needs a change to `app.yaml` or
 source to be hosted by it ([constitution I](../.specify/memory/constitution.md)). Each one also runs
 on a standalone Databricks App unchanged. They exist for hand testing; they are not part of the
 product, they are not shipped in the deploy folder (`scripts/assemble-deploy.sh` copies an
-allow-list that does not include `examples/`), and the Python gate does not run them (it does lint
-them).
+allow-list that does not include `examples/`), and the Python gate does not run them (it lints the
+three Python apps; the Node app is checked by hand).
 
-> **Verification status.** Run **locally only**, in a scratch virtual environment whose versions
-> match the Apps environment recorded in [design 5.3](../docs/product/v1-design.md) (fastapi 0.115.0,
-> uvicorn 0.30.6, flask 3.0.3, gunicorn 23.0.0, streamlit 1.38.0), on Python 3.12 (the Apps
-> environment is 3.11). They have **not** been run in the appmux container, registered on any appmux
-> instance, or uploaded to a workspace. What the local runs showed is in
+> **Verification status.** Run **locally only**. The Python apps ran in a scratch virtual
+> environment whose versions match the Apps environment recorded in
+> [design 5.3](../docs/product/v1-design.md) (fastapi 0.115.0, uvicorn 0.30.6, flask 3.0.3,
+> gunicorn 23.0.0, streamlit 1.38.0), on Python 3.12 (the Apps environment is 3.11). The Node app
+> ran on Node v24.12.0 (the Apps environment has Node 22) and has no dependency. None has been run in
+> the appmux container, registered on any appmux instance, or uploaded to a workspace. What the
+> local runs showed is in
 > [What was verified](#what-was-verified); the rest of the behaviour described below (cookie `Path`
 > rewrite, `Location` rewrite, WebSocket relay, the token header) is what the design says appmux does,
 > not something observed.
@@ -27,6 +30,7 @@ them).
 | [fastapi-notes](fastapi-notes/README.md) | FastAPI on uvicorn (async API) | `python -m uvicorn app:app` | `notes` / 128 MB | JSON identity, in-memory notes that reset on restart, `/openapi.json` carrying the prefix |
 | [flask-session](flask-session/README.md) | Flask on gunicorn (sync WSGI, server-rendered forms) | `python -m gunicorn --workers 1 --threads 4 app:app` | `session` / 128 MB | a session cookie and a form redirect, which are the two things appmux rewrites on a response |
 | [streamlit-inspector](streamlit-inspector/README.md) | Streamlit (reactive UI over a WebSocket) | `streamlit run app.py` | `inspector` / 512 MB | the WebSocket relay carrying the identity headers, per-session state |
+| [node-stream](node-stream/README.md) | Node, `node:http` only, no dependency | `node server.js` | `stream` / **768 MB** | the Node runtime, a Server-Sent Events stream that stays open, relative asset and stream URLs under the prefix |
 
 Every app listens on the port appmux gives it (`8000` in this repo's setup; locally you pick it), and
 every app shows the same three things so you can tell a release from a config change:
@@ -39,18 +43,23 @@ every app shows the same three things so you can tell a release from a config ch
 - **health**: `GET /` answers 200 (appmux's default health path) and each app has its own
   health URL (`/healthz`, or `/_stcore/health` for Streamlit).
 
-Why these three: FastAPI is the framework appmux's own fixtures and docs lean on, so it is the
+Why these four: FastAPI is the framework appmux's own fixtures and docs lean on, so it is the
 baseline; Flask on gunicorn is the synchronous WSGI path and gives the cookie and redirect rewrite
 something to act on; Streamlit is the app that needs a long-lived WebSocket and relative asset
-paths, the hardest ordinary case. Not included, and why: a Node app (appmux has a Node fixture at
-[tests/fixtures/node_app](../tests/fixtures/node_app), and a Node app with dependencies needs
-`index` mode, which v1 does not ship an offline cache for), and Dash or Gradio (they would exercise
-the framework prefix variables appmux sets, `DASH_*` and `GRADIO_ROOT_PATH`; they are the natural
-next examples). Both omissions are easy to reverse.
+paths, the hardest ordinary case; the Node app is the only one on the Node runtime and the only one
+that holds a plain HTTP response open (Server-Sent Events). It uses Node's own `http` module because
+v1 has no `npm install` step, so a Node app with dependencies is not something this release can host
+([research D8](../specs/001-appmux-v1/research.md); appmux's Node fixture is
+[tests/fixtures/node_app](../tests/fixtures/node_app)), and it needs a **768 MB budget**, not the
+128 MB of the small Python apps, because V8 does not start under about 1.1 GB of address space (see
+its README). Not included, and why: Dash and Gradio (they would exercise the framework prefix
+variables appmux sets, `DASH_*` and `GRADIO_ROOT_PATH`; they are the natural next examples). The
+omission is easy to reverse.
 
-Packages: every requirement is already in the Apps environment, so no wheel folder, index or
+Packages: every Python requirement is already in the Apps environment, so no wheel folder, index or
 `wheel_sources` is needed ([design 5.3](../docs/product/v1-design.md)). The `requirements.txt` files
-use lower bounds, not `==` pins, so the environment's version satisfies them.
+use lower bounds, not `==` pins, so the environment's version satisfies them. The Node app has no
+dependency and no `requirements.txt` (that file would make appmux treat it as Python).
 
 No example uses a resource or a secret, and none calls an API with the visitor's token. A resource
 example needs an object in your workspace and exact attach steps that have not been run in the
@@ -91,7 +100,8 @@ python3 -m venv /tmp/appmux-examples-venv      # outside examples/: import-dir u
 ```
 
 Then the commands in each app's README. Use `PYTHONDONTWRITEBYTECODE=1` as they show, or delete any
-`__pycache__` before you upload: it would land in your workspace folder.
+`__pycache__` before you upload: it would land in your workspace folder. `node-stream` needs no
+virtual environment, only Node 22 or later ([its README](node-stream/README.md#run-it-locally)).
 
 ## Admin walkthrough, in order
 
@@ -133,12 +143,12 @@ reason and changes nothing for a running release.
 **4. Open it.** `https://<your-appmux-url>/<slug>/`, with the trailing slash. The launcher's
 **Open** button goes there.
 
-**5. Update again: release 2.** Edit `VERSION` in `app.py` (`"1.0.0"` to `"2.0.0"`), run the
+**5. Update again: release 2.** Edit `VERSION` in `app.py` (`server.js` for the Node app; `"1.0.0"` to `"2.0.0"`), run the
 `import-dir` command from step 1 again, press **Update**. Release 2 starts beside release 1 on a
 private route, must pass the health check, and only then does the route swap; release 1 drains. Keep
 `/<slug>/` open in a tab and reload it through the update: it should never error. The page then shows
 `2.0.0`, and anything the app kept in memory (notes, the visit counter, the Flask session key, the
-Streamlit session count) is gone, because a new process replaced the old one. Pressing **Update**
+Streamlit session count, the Node stream count) is gone, because a new process replaced the old one. Pressing **Update**
 with no change to the folder answers "already up to date" and creates no release.
 
 **6. Roll back.** On **Releases**, press **Activate** on release 1. It goes through the same
@@ -180,7 +190,7 @@ in-memory state resets, with no change of release.
 
 ### OBO, optional
 
-All three apps report whether `X-Forwarded-Access-Token` arrives. appmux passes it only for an app a
+All four apps report whether `X-Forwarded-Access-Token` arrives. appmux passes it only for an app a
 platform admin has delegated OBO to, and only to an allowed visitor ([design 7.1](../docs/product/v1-design.md)).
 By default it is **absent**. To see it **present**, a platform admin delegates OBO with a reason
 (takes effect at the app's next start), using the same `API`, `SLUG` and `TOKEN` as above:
@@ -216,16 +226,18 @@ Open `https://<your-appmux-url>/_appmux/` (or `/`): the launcher lists the apps 
 7. While the admin presses **Stop**, `/<slug>/` shows a status page instead of the app; after
    **Start** it serves again.
 8. The per-app checks in each README: cookie and redirect (Flask), notes and OpenAPI (FastAPI),
-   live widgets (Streamlit).
+   live widgets (Streamlit), the 15 second stream (Node).
 
 ## What was verified
 
 Run on 2026-11-01, locally, from this folder, with the environment variables appmux sets
-(`UVICORN_*`, `PORT`, `STREAMLIT_SERVER_*`, `APPMUX_BASE_PATH`):
+(`UVICORN_*`, `PORT`, `STREAMLIT_SERVER_*`, `DATABRICKS_APP_PORT`, `APPMUX_BASE_PATH`):
 
-- `ruff format --check` and `ruff check` pass on all three `app.py` files.
-- appmux's own `read_manifest` reads each `app.yaml` (runtime `python`, no warnings) and its
-  requirements check finds every `requirements.txt` line satisfied by the environment.
+- `ruff format --check` and `ruff check` pass on all three `app.py` files. The Node app has no
+  linter or formatter run over it; `node --check server.js` passes.
+- appmux's own `read_manifest` reads each `app.yaml` (runtime `python` for the three Python apps and
+  `node` for `node-stream`, no warnings) and its requirements check finds every `requirements.txt`
+  line satisfied by the environment.
 - **fastapi-notes**: pages and JSON answered with and without identity headers; the token header is
   reported as present and its value never appears; notes are stored, HTML-escaped, and refused with
   `409` at 50; `/openapi.json` lists the prefix under `UVICORN_ROOT_PATH`.
@@ -237,13 +249,25 @@ Run on 2026-11-01, locally, from this folder, with the environment variables app
   paths; in headless Chromium with identity headers on every request, the WebSocket opened, the
   headers showed up in the page, two button clicks and a typed echo worked, and a second session
   raised the session count.
+- **node-stream** (Node v24.12.0, under an address-space limit of 1,536 MB): pages and JSON answered
+  with and without identity headers; the token header is reported as present and its value never
+  appears in any response; the email header and the greeting are HTML-escaped; unknown paths answer
+  `404` and other methods `405` with `Allow: GET`; `/events` sends 15 ticks and `event: done`; with a
+  hook that counts `setInterval` calls, one timer is live while a stream is open and none after the
+  client leaves; `SIGTERM` with a stream open ended the process in about 0.1 s (and exits 0 without
+  one); a missing or invalid `DATABRICKS_APP_PORT` exits 1 with a message; `npm run start` serves.
+  In headless Chromium, behind a throwaway proxy that strips `/stream` and adds
+  `X-Forwarded-Prefix`, the page's script ran from `/stream/`: 15 ticks, `stream finished`, the
+  button locked and then unlocked again, no failed request. That proxy is not appmux.
 - Peak memory over the process tree, and a start under `RLIMIT_AS` of 2 x the budget (the
   sandbox's factor, [watchdog](../src/appmux/sandbox/watchdog.py)): fastapi-notes peaked at 53 MB
   virtual and 41 MB resident, flask-session at 177 MB and 30 MB, streamlit-inspector at 562 MB and
   47 MB. All three started and answered under their suggested budgets (the fastapi and flask apps also
   under 64 MB). Streamlit also started under 256 MB, at 498 MB of its 512 MB limit, so 256 MB is its
-  floor and the suggested 512 MB leaves room for more sessions. These are workstation numbers, not
-  container numbers.
+  floor and the suggested 512 MB leaves room for more sessions. node-stream peaked at 1.4 GB virtual
+  and 50 MB resident; it started at a limit of 1,120 MB and **did not start at 1,100 MB or below**
+  (`Failed to reserve virtual memory for CodeRange`), so a budget of 512 MB (limit 1,024 MB) fails and
+  the suggested 768 MB is the tested one. These are workstation numbers, not container numbers.
 
 ## What was not verified
 
@@ -251,5 +275,9 @@ Not run in the appmux container, and not run behind the appmux edge at all: the 
 rewrite of `Set-Cookie`, the `Location` rewrite, the WebSocket relay carrying Streamlit, the
 `X-Forwarded-Access-Token` header in either open mode, the health-gated swap with these apps, and
 every UI label above as rendered (they are quoted from the web source and the admin API contract).
+For `node-stream` also: Node 22 itself (it ran on v24.12.0 and uses no API newer than 22, which is a
+reading, not a run), the Server-Sent Events stream through the edge (its 120 second, 100 MB and 64
+concurrent limits, and any buffering), what happens to a stream that is open during an Update or a
+Restart, and the release failing to start under a 512 MB budget (shown here only as a local `ulimit`).
 `import-dir`, Register, Update and the config call have not been run against a workspace. If
 something here disagrees with what you see, trust what you see and correct this file.

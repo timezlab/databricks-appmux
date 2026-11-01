@@ -1,0 +1,12 @@
+{
+  "name": "node-stream",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An appmux example child app: Node's own http module, no dependency. See server.js.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
