@@ -1,0 +1,154 @@
+/**
+ * What the app page says about the app as a whole, derived from the fields of
+ * `AppDetail` and nothing else: which release serves, which one is the target
+ * and what went wrong with it. The notices are plain data; the page draws them.
+ */
+import type { AppDetail, ReleaseSummary } from "@/lib/api";
+import { isReleaseInProgress } from "./actions";
+import { pluralize } from "@/lib/format";
+import { releaseStatusPresentation } from "@/lib/status-presentation";
+import type { Tone } from "@/lib/status-presentation";
+
+// ---------------------------------------------------------------- releases
+
+export function activeRelease(app: AppDetail): ReleaseSummary | null {
+  return app.releases.find((release) => release.status === "active") ?? null;
+}
+
+/** The release being built or started on its way to active, if any. */
+export function inProgressRelease(app: AppDetail): ReleaseSummary | null {
+  return (
+    app.releases.find((release) => isReleaseInProgress(release.status)) ?? null
+  );
+}
+
+/** A target that failed: the app keeps the previous active release, or has none. */
+export function failedTargetRelease(app: AppDetail): ReleaseSummary | null {
+  return (
+    app.releases.find(
+      (release) => release.is_target && release.status === "failed",
+    ) ?? null
+  );
+}
+
+export function releasesNewestFirst(
+  releases: readonly ReleaseSummary[],
+): ReleaseSummary[] {
+  return releases.toSorted((a, b) => b.release_no - a.release_no);
+}
+
+/** Small words beside a release's status. The active release is the target by definition, so it needs no mark. */
+export function releaseMarkers(release: ReleaseSummary): string[] {
+  return release.is_target && release.status !== "active" ? ["target"] : [];
+}
+
+/** The lock column: a hand lock names who set it; the active release is protected with no mark. */
+export function releaseLockLabel(release: ReleaseSummary): string | null {
+  if (release.locked_by !== null) return `Locked by ${release.locked_by}`;
+  if (release.status === "active") return "Protected while active";
+  return null;
+}
+
+/**
+ * A poll can remove the release a panel is open on (someone deleted it). The
+ * selection survives only while the release is still in the list.
+ */
+export function reconcileSelection(
+  selectedReleaseNo: number | null,
+  releases: readonly ReleaseSummary[],
+): number | null {
+  if (selectedReleaseNo === null) return null;
+  return releases.some((release) => release.release_no === selectedReleaseNo)
+    ? selectedReleaseNo
+    : null;
+}
+
+// ----------------------------------------------------------------- notices
+
+export interface StatusNotice {
+  /** Stable, for the React key and for tests. */
+  id: string;
+  tone: Tone;
+  title: string;
+  detail: string | null;
+}
+
+/** Most urgent first. A healthy, current app has none. */
+export function statusNotices(app: AppDetail): StatusNotice[] {
+  const notices: StatusNotice[] = [];
+  const active = activeRelease(app);
+
+  if (app.state === "crashed") {
+    notices.push({
+      id: "crashed",
+      tone: "danger",
+      title: "The app crashed",
+      detail:
+        "It stopped after repeated crashes and its route answers 503. Restart it once the cause is fixed, or activate a different release.",
+    });
+  }
+
+  if (app.restart_to_apply) {
+    notices.push({
+      id: "restart-to-apply",
+      tone: "warning",
+      title: "Restart to apply the resource changes",
+      detail:
+        "Resources changed since the app last started; the running process still has the old ones.",
+    });
+  }
+
+  const failedTarget = failedTargetRelease(app);
+  if (failedTarget !== null) {
+    const reason = failedTarget.status_reason ?? "no reason was recorded";
+    const serving =
+      active === null
+        ? "No release is serving."
+        : `Release ${active.release_no} keeps serving.`;
+    notices.push({
+      id: "failed-target",
+      tone: "warning",
+      title: `Release ${failedTarget.release_no} failed`,
+      detail: `${reason}. ${serving}`,
+    });
+  }
+
+  const inProgress = inProgressRelease(app);
+  if (inProgress !== null) {
+    const status = releaseStatusPresentation(inProgress.status).label;
+    notices.push({
+      id: "in-progress",
+      tone: "info",
+      title: `Release ${inProgress.release_no} is ${status.toLowerCase()}`,
+      detail:
+        active === null
+          ? "The route opens once its health check passes."
+          : `Release ${active.release_no} keeps serving until the new release is healthy.`,
+    });
+  }
+
+  if (app.releases.length === 0) {
+    notices.push({
+      id: "no-release",
+      tone: "info",
+      title: "There is no release yet",
+      detail:
+        "Press Update to fetch the source folder and build the first release.",
+    });
+  }
+
+  const missingCount = app.requirements.items.filter(
+    (requirement) => requirement.state === "missing",
+  ).length;
+  if (missingCount > 0) {
+    const noun = pluralize(missingCount, "requirement");
+    notices.push({
+      id: "requirements-missing",
+      tone: "warning",
+      title: `${noun} ${missingCount === 1 ? "is" : "are"} missing`,
+      detail: "Attach a resource for each one in the Requirements panel.",
+    });
+  }
+
+  return notices;
+}

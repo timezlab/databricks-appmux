@@ -1,0 +1,318 @@
+/*
+ * appmux admin UI: Tailwind v4 theme, shadcn semantic tokens and base styles.
+ *
+ * Rules this file keeps (tests/contract/contrast.test.ts checks the first two,
+ * tests/export/*.test.ts the third on the built CSS and HTML):
+ *  - Every colour is a plain #rrggbb custom property in the `:root` block below
+ *    and is overridden in the dark block, so the contrast test can compute each
+ *    pair. Text pairs must reach 4.5:1, control borders, the focus ring and
+ *    chart series 3:1. No oklch(), no alpha, and no opacity modifier on a
+ *    colour utility (a slash and a number after the colour name): the test
+ *    could not see the result. Hover colours are tokens of their own
+ *    (`primary-hover`).
+ *  - Tailwind reads class names out of every file it scans, comments included,
+ *    so the `source()` below keeps it to `src/` and a banned example written
+ *    in a comment there would still be emitted as CSS.
+ *  - The only `@import`s are the two named below; Tailwind inlines both when it
+ *    builds, so the shipped CSS has none. Nothing else is fetched: no url(),
+ *    no @font-face, no remote address. The edge serves the page under a strict
+ *    CSP (spike 19: style-src, img-src and font-src are 'self'), and the system
+ *    font stack needs no download. For the same reason no component sets a
+ *    style attribute or injects a <style> element.
+ *  - Dark mode follows the operating system (prefers-color-scheme). There is
+ *    no theme switch: it would need an inline script, which the CSP would
+ *    allow only by its hash.
+ *  - Colour is never the only signal: tones come with a word, a mark or a shape.
+ */
+
+@import "tailwindcss" source("..");
+@import "tw-animate-css";
+
+/* `dark:` follows the OS, like the token overrides below. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+/* ----------------------------------------------------------------- theme
+   `--color-*`, `--text-*` and `--font-*` are wiped and declared again in full,
+   so Tailwind's default colours and its largest type sizes do not exist: the
+   palette is the semantic tokens further down, and nothing else can be
+   painted. The type scale is re-declared because every shadcn component uses
+   `text-xs` and `text-sm`. */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --font-*: initial;
+
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 1.25;
+}
+
+/* ---------------------------------------------------------------- tokens
+   shadcn's names, plus what appmux needs and shadcn lacks: a hover colour for
+   the filled buttons, `link`, the five tones (text on its tint, and the border
+   that frames it), six chart series, `brand` and the three `chrome` colours of
+   the header band.
+
+   `brand` is the Databricks red of the official logo (#ff3621, from the icon
+   on databricks.com's press kit). White on it is only 3.6:1, so it paints the
+   logo, the selected-tab bar, the focus ring and other large or non-text
+   marks; `primary` (filled buttons, with white or near-black text) and `link`
+   (text) are darker shades of the same hue in light mode, and carry the 4.5:1
+   text pairs. Red is also the colour of danger, so a destructive control never
+   relies on hue: it is outlined until confirmed, asks a question in a framed
+   notice, and says what it deletes. */
+:root {
+  color-scheme: light dark;
+
+  --background: #ffffff;
+  --foreground: #1b1f27;
+  --card: #f5f6f8;
+  --card-foreground: #1b1f27;
+  --popover: #ffffff;
+  --popover-foreground: #1b1f27;
+  --brand: #ff3621;
+  --primary: #cf2914;
+  --primary-hover: #b81f0d;
+  --primary-foreground: #ffffff;
+  --secondary: #eceef2;
+  --secondary-foreground: #1b1f27;
+  --muted: #eceef2;
+  --muted-foreground: #4a5262;
+  --accent: #e2e6ec;
+  --accent-foreground: #1b1f27;
+  --destructive: #b3261e;
+  --destructive-hover: #8f1d17;
+  --destructive-foreground: #ffffff;
+  --border: #d3d7de;
+  --input: #6a7383;
+  --ring: #ff3621;
+  --link: #c42410;
+
+  --chrome: #1b1f27;
+  --chrome-foreground: #ffffff;
+  --chrome-muted: #c5cbd6;
+
+  --tone-neutral-text: #3b4352;
+  --tone-neutral-bg: #eceef2;
+  --tone-neutral-border: #6a7383;
+  --tone-info-text: #0a4a96;
+  --tone-info-bg: #e5effc;
+  --tone-info-border: #2f6fc4;
+  --tone-success-text: #14532d;
+  --tone-success-bg: #e0f4e8;
+  --tone-success-border: #2a7d4f;
+  --tone-warning-text: #6b3a00;
+  --tone-warning-bg: #fdf0d5;
+  --tone-warning-border: #a85f00;
+  --tone-danger-text: #8c1d18;
+  --tone-danger-bg: #fde8e7;
+  --tone-danger-border: #b3261e;
+
+  --chart-1: #0a58b5;
+  --chart-2: #c2410c;
+  --chart-3: #15803d;
+  --chart-4: #7e22ce;
+  --chart-5: #946200;
+  --chart-6: #be185d;
+
+  /* Not a colour: the dark block does not repeat it. */
+  --radius: 0.375rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #101319;
+    --foreground: #e7e9ee;
+    --card: #1a1e26;
+    --card-foreground: #e7e9ee;
+    --popover: #1a1e26;
+    --popover-foreground: #e7e9ee;
+    --brand: #ff3621;
+    --primary: #ff3621;
+    --primary-hover: #ff5a45;
+    --primary-foreground: #1b0503;
+    --secondary: #2a303b;
+    --secondary-foreground: #e7e9ee;
+    --muted: #2a303b;
+    --muted-foreground: #a9b1bf;
+    --accent: #343b47;
+    --accent-foreground: #e7e9ee;
+    --destructive: #ff8077;
+    --destructive-hover: #ffa099;
+    --destructive-foreground: #2a0705;
+    --border: #343b47;
+    --input: #8892a3;
+    --ring: #ff3621;
+    --link: #ff8a7a;
+
+    --chrome: #0a0c10;
+    --chrome-foreground: #f2f4f8;
+    --chrome-muted: #b4bcc9;
+
+    --tone-neutral-text: #d5dae3;
+    --tone-neutral-bg: #2a303b;
+    --tone-neutral-border: #8892a3;
+    --tone-info-text: #b4d3ff;
+    --tone-info-bg: #15305a;
+    --tone-info-border: #6ea3f0;
+    --tone-success-text: #a8e6bf;
+    --tone-success-bg: #11382a;
+    --tone-success-border: #4fb37d;
+    --tone-warning-text: #f4d58a;
+    --tone-warning-bg: #46310a;
+    --tone-warning-border: #d8962f;
+    --tone-danger-text: #ffbab4;
+    --tone-danger-bg: #55191a;
+    --tone-danger-border: #ff8077;
+
+    --chart-1: #8bb8ff;
+    --chart-2: #ff9a6c;
+    --chart-3: #5fd08a;
+    --chart-4: #c79bff;
+    --chart-5: #e5b94a;
+    --chart-6: #ff8fb8;
+  }
+}
+
+/* `inline` makes `bg-background` read `var(--background)` at the point of use,
+   so the dark block above changes every utility without a second stylesheet. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-brand: var(--brand);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-link: var(--link);
+  --color-chrome: var(--chrome);
+  --color-chrome-foreground: var(--chrome-foreground);
+  --color-chrome-muted: var(--chrome-muted);
+
+  --color-tone-neutral-text: var(--tone-neutral-text);
+  --color-tone-neutral-bg: var(--tone-neutral-bg);
+  --color-tone-neutral-border: var(--tone-neutral-border);
+  --color-tone-info-text: var(--tone-info-text);
+  --color-tone-info-bg: var(--tone-info-bg);
+  --color-tone-info-border: var(--tone-info-border);
+  --color-tone-success-text: var(--tone-success-text);
+  --color-tone-success-bg: var(--tone-success-bg);
+  --color-tone-success-border: var(--tone-success-border);
+  --color-tone-warning-text: var(--tone-warning-text);
+  --color-tone-warning-bg: var(--tone-warning-bg);
+  --color-tone-warning-border: var(--tone-warning-border);
+  --color-tone-danger-text: var(--tone-danger-text);
+  --color-tone-danger-bg: var(--tone-danger-bg);
+  --color-tone-danger-border: var(--tone-danger-border);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ------------------------------------------------------------------ base
+   Element defaults for markup that is not a component yet (a heading, a link,
+   a code block). Components bring their own classes, which win over these. */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    @apply bg-background font-sans text-base text-foreground;
+  }
+
+  h1 {
+    @apply text-2xl font-bold sm:text-3xl;
+  }
+
+  h2 {
+    @apply text-xl font-bold;
+  }
+
+  h3 {
+    @apply text-lg font-bold;
+  }
+
+  a {
+    @apply text-link underline underline-offset-[0.15em] hover:decoration-2;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    @apply font-mono;
+    font-size: 0.9em;
+  }
+
+  pre {
+    @apply overflow-x-auto rounded-md border bg-card p-3;
+  }
+
+  fieldset {
+    @apply rounded-md border px-4 py-3;
+  }
+
+  legend {
+    @apply px-1 font-semibold;
+  }
+
+  /* An outline, not a box-shadow ring: it stays visible in forced-colors mode. */
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Whatever a component forgot to guard with `motion-reduce:`. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

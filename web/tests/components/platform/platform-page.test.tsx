@@ -1,0 +1,145 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as ApiModule from "@/lib/api";
+
+import { PlatformPage } from "@/components/platform/platform-page";
+import { ApiError, getMe, getPlatform, listRequests } from "@/lib/api";
+import type { MeResponse } from "@/lib/api";
+import { platformView } from "./shell-fixtures";
+
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiModule>()),
+  getMe: vi.fn(),
+  getPlatform: vi.fn(),
+  listRequests: vi.fn(),
+}));
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  // A poll that never answers: the page stays in its loading state.
+  vi.mocked(getPlatform).mockReturnValue(new Promise(() => undefined));
+  vi.mocked(listRequests).mockReturnValue(new Promise(() => undefined));
+});
+
+function me(isPlatformAdmin: boolean): MeResponse {
+  return {
+    email: "eve@example.com",
+    groups: ["data-platform"],
+    is_platform_admin: isPlatformAdmin,
+  };
+}
+
+describe("PlatformPage access", () => {
+  it("asks for nothing about the platform while it checks who is looking", () => {
+    vi.mocked(getMe).mockReturnValue(new Promise(() => undefined));
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Platform", level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Checking your access…")).toBeInTheDocument();
+    expect(getPlatform).not.toHaveBeenCalled();
+    expect(listRequests).not.toHaveBeenCalled();
+  });
+
+  it("explains to a visitor who is not a platform admin and never loads the platform", async () => {
+    vi.mocked(getMe).mockResolvedValue(me(false));
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+    expect(
+      await screen.findByText("This page is for platform admins"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("eve@example.com")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Back to the launcher" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh now" })).toBeNull();
+    expect(getPlatform).not.toHaveBeenCalled();
+    expect(listRequests).not.toHaveBeenCalled();
+  });
+
+  it("loads the platform, with the abort signal, once GET /me says admin", async () => {
+    vi.mocked(getMe).mockResolvedValue(me(true));
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+    expect(
+      await screen.findByText("Loading the platform…"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Refresh now" }),
+    ).toBeInTheDocument();
+    // Each poll hands its call the abort signal, so unmounting cancels the request.
+    for (const load of [getPlatform, listRequests]) {
+      const [options] = vi.mocked(load).mock.calls[0] ?? [];
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it("shows the tab bar and the page only once the platform has loaded, and never to a visitor who is not an admin", async () => {
+    vi.mocked(getMe).mockResolvedValue(me(true));
+    vi.mocked(getPlatform).mockResolvedValue(platformView());
+    vi.mocked(listRequests).mockResolvedValue({ items: [] });
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+    expect(
+      await screen.findByText("A page of the platform"),
+    ).toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "Platform sections" });
+    expect(
+      within(tabs)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Overview", "Apps", "Access", "Egress", "Settings"]);
+  });
+
+  it("keeps the page back from a visitor who is not an admin", async () => {
+    vi.mocked(getMe).mockResolvedValue(me(false));
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+    await screen.findByText("This page is for platform admins");
+    expect(screen.queryByText("A page of the platform")).toBeNull();
+    expect(
+      screen.queryByRole("navigation", { name: "Platform sections" }),
+    ).toBeNull();
+  });
+
+  it("fails closed when GET /me fails, and Try again asks it again", async () => {
+    vi.mocked(getMe)
+      .mockRejectedValueOnce(new ApiError(503, "unavailable", "starting up"))
+      .mockResolvedValueOnce(me(false));
+    const user = userEvent.setup();
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Could not check your access");
+    expect(getPlatform).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText("This page is for platform admins"),
+      ).toBeInTheDocument();
+    });
+    expect(getMe).toHaveBeenCalledTimes(2);
+  });
+});
