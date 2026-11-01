@@ -1,0 +1,111 @@
+{
+  "release_no": 7,
+  "status": "active",
+  "status_reason": null,
+  "status_at": "2026-10-30T09:14:00Z",
+  "name": "fix pagination",
+  "tags": [
+    "stable"
+  ],
+  "is_target": false,
+  "locked_by": null,
+  "locked_at": null,
+  "created_by": "alice@example.com",
+  "created_at": "2026-10-30T09:12:00Z",
+  "snapshot_digest": "sha256:fa9f75a9389a68a63515e2baf131a838156cd308d1e14e31777cb22381a095b1",
+  "build_log_tail": null,
+  "detected": {
+    "runtime": "python",
+    "framework": "fastapi",
+    "command": [
+      "uvicorn",
+      "app:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8000"
+    ],
+    "env": [
+      {
+        "name": "LOG_LEVEL",
+        "value": "info",
+        "value_from": null
+      },
+      {
+        "name": "OPENAI_API_KEY",
+        "value": null,
+        "value_from": "openai-api-key"
+      },
+      {
+        "name": "WAREHOUSE_ID",
+        "value": null,
+        "value_from": "sql-warehouse"
+      },
+      {
+        "name": "MLFLOW_EXPERIMENT_ID",
+        "value": null,
+        "value_from": "experiment"
+      }
+    ],
+    "bundle_resources": [
+      {
+        "key": "sql-warehouse",
+        "type": "sql_warehouse",
+        "target": "a1b2c3d4e5f67890",
+        "permission": "CAN_USE"
+      },
+      {
+        "key": "experiment",
+        "type": "mlflow_experiment",
+        "target": "456789012",
+        "permission": "CAN_EDIT"
+      },
+      {
+        "key": "openai-api-key",
+        "type": "secret",
+        "target": "sales-secrets/openai-api-key",
+        "permission": "READ"
+      },
+      {
+        "key": "forecast-model",
+        "type": "serving_endpoint",
+        "target": null,
+        "permission": "CAN_QUERY"
+      }
+    ],
+    "warnings": [
+      "app.yaml: unknown key 'resources' ignored",
+      "databricks.yml: 'permissions' and 'user_api_scopes' ignored",
+      "databricks.yml: resource 'forecast-model' has no value yet (${var.endpoint}); fill it in when attaching"
+    ]
+  },
+  "config": {
+    "env": [
+      {
+        "name": "LOG_LEVEL",
+        "value": "info",
+        "value_from": null
+      },
+      {
+        "name": "WAREHOUSE",
+        "value": null,
+        "value_from": "sql-warehouse"
+      }
+    ],
+    "wheel_sources": [
+      "/Workspace/Users/alice@example.com/wheels/sales"
+    ]
+  },
+  "wheels": [
+    {
+      "sha256": "2936a23ef94b6c3167594e0113e842e379b7819f43f24353bf0a235aeb7785c7",
+      "filename": "fastapi-0.115.0-py3-none-any.whl",
+      "source": "/Workspace/Users/alice@example.com/wheels/sales"
+    },
+    {
+      "sha256": "2cab5aa1780c81b00d5de4aba559b8c65d14d4114178103674d8dbf2417fdc62",
+      "filename": "pydantic_core-2.23.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "source": "/Workspace/Shared/appmux/wheelhouse"
+    }
+  ]
+}

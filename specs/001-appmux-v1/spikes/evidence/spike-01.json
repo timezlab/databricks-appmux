@@ -1,0 +1,77 @@
+{
+ "date": "2026-10-30",
+ "workspace": "Free Edition only (<workspace-host>); Lakebase project appmux-spike-1 (<lakebase-host>), database databricks_postgres",
+ "caller": "the owner's token as the Databricks Apps proxy forwards it in X-Forwarded-Access-Token (JWT, about 1000 characters, lifetime 3047-3386 s, claim client_id databricks-cli because the request carried the CLI's bearer); login user = the owner's own OAuth Postgres role (masked)",
+ "setup": [
+  "CREATE ROLE appmux_platform_writers NOLOGIN; CREATE ROLE appmux_spike1_owner NOLOGIN",
+  "tables public.spike1_apps and public.spike1_other owned by appmux_spike1_owner; GRANT INSERT ON spike1_apps TO appmux_platform_writers (nothing on spike1_other)",
+  "before isolation the owner's role held inherit-memberships of both new roles and of databricks_superuser: has_table_privilege INSERT true on both tables and a direct INSERT worked",
+  "REVOKE both new roles FROM the owner's role: has_table_privilege false on both tables and a direct INSERT refused (42501); this is the starting state of phase A"
+ ],
+ "matrix": [
+  {
+   "phase": "A before membership",
+   "token_scope_claim": "iam.access-control:read iam.current-user:read postgres",
+   "login": "ok, current_user = the owner's role, rolsuper false",
+   "membership": "admin option only (no inherit)",
+   "insert spike1_apps": "refused 42501",
+   "update": "refused 42501",
+   "delete": "refused 42501",
+   "insert spike1_other": "refused 42501"
+  },
+  {
+   "phase": "B after GRANT appmux_platform_writers TO the owner's role",
+   "token_scope_claim": "same",
+   "login": "ok",
+   "membership": "inherit true, set true",
+   "insert spike1_apps": "OK (1 row)",
+   "update": "refused 42501",
+   "delete": "refused 42501",
+   "insert spike1_other": "refused 42501"
+  },
+  {
+   "phase": "C user_api_scopes set to [] then app stop and start",
+   "token_scope_claim": "iam.access-control:read iam.current-user:read (no postgres; claim printed in the C2 re-run)",
+   "login": "ok, same role",
+   "membership": "inherit true",
+   "insert spike1_apps": "OK (1 row)",
+   "update": "refused 42501",
+   "delete": "refused 42501",
+   "insert spike1_other": "refused 42501"
+  },
+  {
+   "phase": "C3 controls with the C token",
+   "login": {
+    "random string": "refused: ERROR: Provided authentication token is not a valid JWT encoding",
+    "signature altered (same length, valid base64url)": "refused: ERROR: password authentication failed for user '<user>'"
+   }
+  },
+  {
+   "phase": "D after REVOKE appmux_platform_writers FROM the owner's role",
+   "token_scope_claim": "same as C",
+   "login": "ok",
+   "membership": "admin option only (no inherit)",
+   "insert spike1_apps": "refused 42501",
+   "update": "refused 42501",
+   "delete": "refused 42501",
+   "insert spike1_other": "refused 42501"
+  }
+ ],
+ "soak": {
+  "script": "scripts/spike-01/obo_soak.py, detached on the probe app; one connection opened with the token, `select 1` every 60 s for 65 min; a fresh login with the same token at the first tick after expiry + 120 s",
+  "token_lifetime_s": 3047,
+  "token_expires_at_t_plus_s": 2886,
+  "queries_on_the_open_connection": {
+   "before_expiry": 48,
+   "after_expiry": 17,
+   "failed": 0
+  },
+  "last_query_t_plus_s": 3900,
+  "seconds_past_expiry_at_last_query": 1014,
+  "fresh_login_with_the_expired_token": "refused at t+3060 s (174 s after expiry) with OperationalError, message starts `ERROR:  passwo` (the script cut the line at 100 characters; the full text was not kept)"
+ },
+ "also_seen": [
+  "an app's user_api_scopes change reaches the tokens only after the app is stopped and started; before that the proxy still issued tokens with the old scope claim (the claim read `... postgres` at 12:49 after the scopes were cleared at 12:49)",
+  "stop and start empties /tmp on the app; a redeploy keeps it"
+ ]
+}

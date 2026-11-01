@@ -1,0 +1,737 @@
+{
+ "date": "2026-10-30",
+ "runs": [
+  {
+   "build": {
+    "launcher_rc": 0,
+    "raw_tail": "",
+    "result": {
+     "bin_modes": {
+      "fastapi": "0o755",
+      "uvicorn": "0o755"
+     },
+     "bin_scripts": {
+      "fastapi": "#!/app/python/source_code/.venv/bin/python",
+      "uvicorn": "#!/app/python/source_code/.venv/bin/python"
+     },
+     "missing_hash": {
+      "rc": 1,
+      "seconds": 0.32,
+      "tail": [
+       "Looking in links: /srv/wheels",
+       "Processing /srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/no-hash.txt (line 1))",
+       "ERROR: Hashes are required in --require-hashes mode, but they are missing from some requirements. Here is a list of those requirements along with the hashes their downloaded archives actually had. Add lines like these to your requirements files to prevent tampering. (If you did not enable --require-hashes manually, note that it turns on automatically when any package has a hash.)",
+       "    fastapi==0.142.2 --hash=sha256:bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b"
+      ]
+     },
+     "negative_targets_created": [],
+     "overlay_bytes": 4036881,
+     "overlay_files": 412,
+     "overlay_pyc_files": 150,
+     "overlay_top_level": [
+      "bin",
+      "click",
+      "click-8.1.8.dist-info",
+      "fastapi",
+      "fastapi-0.142.2.dist-info",
+      "humanize",
+      "humanize-4.11.0.dist-info",
+      "starlette",
+      "starlette-1.7.0.dist-info",
+      "uvicorn",
+      "uvicorn-0.32.1.dist-info"
+     ],
+     "positive": {
+      "rc": 0,
+      "seconds": 0.68,
+      "tail": [
+       "Processing /srv/wheels/click-8.1.8-py3-none-any.whl (from -r /tmp/lock.txt (line 4))",
+       "Processing /srv/wheels/humanize-4.11.0-py3-none-any.whl (from -r /tmp/lock.txt (line 5))",
+       "Installing collected packages: uvicorn, starlette, humanize, fastapi, click",
+       "Successfully installed click-8.1.8 fastapi-0.142.2 humanize-4.11.0 starlette-1.7.0 uvicorn-0.32.1"
+      ]
+     },
+     "unpinned": {
+      "rc": 1,
+      "seconds": 0.33,
+      "tail": [
+       "Looking in links: /srv/wheels",
+       "Processing /srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/unpinned.txt (line 1))",
+       "ERROR: In --require-hashes mode, all requirements must have their versions pinned with ==. These do not:",
+       "    fastapi>=0.142.2 from file:///srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/unpinned.txt (line 1))"
+      ]
+     },
+     "wrong_hash": {
+      "rc": 1,
+      "seconds": 0.33,
+      "tail": [
+       "ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE. If you have updated the package versions, please update the hashes. Otherwise, examine the package contents carefully; someone may have tampered with them.",
+       "    fastapi==0.142.2 from file:///srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/bad-hash.txt (line 1)):",
+       "        Expected sha256 bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b000000",
+       "             Got        bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b"
+      ]
+     }
+    },
+    "stage1_failed_steps": {},
+    "stderr": ""
+   },
+   "lock": [
+    "fastapi==0.142.2",
+    "starlette==1.7.0",
+    "uvicorn==0.32.1",
+    "click==8.1.8",
+    "humanize==4.11.0"
+   ],
+   "run": "run 1",
+   "run_phase": {
+    "launcher_rc": 0,
+    "raw_tail": "",
+    "result": {
+     "environment_control": {
+      "PYTHONPATH": null,
+      "executable": "/app/python/source_code/.venv/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [16]"
+      ],
+      "seconds_to_first_response": 0.64,
+      "versions": {
+       "click": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/click/__init__.py",
+        "metadata_version": "8.4.1"
+       },
+       "fastapi": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/fastapi/__init__.py",
+        "metadata_version": "0.115.0"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "error": "ModuleNotFoundError"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/starlette/__init__.py",
+        "metadata_version": "0.38.6"
+       },
+       "uvicorn": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/uvicorn/__init__.py",
+        "metadata_version": "0.30.6"
+       }
+      }
+     },
+     "overlay_script_without_pythonpath": {
+      "PYTHONPATH": null,
+      "executable": "/srv/overlay/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [9]"
+      ],
+      "seconds_to_first_response": 0.64,
+      "versions": {
+       "click": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/click/__init__.py",
+        "metadata_version": "8.4.1"
+       },
+       "fastapi": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/fastapi/__init__.py",
+        "metadata_version": "0.115.0"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "error": "ModuleNotFoundError"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/starlette/__init__.py",
+        "metadata_version": "0.38.6"
+       },
+       "uvicorn": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/uvicorn/__init__.py",
+        "metadata_version": "0.30.6"
+       }
+      }
+     },
+     "overlay_with_pythonpath": {
+      "PYTHONPATH": "/srv/overlay",
+      "executable": "/srv/overlay/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [2]"
+      ],
+      "seconds_to_first_response": 0.64,
+      "versions": {
+       "click": {
+        "file": "/srv/overlay/click/__init__.py",
+        "metadata_version": "8.1.8"
+       },
+       "fastapi": {
+        "file": "/srv/overlay/fastapi/__init__.py",
+        "metadata_version": "0.142.2"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "file": "/srv/overlay/humanize/__init__.py",
+        "metadata_version": "4.11.0"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/srv/overlay/starlette/__init__.py",
+        "metadata_version": "1.7.0"
+       },
+       "uvicorn": {
+        "file": "/srv/overlay/uvicorn/__init__.py",
+        "metadata_version": "0.32.1"
+       }
+      }
+     },
+     "pip_check_environment_alone": {
+      "output": [
+       "No broken requirements found."
+      ],
+      "rc": 0
+     },
+     "pip_check_with_overlay": {
+      "output": [
+       "fastapi 0.142.2 has requirement opentelemetry-api>=1.44.0, but you have opentelemetry-api 1.42.1."
+      ],
+      "rc": 1
+     },
+     "uvicorn_version_from_overlay_bin": {
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Running uvicorn 0.32.1 with CPython 3.11.17 on Linux"
+     },
+     "write_checks": {
+      "append_to_overlay_module": "EROFS",
+      "new_file_in_environment_bin": "EROFS",
+      "new_file_in_environment_site_packages": "EROFS",
+      "new_file_in_overlay_bin": "EROFS",
+      "new_file_in_overlay_package_dir": "EROFS",
+      "new_file_in_overlay_root": "EROFS"
+     }
+    },
+    "stage1_failed_steps": {},
+    "stderr": ""
+   }
+  },
+  {
+   "build": {
+    "launcher_rc": 0,
+    "raw_tail": "",
+    "result": {
+     "bin_modes": {
+      "fastapi": "0o755",
+      "uvicorn": "0o755"
+     },
+     "bin_scripts": {
+      "fastapi": "#!/app/python/source_code/.venv/bin/python",
+      "uvicorn": "#!/app/python/source_code/.venv/bin/python"
+     },
+     "missing_hash": {
+      "rc": 1,
+      "seconds": 0.47,
+      "tail": [
+       "Looking in links: /srv/wheels",
+       "Processing /srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/no-hash.txt (line 1))",
+       "ERROR: Hashes are required in --require-hashes mode, but they are missing from some requirements. Here is a list of those requirements along with the hashes their downloaded archives actually had. Add lines like these to your requirements files to prevent tampering. (If you did not enable --require-hashes manually, note that it turns on automatically when any package has a hash.)",
+       "    fastapi==0.142.2 --hash=sha256:bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b"
+      ]
+     },
+     "negative_targets_created": [],
+     "overlay_bytes": 4473336,
+     "overlay_files": 491,
+     "overlay_pyc_files": 180,
+     "overlay_top_level": [
+      "bin",
+      "click",
+      "click-8.1.8.dist-info",
+      "fastapi",
+      "fastapi-0.142.2.dist-info",
+      "humanize",
+      "humanize-4.11.0.dist-info",
+      "opentelemetry",
+      "opentelemetry_api-1.45.1.dist-info",
+      "starlette",
+      "starlette-1.7.0.dist-info",
+      "uvicorn",
+      "uvicorn-0.32.1.dist-info"
+     ],
+     "positive": {
+      "rc": 0,
+      "seconds": 0.64,
+      "tail": [
+       "Processing /srv/wheels/humanize-4.11.0-py3-none-any.whl (from -r /tmp/lock.txt (line 5))",
+       "Processing /srv/wheels/opentelemetry_api-1.45.1-py3-none-any.whl (from -r /tmp/lock.txt (line 6))",
+       "Installing collected packages: uvicorn, starlette, opentelemetry-api, humanize, fastapi, click",
+       "Successfully installed click-8.1.8 fastapi-0.142.2 humanize-4.11.0 opentelemetry-api-1.45.1 starlette-1.7.0 uvicorn-0.32.1"
+      ]
+     },
+     "unpinned": {
+      "rc": 1,
+      "seconds": 0.37,
+      "tail": [
+       "Looking in links: /srv/wheels",
+       "Processing /srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/unpinned.txt (line 1))",
+       "ERROR: In --require-hashes mode, all requirements must have their versions pinned with ==. These do not:",
+       "    fastapi>=0.142.2 from file:///srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/unpinned.txt (line 1))"
+      ]
+     },
+     "wrong_hash": {
+      "rc": 1,
+      "seconds": 0.36,
+      "tail": [
+       "ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE. If you have updated the package versions, please update the hashes. Otherwise, examine the package contents carefully; someone may have tampered with them.",
+       "    fastapi==0.142.2 from file:///srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/bad-hash.txt (line 1)):",
+       "        Expected sha256 bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b000000",
+       "             Got        bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b"
+      ]
+     }
+    },
+    "stage1_failed_steps": {},
+    "stderr": ""
+   },
+   "lock": [
+    "fastapi==0.142.2",
+    "starlette==1.7.0",
+    "uvicorn==0.32.1",
+    "click==8.1.8",
+    "humanize==4.11.0",
+    "opentelemetry-api==1.45.1"
+   ],
+   "run": "run 2",
+   "run_phase": {
+    "launcher_rc": 0,
+    "raw_tail": "",
+    "result": {
+     "environment_control": {
+      "PYTHONPATH": null,
+      "executable": "/app/python/source_code/.venv/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [16]"
+      ],
+      "seconds_to_first_response": 0.94,
+      "versions": {
+       "click": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/click/__init__.py",
+        "metadata_version": "8.4.1"
+       },
+       "fastapi": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/fastapi/__init__.py",
+        "metadata_version": "0.115.0"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "error": "ModuleNotFoundError"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/starlette/__init__.py",
+        "metadata_version": "0.38.6"
+       },
+       "uvicorn": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/uvicorn/__init__.py",
+        "metadata_version": "0.30.6"
+       }
+      }
+     },
+     "overlay_script_without_pythonpath": {
+      "PYTHONPATH": null,
+      "executable": "/srv/overlay/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [9]"
+      ],
+      "seconds_to_first_response": 0.94,
+      "versions": {
+       "click": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/click/__init__.py",
+        "metadata_version": "8.4.1"
+       },
+       "fastapi": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/fastapi/__init__.py",
+        "metadata_version": "0.115.0"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "error": "ModuleNotFoundError"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/starlette/__init__.py",
+        "metadata_version": "0.38.6"
+       },
+       "uvicorn": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/uvicorn/__init__.py",
+        "metadata_version": "0.30.6"
+       }
+      }
+     },
+     "overlay_with_pythonpath": {
+      "PYTHONPATH": "/srv/overlay",
+      "executable": "/srv/overlay/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [2]"
+      ],
+      "seconds_to_first_response": 0.64,
+      "versions": {
+       "click": {
+        "file": "/srv/overlay/click/__init__.py",
+        "metadata_version": "8.1.8"
+       },
+       "fastapi": {
+        "file": "/srv/overlay/fastapi/__init__.py",
+        "metadata_version": "0.142.2"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "file": "/srv/overlay/humanize/__init__.py",
+        "metadata_version": "4.11.0"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/srv/overlay/starlette/__init__.py",
+        "metadata_version": "1.7.0"
+       },
+       "uvicorn": {
+        "file": "/srv/overlay/uvicorn/__init__.py",
+        "metadata_version": "0.32.1"
+       }
+      }
+     },
+     "pip_check_environment_alone": {
+      "output": [
+       "No broken requirements found."
+      ],
+      "rc": 0
+     },
+     "pip_check_with_overlay": {
+      "output": [
+       "opentelemetry-sdk 1.42.1 has requirement opentelemetry-api==1.42.1, but you have opentelemetry-api 1.45.1.",
+       "opentelemetry-semantic-conventions 0.63b1 has requirement opentelemetry-api==1.42.1, but you have opentelemetry-api 1.45.1."
+      ],
+      "rc": 1
+     },
+     "uvicorn_version_from_overlay_bin": {
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Running uvicorn 0.32.1 with CPython 3.11.17 on Linux"
+     },
+     "write_checks": {
+      "append_to_overlay_module": "EROFS",
+      "new_file_in_environment_bin": "EROFS",
+      "new_file_in_environment_site_packages": "EROFS",
+      "new_file_in_overlay_bin": "EROFS",
+      "new_file_in_overlay_package_dir": "EROFS",
+      "new_file_in_overlay_root": "EROFS"
+     }
+    },
+    "stage1_failed_steps": {},
+    "stderr": ""
+   }
+  },
+  {
+   "build": {
+    "launcher_rc": 0,
+    "raw_tail": "",
+    "result": {
+     "bin_modes": {
+      "fastapi": "0o755",
+      "uvicorn": "0o755"
+     },
+     "bin_scripts": {
+      "fastapi": "#!/app/python/source_code/.venv/bin/python",
+      "uvicorn": "#!/app/python/source_code/.venv/bin/python"
+     },
+     "missing_hash": {
+      "rc": 1,
+      "seconds": 0.38,
+      "tail": [
+       "Looking in links: /srv/wheels",
+       "Processing /srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/no-hash.txt (line 1))",
+       "ERROR: Hashes are required in --require-hashes mode, but they are missing from some requirements. Here is a list of those requirements along with the hashes their downloaded archives actually had. Add lines like these to your requirements files to prevent tampering. (If you did not enable --require-hashes manually, note that it turns on automatically when any package has a hash.)",
+       "    fastapi==0.142.2 --hash=sha256:bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b"
+      ]
+     },
+     "negative_targets_created": [],
+     "overlay_bytes": 6810563,
+     "overlay_files": 885,
+     "overlay_pyc_files": 368,
+     "overlay_top_level": [
+      "bin",
+      "click",
+      "click-8.1.8.dist-info",
+      "fastapi",
+      "fastapi-0.142.2.dist-info",
+      "humanize",
+      "humanize-4.11.0.dist-info",
+      "opentelemetry",
+      "opentelemetry_api-1.45.1.dist-info",
+      "opentelemetry_sdk-1.45.1.dist-info",
+      "opentelemetry_semantic_conventions-0.66b1.dist-info",
+      "starlette",
+      "starlette-1.7.0.dist-info",
+      "uvicorn",
+      "uvicorn-0.32.1.dist-info"
+     ],
+     "positive": {
+      "rc": 0,
+      "seconds": 0.83,
+      "tail": [
+       "Processing /srv/wheels/opentelemetry_sdk-1.45.1-py3-none-any.whl (from -r /tmp/lock.txt (line 7))",
+       "Processing /srv/wheels/opentelemetry_semantic_conventions-0.66b1-py3-none-any.whl (from -r /tmp/lock.txt (line 8))",
+       "Installing collected packages: uvicorn, starlette, opentelemetry-semantic-conventions, opentelemetry-sdk, opentelemetry-api, humanize, fastapi, click",
+       "Successfully installed click-8.1.8 fastapi-0.142.2 humanize-4.11.0 opentelemetry-api-1.45.1 opentelemetry-sdk-1.45.1 opentelemetry-semantic-conventions-0.66b1 starlette-1.7.0 uvicorn-0.32.1"
+      ]
+     },
+     "unpinned": {
+      "rc": 1,
+      "seconds": 0.36,
+      "tail": [
+       "Looking in links: /srv/wheels",
+       "Processing /srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/unpinned.txt (line 1))",
+       "ERROR: In --require-hashes mode, all requirements must have their versions pinned with ==. These do not:",
+       "    fastapi>=0.142.2 from file:///srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/unpinned.txt (line 1))"
+      ]
+     },
+     "wrong_hash": {
+      "rc": 1,
+      "seconds": 0.37,
+      "tail": [
+       "ERROR: THESE PACKAGES DO NOT MATCH THE HASHES FROM THE REQUIREMENTS FILE. If you have updated the package versions, please update the hashes. Otherwise, examine the package contents carefully; someone may have tampered with them.",
+       "    fastapi==0.142.2 from file:///srv/wheels/fastapi-0.142.2-py3-none-any.whl (from -r /tmp/bad-hash.txt (line 1)):",
+       "        Expected sha256 bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b000000",
+       "             Got        bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b"
+      ]
+     }
+    },
+    "stage1_failed_steps": {},
+    "stderr": ""
+   },
+   "lock": [
+    "fastapi==0.142.2",
+    "starlette==1.7.0",
+    "uvicorn==0.32.1",
+    "click==8.1.8",
+    "humanize==4.11.0",
+    "opentelemetry-api==1.45.1",
+    "opentelemetry-sdk==1.45.1",
+    "opentelemetry-semantic-conventions==0.66b1"
+   ],
+   "run": "run 3",
+   "run_phase": {
+    "launcher_rc": 0,
+    "raw_tail": "",
+    "result": {
+     "environment_control": {
+      "PYTHONPATH": null,
+      "executable": "/app/python/source_code/.venv/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [16]"
+      ],
+      "seconds_to_first_response": 0.64,
+      "versions": {
+       "click": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/click/__init__.py",
+        "metadata_version": "8.4.1"
+       },
+       "fastapi": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/fastapi/__init__.py",
+        "metadata_version": "0.115.0"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "error": "ModuleNotFoundError"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/starlette/__init__.py",
+        "metadata_version": "0.38.6"
+       },
+       "uvicorn": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/uvicorn/__init__.py",
+        "metadata_version": "0.30.6"
+       }
+      }
+     },
+     "overlay_script_without_pythonpath": {
+      "PYTHONPATH": null,
+      "executable": "/srv/overlay/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [9]"
+      ],
+      "seconds_to_first_response": 0.64,
+      "versions": {
+       "click": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/click/__init__.py",
+        "metadata_version": "8.4.1"
+       },
+       "fastapi": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/fastapi/__init__.py",
+        "metadata_version": "0.115.0"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "error": "ModuleNotFoundError"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/starlette/__init__.py",
+        "metadata_version": "0.38.6"
+       },
+       "uvicorn": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/uvicorn/__init__.py",
+        "metadata_version": "0.30.6"
+       }
+      }
+     },
+     "overlay_with_pythonpath": {
+      "PYTHONPATH": "/srv/overlay",
+      "executable": "/srv/overlay/bin/uvicorn",
+      "exit_code": 0,
+      "log_tail": [
+       "INFO:     Shutting down",
+       "INFO:     Waiting for application shutdown.",
+       "INFO:     Application shutdown complete.",
+       "INFO:     Finished server process [2]"
+      ],
+      "seconds_to_first_response": 0.64,
+      "versions": {
+       "click": {
+        "file": "/srv/overlay/click/__init__.py",
+        "metadata_version": "8.1.8"
+       },
+       "fastapi": {
+        "file": "/srv/overlay/fastapi/__init__.py",
+        "metadata_version": "0.142.2"
+       },
+       "h11": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/h11/__init__.py",
+        "metadata_version": "0.16.0"
+       },
+       "humanize": {
+        "file": "/srv/overlay/humanize/__init__.py",
+        "metadata_version": "4.11.0"
+       },
+       "pydantic": {
+        "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/pydantic/__init__.py",
+        "metadata_version": "2.13.4"
+       },
+       "starlette": {
+        "file": "/srv/overlay/starlette/__init__.py",
+        "metadata_version": "1.7.0"
+       },
+       "uvicorn": {
+        "file": "/srv/overlay/uvicorn/__init__.py",
+        "metadata_version": "0.32.1"
+       }
+      }
+     },
+     "pip_check_environment_alone": {
+      "output": [
+       "No broken requirements found."
+      ],
+      "rc": 0
+     },
+     "pip_check_with_overlay": {
+      "output": [
+       "No broken requirements found."
+      ],
+      "rc": 0
+     },
+     "uvicorn_version_from_overlay_bin": {
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Running uvicorn 0.32.1 with CPython 3.11.17 on Linux"
+     },
+     "write_checks": {
+      "append_to_overlay_module": "EROFS",
+      "new_file_in_environment_bin": "EROFS",
+      "new_file_in_environment_site_packages": "EROFS",
+      "new_file_in_overlay_bin": "EROFS",
+      "new_file_in_overlay_package_dir": "EROFS",
+      "new_file_in_overlay_root": "EROFS"
+     }
+    },
+    "stage1_failed_steps": {},
+    "stderr": ""
+   }
+  }
+ ],
+ "where": "appmux-probe harness, Free Edition; two sandboxes per run (scripts/spike-18/sandbox_overlay.py)"
+}

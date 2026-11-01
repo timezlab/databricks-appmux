@@ -1,0 +1,10 @@
+{
+  "name": "appmux-spike-19",
+  "private": true,
+  "description": "Spike 19: a minimal Next.js static export for appmux's admin UI. Exact versions, no install scripts run.",
+  "dependencies": {
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

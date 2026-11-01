@@ -1,0 +1,11 @@
+{
+  "kind": "register",
+  "app": "wiki",
+  "payload": {
+    "slug": "wiki",
+    "display_name": "Team wiki",
+    "source_path": "/Workspace/Shared/apps/wiki",
+    "memory_budget_mb": 128
+  },
+  "reason": "the team wiki, a small Flask app"
+}

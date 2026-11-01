@@ -1,0 +1,39 @@
+{
+  "release_no": 7,
+  "items": [
+    {
+      "key": "experiment",
+      "state": "attached",
+      "offer": {
+        "key": "experiment",
+        "type": "mlflow_experiment",
+        "target": "456789012",
+        "permission": "CAN_EDIT"
+      },
+      "suggested_type": null
+    },
+    {
+      "key": "openai-api-key",
+      "state": "attached",
+      "offer": {
+        "key": "openai-api-key",
+        "type": "secret",
+        "target": "sales-secrets/openai-api-key",
+        "permission": "READ"
+      },
+      "suggested_type": null
+    },
+    {
+      "key": "sql-warehouse",
+      "state": "attached",
+      "offer": {
+        "key": "sql-warehouse",
+        "type": "sql_warehouse",
+        "target": "a1b2c3d4e5f67890",
+        "permission": "CAN_USE"
+      },
+      "suggested_type": null
+    }
+  ],
+  "unreferenced_offers": []
+}

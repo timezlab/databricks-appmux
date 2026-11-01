@@ -1,0 +1,245 @@
+{
+ "bad_bearer": {
+  "body": "<a href=\"https://<workspace-host>/oidc/oauth2/v2.0/authorize?approval_prompt=consent&amp;client_id=7a9d33c5-0f75-41d3-8c22-bb3cd",
+  "status": 302
+ },
+ "exec_gate_real_email": {
+  "body": "{\n \"rc\": 0,\n \"secs\": 0.0,\n \"stderr\": \"\",\n \"stdout\": \"hi\\n\"\n}",
+  "status": 200
+ },
+ "exec_gate_with_spoofed_email": {
+  "body": "{\n \"rc\": 0,\n \"secs\": 0.0,\n \"stderr\": \"\",\n \"stdout\": \"hi\\n\"\n}",
+  "status": 200
+ },
+ "headers": {
+  "req_hdr_16KB": {
+   "status": 200
+  },
+  "req_hdr_32KB": {
+   "status": 200
+  },
+  "req_hdr_4KB": {
+   "status": 200
+  },
+  "req_hdr_64KB": {
+   "status": 431
+  },
+  "req_hdr_8KB": {
+   "status": 200
+  },
+  "resp_hdr_16KB": {
+   "status": 200,
+   "x_big_len": 16384
+  },
+  "resp_hdr_32KB": {
+   "status": 200,
+   "x_big_len": 32768
+  },
+  "resp_hdr_4KB": {
+   "status": 200,
+   "x_big_len": 4096
+  },
+  "resp_hdr_64KB": {
+   "status": 503,
+   "x_big_len": 0
+  },
+  "resp_hdr_8KB": {
+   "status": 200,
+   "x_big_len": 8192
+  }
+ },
+ "idle": {
+  "120": {
+   "body": "{\n \"slept\": \"120\"\n}",
+   "len": 19,
+   "secs": 121.0,
+   "status": 200
+  },
+  "30": {
+   "body": "{\n \"slept\": \"30\"\n}",
+   "len": 18,
+   "secs": 30.97,
+   "status": 200
+  },
+  "300": {
+   "body": "upstream request timeout",
+   "len": 24,
+   "secs": 300.95,
+   "status": 504
+  },
+  "60": {
+   "body": "{\n \"slept\": \"60\"\n}",
+   "len": 18,
+   "secs": 60.94,
+   "status": 200
+  }
+ },
+ "methods": {
+  "DELETE": 200,
+  "OPTIONS": 200,
+  "POST": 200,
+  "PUT": 200
+ },
+ "no_auth": {
+  "has_location": true,
+  "status": 302
+ },
+ "paths": {
+  "dotdot": {
+   "app_saw": "/echo/a/c",
+   "location": null,
+   "sent": "/echo/a/b/../c",
+   "status": 200
+  },
+  "double_slash": {
+   "app_saw": "",
+   "location": "/echo/x",
+   "sent": "//echo/x",
+   "status": 301
+  },
+  "encoded_dotdot": {
+   "app_saw": "/echo/x",
+   "location": null,
+   "sent": "/echo/%2e%2e/echo/x",
+   "status": 200
+  },
+  "encoded_slash": {
+   "app_saw": "/echo/a%2Fb",
+   "location": null,
+   "sent": "/echo/a%2Fb",
+   "status": 200
+  },
+  "encoded_space_query": {
+   "app_saw": "/echo/a%20b?q=%20x&r=1&r=2",
+   "location": null,
+   "sent": "/echo/a%20b?q=%20x&r=1&r=2",
+   "status": 200
+  },
+  "fragment_free_long_query": {
+   "app_saw": "/echo/q?a=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "location": null,
+   "sent": "/echo/q?a=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "status": 200
+  },
+  "mid_double_slash": {
+   "app_saw": "",
+   "location": "/echo/x",
+   "sent": "/echo//x",
+   "status": 301
+  },
+  "plain_sub": {
+   "app_saw": "/echo/a/b",
+   "location": null,
+   "sent": "/echo/a/b",
+   "status": 200
+  },
+  "semicolon": {
+   "app_saw": "/echo/a;b=1",
+   "location": null,
+   "sent": "/echo/a;b=1",
+   "status": 200
+  },
+  "trailing": {
+   "app_saw": "/echo/",
+   "location": null,
+   "sent": "/echo/",
+   "status": 200
+  },
+  "unicode": {
+   "app_saw": "/echo/%C3%A9",
+   "location": null,
+   "sent": "/echo/%C3%A9",
+   "status": 200
+  }
+ },
+ "redirect": {
+  "location": "/login",
+  "status": 302
+ },
+ "set_cookie": {
+  "set_cookie_seen_by_client": [
+   "__Host-databricks-app-router=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=None",
+   "a=1; Path=/; Domain=example.com; HttpOnly",
+   "b=2; Path=/deep/path; SameSite=Lax",
+   "__Host-c=3; Path=/; Secure"
+  ],
+  "status": 200
+ },
+ "sizes": {
+  "req_100MB": {
+   "body": "{\n \"received\": 104857600\n}",
+   "len": 26,
+   "secs": 10.65,
+   "status": 200
+  },
+  "req_10MB": {
+   "body": "{\n \"received\": 10485760\n}",
+   "len": 25,
+   "secs": 3.86,
+   "status": 200
+  },
+  "req_1MB": {
+   "body": "{\n \"received\": 1048576\n}",
+   "len": 24,
+   "secs": 2.55,
+   "status": 200
+  },
+  "resp_100MB": {
+   "len": 104857600,
+   "secs": 12.12,
+   "status": 200
+  },
+  "resp_10MB": {
+   "len": 10485760,
+   "secs": 3.83,
+   "status": 200
+  },
+  "resp_1MB": {
+   "len": 1048576,
+   "secs": 2.32,
+   "status": 200
+  }
+ },
+ "spoof": {
+  "Authorization": "<absent>",
+  "Cookie": "<cookie names=['foo', 'baz']>",
+  "X-Databricks-Org-Id": "<workspace-id>",
+  "X-Forwarded-Access-Token": "<redacted len=991 prefix='eyJraW'>",
+  "X-Forwarded-Email": "<owner-email>",
+  "X-Forwarded-For": "6.6.6.6,x.x.x.x,x.x.x.x, x.x.x.x",
+  "X-Forwarded-Host": "appmux-probe-<workspace-id>.aws.databricksapps.com",
+  "X-Forwarded-User": "<user-id>@<workspace-id>",
+  "X-Real-Ip": "x.x.x.x",
+  "status": 200
+ },
+ "spoof_owner_without_auth": {
+  "has_location": true,
+  "status": 302
+ },
+ "sse": {
+  "arrival_secs": [
+   0.93,
+   1.93,
+   2.93,
+   3.93,
+   4.93,
+   5.93
+  ],
+  "status": 200,
+  "streamed": true,
+  "transfer_encoding": "chunked"
+ },
+ "sse_360s_every_10s": {
+  "ended_at_s": 302,
+  "error": null,
+  "events": 30,
+  "last_event_at_s": 291,
+  "status": 200
+ },
+ "websocket": {
+  "after_idle_330s": "(1, b'echo:after-idle-330')",
+  "echo": "(1, b'echo:hello')",
+  "frame_60KB": "(1, b'echo:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "handshake": "HTTP/1.1 101 Switching Protocols"
+ }
+}

@@ -1,0 +1,7 @@
+{
+  "email": "dana@example.com",
+  "groups": [
+    "data-platform"
+  ],
+  "is_platform_admin": true
+}

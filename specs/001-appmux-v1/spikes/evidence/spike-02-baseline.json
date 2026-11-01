@@ -1,0 +1,845 @@
+{
+ "date": "2026-10-30",
+ "result": {
+  "candidates": {
+   "/Volumes": {
+    "exists": false
+   },
+   "/Workspace": {
+    "exists": false
+   },
+   "/app": {
+    "exists": true,
+    "list": 7,
+    "sample": [
+     ".pnpm-corepack",
+     ".uv-python",
+     "deployments",
+     "lha-runtime",
+     "python",
+     "scanner",
+     "static"
+    ],
+    "write": false
+   },
+   "/app/python": {
+    "exists": true,
+    "list": 1,
+    "sample": [
+     "source_code"
+    ],
+    "write": true
+   },
+   "/app/python/source_code": {
+    "exists": true,
+    "list": 3,
+    "sample": [
+     ".venv",
+     "app.py",
+     "app.yaml"
+    ],
+    "write": true
+   },
+   "/databricks": {
+    "exists": true,
+    "list": 9,
+    "sample": [
+     "autoscaling",
+     "customer-logs",
+     "deadsnakes.asc",
+     "dynamic-secrets",
+     "one_location.json",
+     "pnpm-corepack.tgz",
+     "preinstalled-uv-env",
+     "runtime-secrets",
+     "uv-packages.tar.gz"
+    ],
+    "write": false
+   },
+   "/databricks/runtime-secrets": {
+    "exists": true,
+    "list": 3,
+    "sample": [
+     "m2m-auth-secret-expiration",
+     "runtime.cfg",
+     "u2m-auth-secret-expiration"
+    ],
+    "write": false
+   },
+   "/dbfs": {
+    "exists": false
+   },
+   "/dev": {
+    "exists": true,
+    "list": 16,
+    "sample": [
+     "core",
+     "fd",
+     "full",
+     "mqueue",
+     "null",
+     "ptmx",
+     "pts",
+     "random",
+     "shm",
+     "stderr",
+     "stdin",
+     "stdout"
+    ],
+    "write": false
+   },
+   "/dev/shm": {
+    "exists": true,
+    "list": 0,
+    "sample": [],
+    "write": true
+   },
+   "/etc": {
+    "exists": true,
+    "list": 110,
+    "sample": [
+     ".pwd.lock",
+     "X11",
+     "adduser.conf",
+     "alternatives",
+     "apparmor.d",
+     "apt",
+     "bash.bashrc",
+     "bash_completion.d",
+     "bindresvport.blacklist",
+     "ca-certificates",
+     "ca-certificates.conf",
+     "ca-certificates.conf.dpkg-old"
+    ],
+    "write": false
+   },
+   "/home": {
+    "exists": true,
+    "list": 1,
+    "sample": [
+     "app"
+    ],
+    "write": false
+   },
+   "/home/app": {
+    "exists": true,
+    "list": 4,
+    "sample": [
+     ".bash_logout",
+     ".bashrc",
+     ".cache",
+     ".profile"
+    ],
+    "write": true
+   },
+   "/local_disk0": {
+    "exists": false
+   },
+   "/media": {
+    "exists": true,
+    "list": 0,
+    "sample": [],
+    "write": false
+   },
+   "/mnt": {
+    "exists": true,
+    "list": 0,
+    "sample": [],
+    "write": false
+   },
+   "/opt": {
+    "exists": true,
+    "list": 1,
+    "sample": [
+     "pnpm"
+    ],
+    "write": false
+   },
+   "/root": {
+    "exists": true,
+    "list": "PermissionError: Permission denied",
+    "write": false
+   },
+   "/run": {
+    "exists": true,
+    "list": 4,
+    "sample": [
+     "lock",
+     "mount",
+     "systemd",
+     "ubuntu-advantage"
+    ],
+    "write": false
+   },
+   "/run/secrets": {
+    "exists": false
+   },
+   "/srv": {
+    "exists": true,
+    "list": 0,
+    "sample": [],
+    "write": false
+   },
+   "/sys": {
+    "exists": true,
+    "list": 11,
+    "sample": [
+     "block",
+     "bus",
+     "class",
+     "dev",
+     "devices",
+     "firmware",
+     "fs",
+     "hypervisor",
+     "kernel",
+     "module",
+     "power"
+    ],
+    "write": false
+   },
+   "/sys/class/dmi/id": {
+    "exists": true,
+    "list": 25,
+    "sample": [
+     "bios_date",
+     "bios_release",
+     "bios_vendor",
+     "bios_version",
+     "board_asset_tag",
+     "board_name",
+     "board_serial",
+     "board_vendor",
+     "board_version",
+     "chassis_asset_tag",
+     "chassis_serial",
+     "chassis_type"
+    ],
+    "write": false
+   },
+   "/sys/fs/cgroup": {
+    "exists": true,
+    "list": 13,
+    "sample": [
+     "blkio",
+     "cpu",
+     "cpu,cpuacct",
+     "cpuacct",
+     "cpuset",
+     "devices",
+     "freezer",
+     "hugetlb",
+     "memory",
+     "misc",
+     "perf_event",
+     "pids"
+    ],
+    "write": false
+   },
+   "/usr/local": {
+    "exists": true,
+    "list": 9,
+    "sample": [
+     "bin",
+     "etc",
+     "games",
+     "include",
+     "lib",
+     "man",
+     "sbin",
+     "share",
+     "src"
+    ],
+    "write": false
+   },
+   "/var": {
+    "exists": true,
+    "list": 11,
+    "sample": [
+     "backups",
+     "cache",
+     "lib",
+     "local",
+     "lock",
+     "log",
+     "mail",
+     "opt",
+     "run",
+     "spool",
+     "tmp"
+    ],
+    "write": false
+   },
+   "/var/lib": {
+    "exists": true,
+    "list": 10,
+    "sample": [
+     "apt",
+     "dpkg",
+     "git",
+     "misc",
+     "pam",
+     "python",
+     "shells.state",
+     "systemd",
+     "ubuntu-advantage",
+     "ucf"
+    ],
+    "write": false
+   },
+   "/var/log": {
+    "exists": true,
+    "list": 9,
+    "sample": [
+     "alternatives.log",
+     "apt",
+     "bootstrap.log",
+     "btmp",
+     "dpkg.log",
+     "faillog",
+     "lastlog",
+     "ubuntu-advantage.log",
+     "wtmp"
+    ],
+    "write": false
+   },
+   "/var/run": {
+    "exists": true,
+    "list": 4,
+    "sample": [
+     "lock",
+     "mount",
+     "systemd",
+     "ubuntu-advantage"
+    ],
+    "write": false
+   },
+   "/var/run/secrets": {
+    "exists": false
+   },
+   "/var/tmp": {
+    "exists": true,
+    "list": 0,
+    "sample": [],
+    "write": true
+   },
+   "/workspace": {
+    "exists": false
+   }
+  },
+  "identity": {
+   "cwd": "/tmp/spike",
+   "env_names": [
+    "DATABRICKS_APP_NAME",
+    "DATABRICKS_APP_PORT",
+    "DATABRICKS_APP_URL",
+    "DATABRICKS_CLIENT_ID",
+    "DATABRICKS_CLIENT_SECRET",
+    "DATABRICKS_HOST",
+    "DATABRICKS_WORKSPACE_ID",
+    "FLASK_RUN_HOST",
+    "FLASK_RUN_PORT",
+    "GRADIO_ANALYTICS_ENABLED",
+    "GRADIO_SERVER_NAME",
+    "GRADIO_SERVER_PORT",
+    "HOME",
+    "LC_CTYPE",
+    "PATH",
+    "PORT",
+    "PYTHONUNBUFFERED",
+    "SPIKE_OWNER",
+    "STREAMLIT_BROWSER_GATHER_USAGE_STATS",
+    "STREAMLIT_SERVER_ADDRESS",
+    "STREAMLIT_SERVER_ENABLE_CORS",
+    "STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION",
+    "STREAMLIT_SERVER_HEADLESS",
+    "STREAMLIT_SERVER_PORT",
+    "UVICORN_HOST",
+    "UVICORN_PORT",
+    "UV_PYTHON_INSTALL_DIR"
+   ],
+   "gid": 1000,
+   "groups": [],
+   "home": "/home/app",
+   "python": "3.10.12",
+   "uid": 1000
+  },
+  "mounts": [
+   {
+    "fstype": "overlay",
+    "mount": "/",
+    "opts": "rw,relatime",
+    "source": "overlay",
+    "super": "rw,lowerdir=/platform_disk/overlaybd-snapshots/snapshots/87/block/mountpoint,upperdir=/platform_disk/overlaybd-snapshots/snapshots/101/fs,workdir=/platform_disk/overlaybd-snapshots/snapshots/101/work"
+   },
+   {
+    "fstype": "proc",
+    "mount": "/proc",
+    "opts": "rw,nosuid,nodev,noexec,relatime",
+    "source": "proc",
+    "super": "rw"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/dev",
+    "opts": "rw,nosuid",
+    "source": "tmpfs",
+    "super": "rw,size=65536k,mode=755"
+   },
+   {
+    "fstype": "devpts",
+    "mount": "/dev/pts",
+    "opts": "rw,nosuid,noexec,relatime",
+    "source": "devpts",
+    "super": "rw,gid=5,mode=620,ptmxmode=666"
+   },
+   {
+    "fstype": "mqueue",
+    "mount": "/dev/mqueue",
+    "opts": "rw,nosuid,nodev,noexec,relatime",
+    "source": "mqueue",
+    "super": "rw"
+   },
+   {
+    "fstype": "sysfs",
+    "mount": "/sys",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "sysfs",
+    "super": "rw"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/sys/fs/cgroup",
+    "opts": "rw,nosuid,nodev,noexec,relatime",
+    "source": "tmpfs",
+    "super": "rw,mode=755"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/systemd",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,xattr,name=systemd"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/cpu,cpuacct",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,cpu,cpuacct"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/blkio",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,blkio"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/freezer",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,freezer"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/cpuset",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,cpuset"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/misc",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,misc"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/perf_event",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,perf_event"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/hugetlb",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,hugetlb"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/pids",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,pids"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/memory",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,memory"
+   },
+   {
+    "fstype": "cgroup",
+    "mount": "/sys/fs/cgroup/devices",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "cgroup",
+    "super": "rw,devices"
+   },
+   {
+    "fstype": "overlay",
+    "mount": "/databricks/one_location.json",
+    "opts": "ro,relatime",
+    "source": "overlayroot",
+    "super": "rw,lowerdir=/media/root-ro,upperdir=/media/root-rw/overlay,workdir=/media/root-rw/overlay-workdir/_"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/databricks/autoscaling",
+    "opts": "ro,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/databricks/customer-logs",
+    "opts": "rw,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/dev/termination-log",
+    "opts": "rw,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "overlay",
+    "mount": "/etc/resolv.conf",
+    "opts": "ro,relatime",
+    "source": "overlayroot",
+    "super": "rw,lowerdir=/media/root-ro,upperdir=/media/root-rw/overlay,workdir=/media/root-rw/overlay-workdir/_"
+   },
+   {
+    "fstype": "overlay",
+    "mount": "/databricks/runtime-secrets",
+    "opts": "rw,relatime",
+    "source": "overlayroot",
+    "super": "rw,lowerdir=/media/root-ro,upperdir=/media/root-rw/overlay,workdir=/media/root-rw/overlay-workdir/_"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/etc/hostname",
+    "opts": "rw,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/etc/hosts",
+    "opts": "rw,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/dev/shm",
+    "opts": "rw,relatime",
+    "source": "shm",
+    "super": "rw,size=65536k"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/databricks/dynamic-secrets/shared",
+    "opts": "ro,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/databricks/dynamic-secrets/apps-runtime",
+    "opts": "ro,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/databricks/dynamic-secrets/reserved-platform/app-metadata",
+    "opts": "ro,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "ext4",
+    "mount": "/databricks/dynamic-secrets/reserved-platform/system-metadata",
+    "opts": "ro,relatime",
+    "source": "/dev/mapper/rw-encrypt",
+    "super": "rw,prjquota"
+   },
+   {
+    "fstype": "proc",
+    "mount": "/proc/bus",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "proc",
+    "super": "rw"
+   },
+   {
+    "fstype": "proc",
+    "mount": "/proc/fs",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "proc",
+    "super": "rw"
+   },
+   {
+    "fstype": "proc",
+    "mount": "/proc/irq",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "proc",
+    "super": "rw"
+   },
+   {
+    "fstype": "proc",
+    "mount": "/proc/sys",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "proc",
+    "super": "rw"
+   },
+   {
+    "fstype": "proc",
+    "mount": "/proc/sysrq-trigger",
+    "opts": "ro,nosuid,nodev,noexec,relatime",
+    "source": "proc",
+    "super": "rw"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/proc/acpi",
+    "opts": "ro,relatime",
+    "source": "tmpfs",
+    "super": "ro"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/proc/kcore",
+    "opts": "rw,nosuid",
+    "source": "tmpfs",
+    "super": "rw,size=65536k,mode=755"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/proc/keys",
+    "opts": "rw,nosuid",
+    "source": "tmpfs",
+    "super": "rw,size=65536k,mode=755"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/proc/latency_stats",
+    "opts": "rw,nosuid",
+    "source": "tmpfs",
+    "super": "rw,size=65536k,mode=755"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/proc/timer_list",
+    "opts": "rw,nosuid",
+    "source": "tmpfs",
+    "super": "rw,size=65536k,mode=755"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/proc/scsi",
+    "opts": "ro,relatime",
+    "source": "tmpfs",
+    "super": "ro"
+   },
+   {
+    "fstype": "tmpfs",
+    "mount": "/sys/firmware",
+    "opts": "ro,relatime",
+    "source": "tmpfs",
+    "super": "ro"
+   }
+  ],
+  "walk": {
+   "note": "paths under /app/python/source_code/.venv (the app environment) removed from the two lists; counts are unchanged",
+   "seconds": 7.8,
+   "secret_named_count": 278,
+   "secret_named_readable": [
+    {
+     "mode": "0o644",
+     "owner_uid": 0,
+     "path": "/etc/passwd-",
+     "size": 922
+    },
+    {
+     "mode": "0o644",
+     "owner_uid": 0,
+     "path": "/etc/passwd",
+     "size": 957
+    },
+    {
+     "mode": "0o644",
+     "owner_uid": 0,
+     "path": "/etc/pam.d/chpasswd",
+     "size": 92
+    },
+    {
+     "mode": "0o644",
+     "owner_uid": 0,
+     "path": "/etc/pam.d/common-password",
+     "size": 1620
+    },
+    {
+     "mode": "0o644",
+     "owner_uid": 0,
+     "path": "/etc/pam.d/passwd",
+     "size": 92
+    },
+    {
+     "mode": "0o755",
+     "owner_uid": 0,
+     "path": "/databricks/runtime-secrets/runtime.cfg",
+     "size": 712
+    },
+    {
+     "mode": "0o755",
+     "owner_uid": 0,
+     "path": "/databricks/runtime-secrets/u2m-auth-secret-expiration",
+     "size": 152
+    },
+    {
+     "mode": "0o755",
+     "owner_uid": 0,
+     "path": "/databricks/runtime-secrets/m2m-auth-secret-expiration",
+     "size": 152
+    }
+   ],
+   "setuid": [
+    "/usr/lib/openssh/ssh-keysign",
+    "/usr/bin/gpasswd",
+    "/usr/bin/newgrp",
+    "/usr/bin/chfn",
+    "/usr/bin/umount",
+    "/usr/bin/mount",
+    "/usr/bin/passwd",
+    "/usr/bin/chsh",
+    "/usr/bin/su"
+   ],
+   "top_level": {
+    "/": {
+     "dirs": 1,
+     "files": 0,
+     "readable_files": 0,
+     "unreadable_dirs": 0
+    },
+    "/app": {
+     "dirs": 3508,
+     "files": 31191,
+     "readable_files": 31191,
+     "unreadable_dirs": 0
+    },
+    "/boot": {
+     "dirs": 1,
+     "files": 0,
+     "readable_files": 0,
+     "unreadable_dirs": 0
+    },
+    "/databricks": {
+     "dirs": 15,
+     "files": 25,
+     "readable_files": 25,
+     "unreadable_dirs": 0
+    },
+    "/dev": {
+     "dirs": 4,
+     "files": 8,
+     "readable_files": 7,
+     "unreadable_dirs": 0
+    },
+    "/etc": {
+     "dirs": 73,
+     "files": 223,
+     "readable_files": 216,
+     "unreadable_dirs": 0
+    },
+    "/home": {
+     "dirs": 3679,
+     "files": 29870,
+     "readable_files": 29870,
+     "unreadable_dirs": 0
+    },
+    "/media": {
+     "dirs": 1,
+     "files": 0,
+     "readable_files": 0,
+     "unreadable_dirs": 0
+    },
+    "/mnt": {
+     "dirs": 1,
+     "files": 0,
+     "readable_files": 0,
+     "unreadable_dirs": 0
+    },
+    "/opt": {
+     "dirs": 111,
+     "files": 450,
+     "readable_files": 450,
+     "unreadable_dirs": 0
+    },
+    "/run": {
+     "dirs": 6,
+     "files": 3,
+     "readable_files": 3,
+     "unreadable_dirs": 0
+    },
+    "/srv": {
+     "dirs": 1,
+     "files": 0,
+     "readable_files": 0,
+     "unreadable_dirs": 0
+    },
+    "/sys": {
+     "dirs": 2820,
+     "files": 20869,
+     "readable_files": 11958,
+     "unreadable_dirs": 0
+    },
+    "/tmp": {
+     "dirs": 4,
+     "files": 87,
+     "readable_files": 9,
+     "unreadable_dirs": 0
+    },
+    "/usr": {
+     "dirs": 2928,
+     "files": 17551,
+     "readable_files": 17551,
+     "unreadable_dirs": 0
+    },
+    "/var": {
+     "dirs": 38,
+     "files": 1251,
+     "readable_files": 1243,
+     "unreadable_dirs": 0
+    }
+   },
+   "writable_dirs_count": 7295,
+   "writable_dirs_outside_tmp": [
+    "/databricks/customer-logs",
+    "/databricks/customer-logs/apps-runtime",
+    "/app/.uv-python",
+    "/app/.pnpm-corepack",
+    "/app/python",
+    "/app/python/source_code"
+   ]
+  }
+ },
+ "where": "appmux-probe harness, uid 1000, plain container (no sandbox)"
+}

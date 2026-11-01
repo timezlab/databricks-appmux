@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "slug_taken",
+    "message": "slug 'reports' is already taken"
+  }
+}

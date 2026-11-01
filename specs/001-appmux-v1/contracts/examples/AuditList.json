@@ -1,0 +1,44 @@
+{
+  "from": "2026-10-30T00:00:00Z",
+  "to": "2026-10-30T12:00:00Z",
+  "items": [
+    {
+      "id": 412,
+      "ts": "2026-10-30T09:45:00Z",
+      "actor": "dana@example.com",
+      "action": "release.view_source",
+      "app_slug": "sales",
+      "detail": {
+        "release": 7,
+        "path": "app.py"
+      },
+      "reason": null
+    },
+    {
+      "id": 411,
+      "ts": "2026-10-30T09:14:00Z",
+      "actor": "alice@example.com",
+      "action": "release.activate",
+      "app_slug": "sales",
+      "detail": {
+        "release": 7
+      },
+      "reason": null
+    },
+    {
+      "id": 410,
+      "ts": "2026-10-30T08:44:00Z",
+      "actor": "dana@example.com",
+      "action": "request.approve",
+      "app_slug": "sales",
+      "detail": {
+        "request": 1,
+        "kind": "delegation",
+        "after": {
+          "obo": true
+        }
+      },
+      "reason": "the app reads per-viewer data only"
+    }
+  ]
+}

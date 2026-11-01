@@ -1,0 +1,67 @@
+{
+  "passed": true,
+  "ran_at": "2026-10-30T08:00:03Z",
+  "duration_ms": 840,
+  "checks": [
+    {
+      "name": "environ_isolation",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "pid_isolation",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "loopback_and_container_ip",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "metadata_address",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "platform_files",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "capabilities",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "read_only_environment",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "sibling_sockets",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "appmux_directories",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "sysv_ipc",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "nested_user_namespace",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "inherited_descriptors",
+      "passed": true,
+      "detail": null
+    }
+  ]
+}

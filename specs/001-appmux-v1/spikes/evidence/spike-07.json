@@ -1,0 +1,1934 @@
+{
+ "note": "Free Edition only. Three runs of scripts/spike-07/egress_load.py on the probe app. run_1 supplies bulk, connections and disk; run_2 supplies ceiling, edge, fork and build (it supersedes run_1's edge, hog, fork and build: run_1 measured the load generator's CPU wrongly, did not know about the CPU ceiling, and left a zombie because PID 1 does not reap); run_3 supplies idle, the final hog measurements (seccomp arms) and the build with a resolver. run_2's hog arms without seccomp are kept as the first measurement; run_3 repeats them next to the new arms.",
+ "run_1": {
+  "date": "2026-10-30",
+  "kernel": "6.1.188-233.393.amzn2023.x86_64",
+  "python": "3.11.17",
+  "cpus_visible": 4,
+  "cpu_lines_in_proc_stat": 4,
+  "load_average_at_start": 0.33544921875,
+  "memory_available_mb_at_start": 13329,
+  "slirp4netns": "v1.3.6 (sha256 checked against probe-archive)",
+  "bulk": {
+   "download 256 MiB, local server": {
+    "direction": "download",
+    "megabytes": 256,
+    "seconds": 2.55,
+    "mb_per_s": 100.5,
+    "cpu_percent_of_one_cpu": {
+     "pump": 124,
+     "slirp4netns": 36,
+     "sandbox_main": 30,
+     "sandbox_relay": 0,
+     "sandbox_app": 0,
+     "load_server": 4
+    },
+    "machine_busy_percent": {
+     "cpu": 62,
+     "cpu0": 62,
+     "cpu1": 62,
+     "cpu2": 61,
+     "cpu3": 62
+    }
+   },
+   "upload 256 MiB, local server": {
+    "direction": "upload",
+    "megabytes": 256,
+    "seconds": 4.36,
+    "mb_per_s": 58.7,
+    "cpu_percent_of_one_cpu": {
+     "pump": 91,
+     "slirp4netns": 48,
+     "sandbox_main": 3,
+     "sandbox_relay": 0,
+     "sandbox_app": 0,
+     "load_server": 57
+    },
+    "machine_busy_percent": {
+     "cpu": 70,
+     "cpu0": 69,
+     "cpu1": 69,
+     "cpu2": 69,
+     "cpu3": 72
+    }
+   },
+   "HTTPS download from the Internet (up to 64 MiB of a public index page)": {
+    "status": "HTTP/1.1 200 OK",
+    "megabytes": 45.7,
+    "seconds": 0.5,
+    "mb_per_s": 92.2,
+    "cpu_percent_of_one_cpu": {
+     "pump": 118,
+     "slirp4netns": 36,
+     "sandbox_main": 40,
+     "sandbox_relay": 0,
+     "sandbox_app": 0,
+     "load_server": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 56,
+     "cpu0": 55,
+     "cpu1": 50,
+     "cpu2": 50,
+     "cpu3": 67
+    }
+   },
+   "pump": {
+    "to_slirp_frames": 281570,
+    "to_slirp_bytes": 283641029,
+    "to_child_frames": 406424,
+    "to_child_bytes": 339466747,
+    "errors": []
+   }
+  },
+  "section_seconds": {
+   "bulk": 8,
+   "connections": 31,
+   "edge": 61,
+   "hog": 33,
+   "fork": 52,
+   "disk": 5,
+   "build": 133
+  },
+  "connections": {
+   "1 connections, 1024-byte ping-pong": {
+    "messages": 80322,
+    "seconds": 10.0,
+    "per_second": 8032,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.12,
+     "p95": 0.18,
+     "p99": 0.26,
+     "max": 6.57
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 25,
+     "slirp4netns": 26,
+     "sandbox_main": 28,
+     "sandbox_relay": 0,
+     "sandbox_app": 0,
+     "load_server": 25
+    },
+    "machine_busy_percent": {
+     "cpu": 36,
+     "cpu0": 34,
+     "cpu1": 36,
+     "cpu2": 37,
+     "cpu3": 37
+    }
+   },
+   "10 connections, 1024-byte ping-pong": {
+    "messages": 247014,
+    "seconds": 10.0,
+    "per_second": 24700,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.25,
+     "p95": 0.47,
+     "p99": 0.75,
+     "max": 42.24
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 50,
+     "slirp4netns": 47,
+     "sandbox_main": 48,
+     "sandbox_relay": 0,
+     "sandbox_app": 0,
+     "load_server": 53
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 56,
+     "cpu1": 56,
+     "cpu2": 57,
+     "cpu3": 59
+    }
+   },
+   "100 connections, 1024-byte ping-pong": {
+    "messages": 281856,
+    "seconds": 10.23,
+    "per_second": 27555,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 2.33,
+     "p95": 5.06,
+     "p99": 37.46,
+     "max": 431.0
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 49,
+     "slirp4netns": 58,
+     "sandbox_main": 40,
+     "sandbox_relay": 0,
+     "sandbox_app": 0,
+     "load_server": 47
+    },
+    "machine_busy_percent": {
+     "cpu": 61,
+     "cpu0": 61,
+     "cpu1": 60,
+     "cpu2": 62,
+     "cpu3": 60
+    }
+   }
+  },
+  "edge": {
+   "1 connections, edge to relay to child in the sandbox": {
+    "connections": 1,
+    "requests": 53060,
+    "seconds": 10.0,
+    "per_second": 5306,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.17,
+     "p95": 0.28,
+     "p99": 0.4,
+     "max": 4.91
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 28,
+     "sandbox_app": 18,
+     "edge": 36,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 37,
+     "cpu0": 40,
+     "cpu1": 37,
+     "cpu2": 35,
+     "cpu3": 37
+    }
+   },
+   "10 connections, edge to relay to child in the sandbox": {
+    "connections": 10,
+    "requests": 110013,
+    "seconds": 10.03,
+    "per_second": 10966,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.55,
+     "p95": 0.99,
+     "p99": 2.44,
+     "max": 43.8
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 49,
+     "sandbox_app": 35,
+     "edge": 59,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 59,
+     "cpu0": 60,
+     "cpu1": 59,
+     "cpu2": 58,
+     "cpu3": 59
+    }
+   },
+   "100 connections, edge to relay to child in the sandbox": {
+    "connections": 100,
+    "requests": 134304,
+    "seconds": 10.03,
+    "per_second": 13389,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 4.62,
+     "p95": 39.34,
+     "p99": 47.8,
+     "max": 51.83
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 47,
+     "sandbox_app": 35,
+     "edge": 60,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 61,
+     "cpu0": 61,
+     "cpu1": 60,
+     "cpu2": 63,
+     "cpu3": 62
+    }
+   },
+   "1 connections, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 1,
+    "requests": 77519,
+    "seconds": 10.0,
+    "per_second": 7752,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.12,
+     "p95": 0.19,
+     "p99": 0.28,
+     "max": 9.43
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 50,
+     "app": 22,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 38,
+     "cpu0": 36,
+     "cpu1": 40,
+     "cpu2": 35,
+     "cpu3": 39
+    }
+   },
+   "10 connections, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 10,
+    "requests": 175105,
+    "seconds": 10.0,
+    "per_second": 17509,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.5,
+     "p95": 0.67,
+     "p99": 1.08,
+     "max": 23.34
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 83,
+     "app": 41,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 55,
+     "cpu1": 60,
+     "cpu2": 55,
+     "cpu3": 60
+    }
+   },
+   "100 connections, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 100,
+    "requests": 207898,
+    "seconds": 10.0,
+    "per_second": 20782,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 4.07,
+     "p95": 8.29,
+     "p99": 23.54,
+     "max": 29.28
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 79,
+     "app": 44,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 64,
+     "cpu0": 65,
+     "cpu1": 65,
+     "cpu2": 63,
+     "cpu3": 65
+    }
+   }
+  },
+  "hog": {
+   "no hog": {
+    "connections": 10,
+    "requests": 111193,
+    "seconds": 10.0,
+    "per_second": 11119,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.55,
+     "p95": 1.0,
+     "p99": 2.5,
+     "max": 43.35
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 48,
+     "sandbox_app": 35,
+     "edge": 59,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 58,
+     "cpu0": 57,
+     "cpu1": 60,
+     "cpu2": 57,
+     "cpu3": 59
+    }
+   },
+   "hog at nice 0": {
+    "connections": 10,
+    "requests": 31576,
+    "seconds": 10.0,
+    "per_second": 3157,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 1.06,
+     "p95": 8.97,
+     "p99": 56.6,
+     "max": 72.65
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 13,
+     "sandbox_app": 9,
+     "edge": 17,
+     "hog_processes": 143,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 56,
+     "cpu0": 56,
+     "cpu1": 56,
+     "cpu2": 56,
+     "cpu3": 57
+    }
+   },
+   "hog at nice 19, set by the launcher": {
+    "connections": 10,
+    "requests": 47866,
+    "seconds": 10.0,
+    "per_second": 4786,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.87,
+     "p95": 1.96,
+     "p99": 52.59,
+     "max": 66.57
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 19,
+     "sandbox_app": 13,
+     "edge": 25,
+     "hog_processes": 117,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 62,
+     "cpu0": 61,
+     "cpu1": 62,
+     "cpu2": 63,
+     "cpu3": 61
+    }
+   }
+  },
+  "fork": {
+   "victim before the fork test": {
+    "connections": 10,
+    "requests": 110813,
+    "seconds": 10.0,
+    "per_second": 11081,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.55,
+     "p95": 1.01,
+     "p99": 2.01,
+     "max": 45.64
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 48,
+     "sandbox_app": 35,
+     "edge": 59,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 59,
+     "cpu0": 58,
+     "cpu1": 59,
+     "cpu2": 59,
+     "cpu3": 60
+    }
+   },
+   "fork test": {
+    "created": 2000,
+    "seconds": 1.52,
+    "stopped_by": "count reached",
+    "nproc_limit": null,
+    "pid_of_this_process_in_sandbox": 1,
+    "container_processes_before": 16,
+    "container_processes_at_peak": 2028,
+    "memory_available_dropped_mb": 2030
+   },
+   "victim during the fork test": {
+    "connections": 10,
+    "requests": 98284,
+    "seconds": 10.0,
+    "per_second": 9828,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.55,
+     "p95": 1.27,
+     "p99": 13.12,
+     "max": 52.58
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 42,
+     "sandbox_app": 30,
+     "edge": 52,
+     "load_generator": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 59,
+     "cpu0": 60,
+     "cpu1": 60,
+     "cpu2": 59,
+     "cpu3": 59
+    }
+   },
+   "teardown by killing the namespace's init": {
+    "processes_in_the_namespace": 2001,
+    "seconds_until_none_is_left": 30.007,
+    "left_after_teardown": 1
+   },
+   "container_processes_after_teardown": 27,
+   "fork test with RLIMIT_NPROC 300 set by the launcher": {
+    "created": 298,
+    "seconds": 0.12,
+    "stopped_by": "EAGAIN",
+    "nproc_limit": 300,
+    "pid_of_this_process_in_sandbox": 1,
+    "processes_of_the_container_outside_the_sandbox": 28,
+    "processes_in_the_sandbox": 299
+   }
+  },
+  "disk": {
+   "mount": {
+    "mounted": "/tmp/spike7-hostdir/tmpfs",
+    "size_mb": 64
+   },
+   "fill a 64 MiB tmpfs with up to 128 MiB": {
+    "written_mb": 64,
+    "seconds": 0.02,
+    "stopped_by": "ENOSPC",
+    "files": 1,
+    "memory_available_dropped_mb": 0
+   },
+   "fill the host directory, no limit with 1024 MiB": {
+    "written_mb": 1024,
+    "seconds": 1.53,
+    "stopped_by": "limit reached",
+    "files": 1,
+    "free_disk_dropped_mb": 1024
+   },
+   "fill the host directory, RLIMIT_FSIZE 8 MiB per file with 1024 MiB": {
+    "written_mb": 1024,
+    "seconds": 0.48,
+    "stopped_by": "limit reached",
+    "files": 128,
+    "free_disk_dropped_mb": 958
+   }
+  },
+  "build": {
+   "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+   "no build isolation, setuptools from the environment, all egress denied": {
+    "exit_code": 0,
+    "seconds": 0.8,
+    "import_add_2_3": "5",
+    "output_tail": "Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nBuilding wheels for collected packages: spike7-ext\n  Building wheel for spike7-ext (pyproject.toml): started\n  Building wheel for spike7-ext (pyproject.toml): finished with status 'done'\n  Created wheel for spike7-ext: filename=spike7_ext-1.0-cp311-cp311-linux_x86_64.whl size=7784 sha256=d3437207f8396f0a6eb24db08cccf8f1bae9a1338f0d42034910198212084cb7\n  Stored in directory: /tmp/spike7-build/work0/pip-cache/wheels/2e/b0/78/1e72b8d9aa2514c1260113f993f3d99824950488baefed4cfa\nSuccessfully built spike7-ext\nInstalling collected packages: spike7-ext\nSuccessfully installed spike7-ext-1.0\n",
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 32,
+     "cpu0": 27,
+     "cpu1": 20,
+     "cpu2": 54,
+     "cpu3": 28
+    }
+   },
+   "build isolation, setuptools==84.1.0 fetched through the pump": {
+    "exit_code": 0,
+    "seconds": 2.7,
+    "import_add_2_3": "5",
+    "output_tail": "Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nBuilding wheels for collected packages: spike7-ext\n  Building wheel for spike7-ext (pyproject.toml): started\n  Building wheel for spike7-ext (pyproject.toml): finished with status 'done'\n  Created wheel for spike7-ext: filename=spike7_ext-1.0-cp311-cp311-linux_x86_64.whl size=7782 sha256=3b2a3a04c9ef7d90dc9001ed3913933e62c5d202df1939f60343eeb15bb77571\n  Stored in directory: /tmp/spike7-build/work1/pip-cache/wheels/2e/b0/78/1e72b8d9aa2514c1260113f993f3d99824950488baefed4cfa\nSuccessfully built spike7-ext\nInstalling collected packages: spike7-ext\nSuccessfully installed spike7-ext-1.0\n",
+    "cpu_percent_of_one_cpu": {
+     "pump": 1,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 32,
+     "cpu0": 53,
+     "cpu1": 27,
+     "cpu2": 31,
+     "cpu3": 18
+    }
+   },
+   "build isolation, all egress denied": {
+    "exit_code": 1,
+    "seconds": 128.3,
+    "import_add_2_3": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'spike7_ext'",
+    "output_tail": "r.urllib3.connection.HTTPSConnection object at 0x7f5a327e5e50>: Failed to establish a new connection: [Errno -3] Temporary failure in name resolution')': /simple/setuptools/\n      ERROR: Could not find a version that satisfies the requirement setuptools==84.1.0 (from versions: none)\n      ERROR: No matching distribution found for setuptools==84.1.0\n      [end of output]\n  \n  note: This error originates from a subprocess, and is likely not a problem with pip.\nerror: subprocess-exited-with-error\n\n\u00d7 pip subprocess to install build dependencies did not run successfully.\n\u2502 exit code: 1\n\u2570\u2500> See above for output.\n\nnote: This error originates from a subprocess, and is likely not a problem with pip.\n",
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 9,
+     "cpu0": 9,
+     "cpu1": 9,
+     "cpu2": 9,
+     "cpu3": 9
+    }
+   }
+  }
+ },
+ "run_2": {
+  "date": "2026-10-30",
+  "kernel": "6.1.188-233.393.amzn2023.x86_64",
+  "python": "3.11.17",
+  "cpus_visible": 4,
+  "cpu_lines_in_proc_stat": 4,
+  "load_average_at_start": 1.220703125,
+  "memory_available_mb_at_start": 13376,
+  "slirp4netns": "v1.3.6 (sha256 checked against probe-archive)",
+  "ceiling": {
+   "1 busy loops for 6 s": {
+    "busy_loops": 1,
+    "seconds": 6.0,
+    "visible_cpus": 4,
+    "cpu_seconds_the_loops_got": 5.99,
+    "cpu_percent_of_one_cpu_in_total": 100,
+    "cpu_percent_of_one_cpu_per_loop": 100,
+    "proc_stat_idle_percent_of_all_cpus": 66,
+    "proc_stat_steal_seconds": 0.0,
+    "cpu_pressure_some_avg10_after": 4.72,
+    "cgroup_cpu_files_visible": []
+   },
+   "2 busy loops for 6 s": {
+    "busy_loops": 2,
+    "seconds": 6.0,
+    "visible_cpus": 4,
+    "cpu_seconds_the_loops_got": 11.96,
+    "cpu_percent_of_one_cpu_in_total": 199,
+    "cpu_percent_of_one_cpu_per_loop": 100,
+    "proc_stat_idle_percent_of_all_cpus": 42,
+    "proc_stat_steal_seconds": 0.0,
+    "cpu_pressure_some_avg10_after": 4.15,
+    "cgroup_cpu_files_visible": []
+   },
+   "3 busy loops for 6 s": {
+    "busy_loops": 3,
+    "seconds": 6.03,
+    "visible_cpus": 4,
+    "cpu_seconds_the_loops_got": 12.05,
+    "cpu_percent_of_one_cpu_in_total": 200,
+    "cpu_percent_of_one_cpu_per_loop": 67,
+    "proc_stat_idle_percent_of_all_cpus": 33,
+    "proc_stat_steal_seconds": 0.0,
+    "cpu_pressure_some_avg10_after": 22.19,
+    "cgroup_cpu_files_visible": []
+   },
+   "4 busy loops for 6 s": {
+    "busy_loops": 4,
+    "seconds": 6.02,
+    "visible_cpus": 4,
+    "cpu_seconds_the_loops_got": 12.09,
+    "cpu_percent_of_one_cpu_in_total": 201,
+    "cpu_percent_of_one_cpu_per_loop": 50,
+    "proc_stat_idle_percent_of_all_cpus": 39,
+    "proc_stat_steal_seconds": 0.01,
+    "cpu_pressure_some_avg10_after": 41.87,
+    "cgroup_cpu_files_visible": []
+   },
+   "8 busy loops for 6 s": {
+    "busy_loops": 8,
+    "seconds": 6.04,
+    "visible_cpus": 4,
+    "cpu_seconds_the_loops_got": 12.05,
+    "cpu_percent_of_one_cpu_in_total": 199,
+    "cpu_percent_of_one_cpu_per_loop": 25,
+    "proc_stat_idle_percent_of_all_cpus": 43,
+    "proc_stat_steal_seconds": 0.0,
+    "cpu_pressure_some_avg10_after": 64.7,
+    "cgroup_cpu_files_visible": []
+   },
+   "4 busy loops for 30 s": {
+    "busy_loops": 4,
+    "seconds": 30.0,
+    "visible_cpus": 4,
+    "cpu_seconds_the_loops_got": 59.99,
+    "cpu_percent_of_one_cpu_in_total": 200,
+    "cpu_percent_of_one_cpu_per_loop": 50,
+    "proc_stat_idle_percent_of_all_cpus": 39,
+    "proc_stat_steal_seconds": 0.0,
+    "cpu_pressure_some_avg10_after": 69.72,
+    "cgroup_cpu_files_visible": []
+   }
+  },
+  "section_seconds": {
+   "ceiling": 60,
+   "edge": 101,
+   "hog": 86,
+   "fork": 24,
+   "build": 433
+  },
+  "edge": {
+   "1 connections, edge to relay to child in the sandbox": {
+    "connections": 1,
+    "requests": 53907,
+    "seconds": 10.0,
+    "per_second": 5391,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.17,
+     "p95": 0.28,
+     "p99": 0.4,
+     "max": 4.81
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 28,
+     "sandbox_app": 18,
+     "edge": 36,
+     "load_generator": 31
+    },
+    "machine_busy_percent": {
+     "cpu": 38,
+     "cpu0": 35,
+     "cpu1": 40,
+     "cpu2": 37,
+     "cpu3": 39
+    }
+   },
+   "10 connections, edge to relay to child in the sandbox": {
+    "connections": 10,
+    "requests": 108503,
+    "seconds": 10.0,
+    "per_second": 10850,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.56,
+     "p95": 1.17,
+     "p99": 2.49,
+     "max": 43.58
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 47,
+     "sandbox_app": 35,
+     "edge": 59,
+     "load_generator": 55
+    },
+    "machine_busy_percent": {
+     "cpu": 61,
+     "cpu0": 59,
+     "cpu1": 63,
+     "cpu2": 61,
+     "cpu3": 60
+    }
+   },
+   "100 connections, edge to relay to child in the sandbox": {
+    "connections": 100,
+    "requests": 140774,
+    "seconds": 10.01,
+    "per_second": 14068,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 4.5,
+     "p95": 38.28,
+     "p99": 45.29,
+     "max": 51.93
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 50,
+     "sandbox_app": 37,
+     "edge": 62,
+     "load_generator": 50
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 57,
+     "cpu1": 59,
+     "cpu2": 58,
+     "cpu3": 57
+    }
+   },
+   "10 connections, 2 load generators, edge to relay to child in the sandbox": {
+    "connections": 10,
+    "generators": 2,
+    "requests": 110703,
+    "seconds": 10.0,
+    "per_second": 11069,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms_worst_generator": {
+     "p50": 0.58,
+     "p95": 0.97,
+     "p99": 4.89,
+     "max": 41.54
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 45,
+     "sandbox_app": 32,
+     "edge": 60,
+     "load_generator": 63
+    },
+    "machine_busy_percent": {
+     "cpu": 58,
+     "cpu0": 59,
+     "cpu1": 59,
+     "cpu2": 58,
+     "cpu3": 57
+    }
+   },
+   "100 connections, 2 load generators, edge to relay to child in the sandbox": {
+    "connections": 100,
+    "generators": 2,
+    "requests": 137451,
+    "seconds": 10.01,
+    "per_second": 13726,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms_worst_generator": {
+     "p50": 4.57,
+     "p95": 36.53,
+     "p99": 46.64,
+     "max": 51.61
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 44,
+     "sandbox_app": 31,
+     "edge": 60,
+     "load_generator": 63
+    },
+    "machine_busy_percent": {
+     "cpu": 62,
+     "cpu0": 61,
+     "cpu1": 62,
+     "cpu2": 63,
+     "cpu3": 63
+    }
+   },
+   "1 connections, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 1,
+    "requests": 79194,
+    "seconds": 10.0,
+    "per_second": 7919,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.12,
+     "p95": 0.18,
+     "p99": 0.27,
+     "max": 4.53
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 50,
+     "app": 22,
+     "load_generator": 41
+    },
+    "machine_busy_percent": {
+     "cpu": 38,
+     "cpu0": 38,
+     "cpu1": 41,
+     "cpu2": 37,
+     "cpu3": 38
+    }
+   },
+   "10 connections, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 10,
+    "requests": 176386,
+    "seconds": 10.0,
+    "per_second": 17638,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.5,
+     "p95": 0.66,
+     "p99": 1.12,
+     "max": 20.94
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 83,
+     "app": 39,
+     "load_generator": 76
+    },
+    "machine_busy_percent": {
+     "cpu": 58,
+     "cpu0": 58,
+     "cpu1": 60,
+     "cpu2": 58,
+     "cpu3": 55
+    }
+   },
+   "100 connections, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 100,
+    "requests": 206595,
+    "seconds": 10.01,
+    "per_second": 20641,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 4.16,
+     "p95": 8.11,
+     "p99": 23.02,
+     "max": 25.89
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 79,
+     "app": 42,
+     "load_generator": 77
+    },
+    "machine_busy_percent": {
+     "cpu": 63,
+     "cpu0": 68,
+     "cpu1": 61,
+     "cpu2": 61,
+     "cpu3": 62
+    }
+   },
+   "10 connections, 2 load generators, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 10,
+    "generators": 2,
+    "requests": 159961,
+    "seconds": 10.02,
+    "per_second": 15970,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms_worst_generator": {
+     "p50": 0.49,
+     "p95": 0.72,
+     "p99": 1.39,
+     "max": 26.13
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 78,
+     "app": 36,
+     "load_generator": 85
+    },
+    "machine_busy_percent": {
+     "cpu": 59,
+     "cpu0": 57,
+     "cpu1": 62,
+     "cpu2": 58,
+     "cpu3": 60
+    }
+   },
+   "100 connections, 2 load generators, edge to a child on a unix socket, no sandbox and no relay (baseline)": {
+    "connections": 100,
+    "generators": 2,
+    "requests": 184646,
+    "seconds": 10.03,
+    "per_second": 18417,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms_worst_generator": {
+     "p50": 4.17,
+     "p95": 22.75,
+     "p99": 30.85,
+     "max": 36.07
+    },
+    "cpu_percent_of_one_cpu": {
+     "edge": 76,
+     "app": 38,
+     "load_generator": 86
+    },
+    "machine_busy_percent": {
+     "cpu": 59,
+     "cpu0": 56,
+     "cpu1": 62,
+     "cpu2": 59,
+     "cpu3": 58
+    }
+   }
+  },
+  "hog": {
+   "no hog, closed loop": {
+    "connections": 10,
+    "requests": 112464,
+    "seconds": 10.01,
+    "per_second": 11232,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.56,
+     "p95": 1.11,
+     "p99": 2.08,
+     "max": 42.89
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 48,
+     "sandbox_app": 34,
+     "edge": 60,
+     "load_generator": 55
+    },
+    "machine_busy_percent": {
+     "cpu": 62,
+     "cpu0": 62,
+     "cpu1": 63,
+     "cpu2": 61,
+     "cpu3": 62
+    }
+   },
+   "no hog, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 0.83,
+     "p95": 1.3,
+     "p99": 1.47,
+     "max": 5.28
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 3,
+     "sandbox_app": 2,
+     "edge": 4,
+     "load_generator": 6
+    },
+    "machine_busy_percent": {
+     "cpu": 9,
+     "cpu0": 9,
+     "cpu1": 9,
+     "cpu2": 10,
+     "cpu3": 9
+    }
+   },
+   "hog at nice 0, closed loop": {
+    "connections": 10,
+    "requests": 31129,
+    "seconds": 10.0,
+    "per_second": 3113,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 1.11,
+     "p95": 8.38,
+     "p99": 56.7,
+     "max": 72.41
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 14,
+     "sandbox_app": 10,
+     "edge": 17,
+     "hog_processes": 143,
+     "load_generator": 16
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 57,
+     "cpu1": 58,
+     "cpu2": 57,
+     "cpu3": 57
+    }
+   },
+   "hog at nice 0, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 5.88,
+     "p95": 48.28,
+     "p99": 54.15,
+     "max": 72.26
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 3,
+     "sandbox_app": 2,
+     "edge": 4,
+     "hog_processes": 186,
+     "load_generator": 5
+    },
+    "machine_busy_percent": {
+     "cpu": 62,
+     "cpu0": 63,
+     "cpu1": 63,
+     "cpu2": 61,
+     "cpu3": 61
+    }
+   },
+   "hog at nice 19, set by the launcher, closed loop": {
+    "connections": 10,
+    "requests": 45198,
+    "seconds": 10.0,
+    "per_second": 4519,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.95,
+     "p95": 1.98,
+     "p99": 52.91,
+     "max": 65.91
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 19,
+     "sandbox_app": 13,
+     "edge": 23,
+     "hog_processes": 122,
+     "load_generator": 23
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 58,
+     "cpu1": 57,
+     "cpu2": 56,
+     "cpu3": 56
+    }
+   },
+   "hog at nice 19, set by the launcher, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.06,
+    "per_second": 498,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 5.9,
+     "p95": 48.77,
+     "p99": 54.28,
+     "max": 60.68
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 3,
+     "sandbox_app": 2,
+     "edge": 4,
+     "hog_processes": 187,
+     "load_generator": 5
+    },
+    "machine_busy_percent": {
+     "cpu": 58,
+     "cpu0": 59,
+     "cpu1": 58,
+     "cpu2": 58,
+     "cpu3": 57
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, set by the launcher, closed loop": {
+    "connections": 10,
+    "requests": 78166,
+    "seconds": 10.02,
+    "per_second": 7805,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.74,
+     "p95": 1.49,
+     "p99": 31.43,
+     "max": 46.56
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 32,
+     "sandbox_app": 23,
+     "edge": 42,
+     "hog_processes": 66,
+     "load_generator": 35
+    },
+    "machine_busy_percent": {
+     "cpu": 61,
+     "cpu0": 59,
+     "cpu1": 55,
+     "cpu2": 60,
+     "cpu3": 70
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, set by the launcher, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 0.87,
+     "p95": 1.34,
+     "p99": 1.87,
+     "max": 8.84
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 4,
+     "sandbox_app": 2,
+     "edge": 5,
+     "hog_processes": 100,
+     "load_generator": 7
+    },
+    "machine_busy_percent": {
+     "cpu": 41,
+     "cpu0": 21,
+     "cpu1": 22,
+     "cpu2": 21,
+     "cpu3": 100
+    }
+   },
+   "can the sandbox undo nice 19 and the CPU pin from inside": {
+    "nice_before": 19,
+    "affinity_before": [
+     3
+    ],
+    "setpriority back to 0": "EACCES",
+    "sched_setaffinity to every visible CPU": "allowed",
+    "nice_after": 19,
+    "affinity_after": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "fork": {
+   "victim before the fork test": {
+    "connections": 10,
+    "requests": 112003,
+    "seconds": 10.0,
+    "per_second": 11199,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.55,
+     "p95": 1.01,
+     "p99": 3.01,
+     "max": 44.31
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 48,
+     "sandbox_app": 35,
+     "edge": 60,
+     "load_generator": 56
+    },
+    "machine_busy_percent": {
+     "cpu": 60,
+     "cpu0": 61,
+     "cpu1": 58,
+     "cpu2": 61,
+     "cpu3": 60
+    }
+   },
+   "fork test": {
+    "created": 2000,
+    "seconds": 1.49,
+    "stopped_by": "count reached",
+    "nproc_limit": null,
+    "pid_of_this_process_in_sandbox": 1,
+    "container_processes_before": 22,
+    "container_processes_at_peak": 2034,
+    "memory_available_dropped_mb": 2011
+   },
+   "victim during the fork test": {
+    "connections": 10,
+    "requests": 99132,
+    "seconds": 10.0,
+    "per_second": 9912,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.55,
+     "p95": 1.49,
+     "p99": 8.88,
+     "max": 54.01
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 42,
+     "sandbox_app": 30,
+     "edge": 52,
+     "load_generator": 50
+    },
+    "machine_busy_percent": {
+     "cpu": 60,
+     "cpu0": 59,
+     "cpu1": 59,
+     "cpu2": 61,
+     "cpu3": 61
+    }
+   },
+   "PID 1 of the container": "lha-runtime",
+   "teardown by killing the namespace's init, orphans go to the container's PID 1": {
+    "processes_in_the_namespace": 2001,
+    "seconds_until_none_is_running": 0.569,
+    "still_running": 0,
+    "zombies_left": 1,
+    "command_of_the_zombies_parent": [
+     "lha-runtime"
+    ],
+    "reaped_by_the_driver": 0
+   },
+   "container_processes_after_teardown": 33,
+   "teardown with the driver as subreaper": {
+    "processes_in_the_namespace": 2001,
+    "seconds_until_none_is_running": 0.563,
+    "still_running": 0,
+    "zombies_left": 0,
+    "command_of_the_zombies_parent": [],
+    "reaped_by_the_driver": 1
+   },
+   "fork test with RLIMIT_NPROC 300 set by the launcher": {
+    "created": 298,
+    "seconds": 0.11,
+    "stopped_by": "EAGAIN",
+    "nproc_limit": 300,
+    "pid_of_this_process_in_sandbox": 1,
+    "processes_of_the_container_outside_the_sandbox": 34,
+    "processes_in_the_sandbox": 299
+   }
+  },
+  "build": {
+   "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+   "no build isolation, setuptools from the environment, all egress denied": {
+    "exit_code": 0,
+    "seconds": 0.8,
+    "import_add_2_3": "5",
+    "output_tail": "Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nBuilding wheels for collected packages: spike7-ext\n  Building wheel for spike7-ext (pyproject.toml): started\n  Building wheel for spike7-ext (pyproject.toml): finished with status 'done'\n  Created wheel for spike7-ext: filename=spike7_ext-1.0-cp311-cp311-linux_x86_64.whl size=7784 sha256=5fcecd371ec79a6a2426b22057269dc42da6e7719c86b8e3ba57976293766213\n  Stored in directory: /tmp/spike7-build/work0/pip-cache/wheels/2e/b0/78/1e72b8d9aa2514c1260113f993f3d99824950488baefed4cfa\nSuccessfully built spike7-ext\nInstalling collected packages: spike7-ext\nSuccessfully installed spike7-ext-1.0\n",
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 32,
+     "cpu0": 14,
+     "cpu1": 35,
+     "cpu2": 46,
+     "cpu3": 33
+    }
+   },
+   "build isolation, setuptools==84.1.0 fetched through the pump": {
+    "exit_code": 0,
+    "seconds": 2.7,
+    "import_add_2_3": "5",
+    "output_tail": "Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nBuilding wheels for collected packages: spike7-ext\n  Building wheel for spike7-ext (pyproject.toml): started\n  Building wheel for spike7-ext (pyproject.toml): finished with status 'done'\n  Created wheel for spike7-ext: filename=spike7_ext-1.0-cp311-cp311-linux_x86_64.whl size=7784 sha256=1dfe34af99e6977e97c55836679c4c045e87c5294b93daae81b269b5b1050e16\n  Stored in directory: /tmp/spike7-build/work1/pip-cache/wheels/2e/b0/78/1e72b8d9aa2514c1260113f993f3d99824950488baefed4cfa\nSuccessfully built spike7-ext\nInstalling collected packages: spike7-ext\nSuccessfully installed spike7-ext-1.0\n",
+    "cpu_percent_of_one_cpu": {
+     "pump": 1,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 35,
+     "cpu0": 43,
+     "cpu1": 31,
+     "cpu2": 42,
+     "cpu3": 24
+    }
+   },
+   "build isolation, all egress denied": {
+    "exit_code": 1,
+    "seconds": 128.3,
+    "import_add_2_3": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'spike7_ext'",
+    "output_tail": "r.urllib3.connection.HTTPSConnection object at 0x7f9473c2f310>: Failed to establish a new connection: [Errno -3] Temporary failure in name resolution')': /simple/setuptools/\n      ERROR: Could not find a version that satisfies the requirement setuptools==84.1.0 (from versions: none)\n      ERROR: No matching distribution found for setuptools==84.1.0\n      [end of output]\n  \n  note: This error originates from a subprocess, and is likely not a problem with pip.\nerror: subprocess-exited-with-error\n\n\u00d7 pip subprocess to install build dependencies did not run successfully.\n\u2502 exit code: 1\n\u2570\u2500> See above for output.\n\nnote: This error originates from a subprocess, and is likely not a problem with pip.\n",
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 9,
+     "cpu0": 9,
+     "cpu1": 9,
+     "cpu2": 9,
+     "cpu3": 9
+    }
+   },
+   "build isolation, all egress denied, resolv.conf names slirp's resolver": {
+    "exit_code": null,
+    "seconds": 300.1,
+    "import_add_2_3": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'spike7_ext'",
+    "output_tail": "timed out",
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 9,
+     "cpu0": 9,
+     "cpu1": 9,
+     "cpu2": 10,
+     "cpu3": 9
+    }
+   }
+  }
+ },
+ "run_3": {
+  "date": "2026-10-30",
+  "kernel": "6.1.188-233.393.amzn2023.x86_64",
+  "python": "3.11.17",
+  "cpus_visible": 4,
+  "cpu_lines_in_proc_stat": 4,
+  "load_average_at_start": 0.537109375,
+  "memory_available_mb_at_start": 13348,
+  "slirp4netns": "v1.3.6 (sha256 checked against probe-archive)",
+  "idle": {
+   "1 idle sandboxes": {
+    "pss_mb_by_part": {
+     "pump": 6.8,
+     "slirp4netns": 1.8,
+     "sandbox_main": 19.0,
+     "sandbox_relay": 0.0,
+     "sandbox_app": 0.0
+    },
+    "pss_mb_total": 27.6,
+    "pss_mb_per_sandbox": 27.6,
+    "memory_available_dropped_mb": -10,
+    "cpu_percent_of_one_cpu_all_sandboxes": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": 7
+   },
+   "10 idle sandboxes": {
+    "pss_mb_by_part": {
+     "pump": 55.9,
+     "slirp4netns": 3.1,
+     "sandbox_main": 159.4,
+     "sandbox_relay": 0.0,
+     "sandbox_app": 0.0
+    },
+    "pss_mb_total": 218.4,
+    "pss_mb_per_sandbox": 21.8,
+    "memory_available_dropped_mb": 239,
+    "cpu_percent_of_one_cpu_all_sandboxes": {
+     "pump": 3,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": 12
+   }
+  },
+  "section_seconds": {
+   "idle": 29,
+   "hog": 130,
+   "build_resolver": 3
+  },
+  "hog": {
+   "no hog, closed loop": {
+    "connections": 10,
+    "requests": 112014,
+    "seconds": 10.03,
+    "per_second": 11168,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.55,
+     "p95": 1.0,
+     "p99": 2.28,
+     "max": 46.01
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 48,
+     "sandbox_app": 35,
+     "edge": 59,
+     "load_generator": 56
+    },
+    "machine_busy_percent": {
+     "cpu": 59,
+     "cpu0": 60,
+     "cpu1": 58,
+     "cpu2": 59,
+     "cpu3": 57
+    }
+   },
+   "no hog, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 0.84,
+     "p95": 1.3,
+     "p99": 1.49,
+     "max": 6.04
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 4,
+     "sandbox_app": 2,
+     "edge": 5,
+     "load_generator": 6
+    },
+    "machine_busy_percent": {
+     "cpu": 16,
+     "cpu0": 15,
+     "cpu1": 16,
+     "cpu2": 18,
+     "cpu3": 16
+    }
+   },
+   "hog at nice 0, closed loop": {
+    "connections": 10,
+    "requests": 31927,
+    "seconds": 10.0,
+    "per_second": 3191,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 1.0,
+     "p95": 9.3,
+     "p99": 56.95,
+     "max": 72.33
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 14,
+     "sandbox_app": 10,
+     "edge": 17,
+     "hog_processes": 142,
+     "load_generator": 16
+    },
+    "machine_busy_percent": {
+     "cpu": 60,
+     "cpu0": 61,
+     "cpu1": 60,
+     "cpu2": 60,
+     "cpu3": 59
+    }
+   },
+   "hog at nice 0, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.05,
+    "per_second": 498,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 7.5,
+     "p95": 50.21,
+     "p99": 55.09,
+     "max": 75.14
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 3,
+     "sandbox_app": 2,
+     "edge": 4,
+     "hog_processes": 185,
+     "load_generator": 5
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 57,
+     "cpu1": 57,
+     "cpu2": 57,
+     "cpu3": 58
+    }
+   },
+   "hog at nice 19, set by the launcher, closed loop": {
+    "connections": 10,
+    "requests": 43449,
+    "seconds": 10.0,
+    "per_second": 4343,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.98,
+     "p95": 2.16,
+     "p99": 53.59,
+     "max": 62.93
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 18,
+     "sandbox_app": 12,
+     "edge": 22,
+     "hog_processes": 125,
+     "load_generator": 22
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 57,
+     "cpu1": 57,
+     "cpu2": 57,
+     "cpu3": 58
+    }
+   },
+   "hog at nice 19, set by the launcher, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 5.54,
+     "p95": 47.86,
+     "p99": 53.48,
+     "max": 64.65
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 3,
+     "sandbox_app": 2,
+     "edge": 4,
+     "hog_processes": 185,
+     "load_generator": 5
+    },
+    "machine_busy_percent": {
+     "cpu": 64,
+     "cpu0": 64,
+     "cpu1": 64,
+     "cpu2": 64,
+     "cpu3": 65
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, set by the launcher, closed loop": {
+    "connections": 10,
+    "requests": 80204,
+    "seconds": 10.0,
+    "per_second": 8020,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.72,
+     "p95": 1.3,
+     "p99": 35.32,
+     "max": 45.95
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 32,
+     "sandbox_app": 23,
+     "edge": 43,
+     "hog_processes": 66,
+     "load_generator": 35
+    },
+    "machine_busy_percent": {
+     "cpu": 57,
+     "cpu0": 54,
+     "cpu1": 52,
+     "cpu2": 54,
+     "cpu3": 68
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, set by the launcher, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 0.86,
+     "p95": 1.34,
+     "p99": 1.99,
+     "max": 10.89
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 4,
+     "sandbox_app": 2,
+     "edge": 5,
+     "hog_processes": 100,
+     "load_generator": 6
+    },
+    "machine_busy_percent": {
+     "cpu": 41,
+     "cpu0": 23,
+     "cpu1": 21,
+     "cpu2": 23,
+     "cpu3": 100
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, each loop first widens its own pin, closed loop": {
+    "connections": 10,
+    "requests": 44193,
+    "seconds": 10.04,
+    "per_second": 4400,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.97,
+     "p95": 2.15,
+     "p99": 53.11,
+     "max": 71.52
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 18,
+     "sandbox_app": 12,
+     "edge": 23,
+     "hog_processes": 123,
+     "load_generator": 23
+    },
+    "machine_busy_percent": {
+     "cpu": 59,
+     "cpu0": 61,
+     "cpu1": 58,
+     "cpu2": 59,
+     "cpu3": 59
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, each loop first widens its own pin, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 6.49,
+     "p95": 49.53,
+     "p99": 55.04,
+     "max": 63.62
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 3,
+     "sandbox_app": 2,
+     "edge": 4,
+     "hog_processes": 186,
+     "load_generator": 5
+    },
+    "machine_busy_percent": {
+     "cpu": 58,
+     "cpu0": 58,
+     "cpu1": 59,
+     "cpu2": 59,
+     "cpu3": 58
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, each loop first widens its own pin, sched_setaffinity refused by seccomp, closed loop": {
+    "connections": 10,
+    "requests": 78472,
+    "seconds": 10.0,
+    "per_second": 7847,
+    "failures": 0,
+    "failure_kinds": [],
+    "latency_ms": {
+     "p50": 0.74,
+     "p95": 1.51,
+     "p99": 30.63,
+     "max": 46.73
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 32,
+     "sandbox_app": 23,
+     "edge": 43,
+     "hog_processes": 67,
+     "load_generator": 36
+    },
+    "machine_busy_percent": {
+     "cpu": 61,
+     "cpu0": 59,
+     "cpu1": 56,
+     "cpu2": 58,
+     "cpu3": 71
+    }
+   },
+   "hog at nice 19 and pinned to CPU 3, each loop first widens its own pin, sched_setaffinity refused by seccomp, 500 requests per second": {
+    "connections": 10,
+    "requests": 5010,
+    "seconds": 10.02,
+    "per_second": 500,
+    "failures": 0,
+    "failure_kinds": [],
+    "rate_per_s": 500.0,
+    "latency_ms": {
+     "p50": 0.87,
+     "p95": 1.35,
+     "p99": 2.0,
+     "max": 11.83
+    },
+    "cpu_percent_of_one_cpu": {
+     "pump": 0,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 4,
+     "sandbox_app": 2,
+     "edge": 5,
+     "hog_processes": 100,
+     "load_generator": 7
+    },
+    "machine_busy_percent": {
+     "cpu": 43,
+     "cpu0": 25,
+     "cpu1": 23,
+     "cpu2": 25,
+     "cpu3": 100
+    }
+   },
+   "can the sandbox undo nice 19 and the CPU pin from inside": {
+    "nice_before": 19,
+    "affinity_before": [
+     3
+    ],
+    "setpriority back to 0": "EACCES",
+    "sched_setaffinity to every visible CPU": "allowed",
+    "nice_after": 19,
+    "affinity_after": [
+     0,
+     1,
+     2,
+     3
+    ]
+   },
+   "the same with sched_setaffinity refused by seccomp": {
+    "nice_before": 19,
+    "affinity_before": [
+     3
+    ],
+    "setpriority back to 0": "EACCES",
+    "sched_setaffinity to every visible CPU": "EPERM",
+    "nice_after": 19,
+    "affinity_after": [
+     3
+    ]
+   }
+  },
+  "build_resolver": {
+   "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+   "build isolation, setuptools==84.1.0 fetched through the pump, resolv.conf names slirp's resolver": {
+    "exit_code": 0,
+    "seconds": 2.7,
+    "import_add_2_3": "5",
+    "output_tail": "Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nBuilding wheels for collected packages: spike7-ext\n  Building wheel for spike7-ext (pyproject.toml): started\n  Building wheel for spike7-ext (pyproject.toml): finished with status 'done'\n  Created wheel for spike7-ext: filename=spike7_ext-1.0-cp311-cp311-linux_x86_64.whl size=7782 sha256=d1fc96b0fc34531417a010826c75a9b7b8e8185df9f094c86e9931c527482228\n  Stored in directory: /tmp/spike7-build/work0/pip-cache/wheels/2e/b0/78/1e72b8d9aa2514c1260113f993f3d99824950488baefed4cfa\nSuccessfully built spike7-ext\nInstalling collected packages: spike7-ext\nSuccessfully installed spike7-ext-1.0\n",
+    "cpu_percent_of_one_cpu": {
+     "pump": 1,
+     "slirp4netns": 0,
+     "sandbox_main": 0,
+     "sandbox_relay": 0,
+     "sandbox_app": 0
+    },
+    "machine_busy_percent": {
+     "cpu": 34,
+     "cpu0": 23,
+     "cpu1": 44,
+     "cpu2": 19,
+     "cpu3": 52
+    }
+   }
+  }
+ }
+}

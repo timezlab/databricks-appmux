@@ -1,0 +1,56 @@
+{
+ "date": "2026-10-30",
+ "workspace": "Free Edition only (<workspace-host>)",
+ "caller": "the owner's OBO token, read inside the probe app (appmux-probe, user authorization on); member of the workspace `admins` group",
+ "call": "GET /api/2.0/preview/scim/v2/Me, response `groups[].type` and `.display`",
+ "groups_created": [
+  "appmux-spike-12-child (direct member: the owner)",
+  "appmux-spike-12-parent (contains child)",
+  "appmux-spike-12-grand (contains parent)",
+  "appmux-spike-12-great (contains grand)"
+ ],
+ "nesting_allowed": true,
+ "add_observation": {
+  "note": "child, parent, grand created and nested first; `great` added on top and the user polled every 3 s from the start",
+  "first_response_after_creating_parent": "direct groups only (parent absent)",
+  "about_60s_later": "parent listed with type `indirect`",
+  "three_levels": [
+   "t+0.1s   child:direct grand:indirect parent:indirect              (great absent)",
+   "t+6.2s   child:direct grand:indirect great:indirect parent:indirect",
+   "t+9.3s   great absent again",
+   "t+12.4s  great present",
+   "t+15.5s  great absent",
+   "t+30.9s  great present",
+   "t+34.0s  great absent",
+   "t+40.2s  great present",
+   "t+46.4s  great absent",
+   "t+49.5s  great present; no further change until the poll ended at t+151s"
+  ],
+  "reading": "after a membership is added the answers alternate between the old and the new state for about 50 s, then settle on the new state"
+ },
+ "removal_observation": {
+  "note": "user removed from `child` by a SCIM PATCH from the CLI at t+14.0s..t+15.5s of the poll (local clock; poll clock from the app, skew not measured)",
+  "timeline": [
+   "t+0.1s   child:direct grand:indirect great:indirect parent:indirect",
+   "t+15.6s  no spike group",
+   "t+21.7s  child:indirect grand:indirect great:indirect parent:indirect   (stale answer; `child` now typed indirect)",
+   "t+27.9s  no spike group",
+   "t+37.2s  child:indirect grand:indirect great:indirect parent:indirect",
+   "t+43.4s  no spike group",
+   "t+46.5s  child:indirect grand:indirect great:indirect parent:indirect",
+   "t+52.6s  no spike group",
+   "t+89.7s  child:indirect grand:indirect great:indirect parent:indirect   (last stale answer, about 75 s after the PATCH)",
+   "t+95.8s  no spike group; no further change until the poll ended at t+272s"
+  ],
+  "reading": "the first answer after the PATCH already showed the removal; stale answers kept coming for about 75 s"
+ },
+ "other_groups_in_response": 3,
+ "limits": "one user, one workspace, one add and one removal; the alternation suggests more than one server answering with different views, which was not confirmed",
+ "created": [
+  "appmux-spike-12-child",
+  "appmux-spike-12-parent",
+  "appmux-spike-12-grand",
+  "appmux-spike-12-great"
+ ],
+ "removed": "all four, verified with `databricks groups list` (no group named *spike*)"
+}

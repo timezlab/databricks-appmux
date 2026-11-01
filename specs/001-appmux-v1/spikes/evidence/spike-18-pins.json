@@ -1,0 +1,77 @@
+{
+ "fastapi": {
+  "version": "0.142.2",
+  "wheel": "fastapi-0.142.2-py3-none-any.whl",
+  "sha256": "bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b",
+  "published": "2026-09-30",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.10"
+ },
+ "starlette": {
+  "version": "1.7.0",
+  "wheel": "starlette-1.7.0-py3-none-any.whl",
+  "sha256": "67f8e99895493dd2911a03f11314af6ceebeae4e704bb9f43dfc6a9db151c93e",
+  "published": "2026-09-23",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.10"
+ },
+ "uvicorn": {
+  "version": "0.32.1",
+  "wheel": "uvicorn-0.32.1-py3-none-any.whl",
+  "sha256": "82ad92fd58da0d12af7482ecdb5f2470a04c9c9a53ced65b9bbb4a205377602e",
+  "published": "2024-11-20",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.8"
+ },
+ "click": {
+  "version": "8.1.8",
+  "wheel": "click-8.1.8-py3-none-any.whl",
+  "sha256": "63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2",
+  "published": "2024-12-21",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.7"
+ },
+ "humanize": {
+  "version": "4.11.0",
+  "wheel": "humanize-4.11.0-py3-none-any.whl",
+  "sha256": "b53caaec8532bcb2fff70c8826f904c35943f8cecaca29d272d9df38092736c0",
+  "published": "2024-10-05",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.9"
+ },
+ "opentelemetry-api": {
+  "version": "1.45.1",
+  "wheel": "opentelemetry_api-1.45.1-py3-none-any.whl",
+  "sha256": "b31553efa588ae44bc306f863c785c5333a9ecc091248c6ee68b4b6c87fdedfb",
+  "published": "2026-10-06",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.10",
+  "added_in": "second run, after pip check named it"
+ },
+ "opentelemetry-sdk": {
+  "version": "1.45.1",
+  "wheel": "opentelemetry_sdk-1.45.1-py3-none-any.whl",
+  "sha256": "c604c11dc429810812348989115fa44bd558772a3d7442afc43d024f2c250ca4",
+  "published": "2026-10-06",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.10",
+  "added_in": "third run, after pip check named it"
+ },
+ "opentelemetry-semantic-conventions": {
+  "version": "0.66b1",
+  "wheel": "opentelemetry_semantic_conventions-0.66b1-py3-none-any.whl",
+  "sha256": "d4cddeb4315490b35213f55e2bdc9ac54bb1e4d318927475bed62b35545e581b",
+  "published": "2026-10-06",
+  "osv_advisories": [],
+  "malware_advisories": [],
+  "requires_python": ">=3.10",
+  "added_in": "third run, after pip check named it"
+ }
+}

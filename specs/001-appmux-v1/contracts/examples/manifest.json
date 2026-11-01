@@ -1,0 +1,435 @@
+{
+  "OpenModeRequest": {
+    "file": "OpenModeRequest.json",
+    "direction": "request",
+    "routes": [
+      "POST /apps/{app}/open-mode"
+    ]
+  },
+  "RegisterAppRequest": {
+    "file": "RegisterAppRequest.json",
+    "direction": "request",
+    "routes": [
+      "POST /apps"
+    ]
+  },
+  "UpdateAppRequest": {
+    "file": "UpdateAppRequest.json",
+    "direction": "request",
+    "routes": [
+      "PATCH /apps/{app}"
+    ]
+  },
+  "SetOwnerRequest": {
+    "file": "SetOwnerRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /apps/{app}/owner"
+    ]
+  },
+  "UpdateReleaseRequest": {
+    "file": "UpdateReleaseRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /apps/{app}/releases/{id}"
+    ]
+  },
+  "UpdateConfigRequest": {
+    "file": "UpdateConfigRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /apps/{app}/config"
+    ]
+  },
+  "AttachResourceRequest": {
+    "file": "AttachResourceRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /apps/{app}/resources/{key}"
+    ]
+  },
+  "GrantRequest": {
+    "file": "GrantRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /apps/{app}/grants"
+    ]
+  },
+  "CreatePermissionRequest": {
+    "file": "CreatePermissionRequest.json",
+    "direction": "request",
+    "routes": [
+      "POST /requests"
+    ]
+  },
+  "DecidePermissionRequest": {
+    "file": "DecidePermissionRequest.json",
+    "direction": "request",
+    "routes": [
+      "POST /requests/{id}/approve",
+      "POST /requests/{id}/deny"
+    ]
+  },
+  "DelegationReasonRequest": {
+    "file": "DelegationReasonRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}"
+    ]
+  },
+  "PutSettingRequest": {
+    "file": "PutSettingRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /platform/settings/{key}"
+    ]
+  },
+  "PutAdminsRequest": {
+    "file": "PutAdminsRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /platform/admins"
+    ]
+  },
+  "PutEgressRequest": {
+    "file": "PutEgressRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /platform/egress"
+    ]
+  },
+  "ErrorBody": {
+    "file": "ErrorBody.json",
+    "direction": "response",
+    "routes": [
+      "GET /me",
+      "GET /apps",
+      "POST /apps/{app}/open-mode",
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "DELETE /apps/{app}",
+      "POST /apps/{app}/start",
+      "POST /apps/{app}/stop",
+      "POST /apps/{app}/restart",
+      "POST /apps/{app}/releases",
+      "GET /apps/{app}/releases/{id}",
+      "POST /apps/{app}/releases/{id}/activate",
+      "PUT /apps/{app}/releases/{id}",
+      "PUT /apps/{app}/releases/{id}/lock",
+      "DELETE /apps/{app}/releases/{id}/lock",
+      "DELETE /apps/{app}/releases/{id}",
+      "GET /apps/{app}/releases/{id}/source",
+      "GET /apps/{app}/releases/{id}/source/{path}",
+      "PUT /apps/{app}/config",
+      "GET /apps/{app}/requirements",
+      "PUT /apps/{app}/resources/{key}",
+      "DELETE /apps/{app}/resources/{key}",
+      "PUT /apps/{app}/grants",
+      "DELETE /apps/{app}/grants/{type}/{name}",
+      "GET /requests",
+      "POST /requests",
+      "POST /requests/{id}/withdraw",
+      "POST /requests/{id}/approve",
+      "POST /requests/{id}/deny",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "GET /platform",
+      "PUT /platform/settings/{key}",
+      "PUT /platform/admins",
+      "PUT /platform/egress",
+      "PUT /apps/{app}/egress",
+      "POST /platform/self-check",
+      "GET /audit",
+      "GET /metrics"
+    ]
+  },
+  "MeResponse": {
+    "file": "MeResponse.json",
+    "direction": "response",
+    "routes": [
+      "GET /me"
+    ]
+  },
+  "AppSummary": {
+    "file": "AppSummary.json",
+    "direction": "response",
+    "routes": [
+      "GET /apps"
+    ]
+  },
+  "AppList": {
+    "file": "AppList.json",
+    "direction": "response",
+    "routes": [
+      "GET /apps"
+    ]
+  },
+  "AppDetail": {
+    "file": "AppDetail.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "AppStateResponse": {
+    "file": "AppStateResponse.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps/{app}/start",
+      "POST /apps/{app}/stop",
+      "POST /apps/{app}/restart"
+    ]
+  },
+  "ReleaseSummary": {
+    "file": "ReleaseSummary.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "ReleaseDetail": {
+    "file": "ReleaseDetail.json",
+    "direction": "response",
+    "routes": [
+      "GET /apps/{app}/releases/{id}",
+      "POST /apps/{app}/releases/{id}/activate",
+      "PUT /apps/{app}/releases/{id}",
+      "PUT /apps/{app}/releases/{id}/lock",
+      "DELETE /apps/{app}/releases/{id}/lock"
+    ]
+  },
+  "ReleaseCreated": {
+    "file": "ReleaseCreated.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps/{app}/releases"
+    ]
+  },
+  "ReleaseSourceListing": {
+    "file": "ReleaseSourceListing.json",
+    "direction": "response",
+    "routes": [
+      "GET /apps/{app}/releases/{id}/source"
+    ]
+  },
+  "ReleaseSourceFile": {
+    "file": "ReleaseSourceFile.json",
+    "direction": "response",
+    "routes": [
+      "GET /apps/{app}/releases/{id}/source/{path}"
+    ]
+  },
+  "ConfigChangeResult": {
+    "file": "ConfigChangeResult.json",
+    "direction": "response",
+    "routes": [
+      "PUT /apps/{app}/config"
+    ]
+  },
+  "BundleResource": {
+    "file": "BundleResource.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "GET /apps/{app}/releases/{id}",
+      "POST /apps/{app}/releases/{id}/activate",
+      "PUT /apps/{app}/releases/{id}",
+      "PUT /apps/{app}/releases/{id}/lock",
+      "DELETE /apps/{app}/releases/{id}/lock",
+      "GET /apps/{app}/requirements",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "Requirement": {
+    "file": "Requirement.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "GET /apps/{app}/requirements",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "RequirementsResponse": {
+    "file": "RequirementsResponse.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "GET /apps/{app}/requirements",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "ResourceView": {
+    "file": "ResourceView.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "PUT /apps/{app}/resources/{key}",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "AppGrant": {
+    "file": "AppGrant.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "PUT /apps/{app}/grants",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "DelegationStatus": {
+    "file": "DelegationStatus.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps",
+      "GET /apps/{app}",
+      "PATCH /apps/{app}",
+      "PUT /apps/{app}/owner",
+      "PUT /apps/{app}/delegation/{kind}",
+      "DELETE /apps/{app}/delegation/{kind}",
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "RequestRow": {
+    "file": "RequestRow.json",
+    "direction": "response",
+    "routes": [
+      "GET /requests",
+      "POST /requests",
+      "POST /requests/{id}/withdraw",
+      "POST /requests/{id}/approve",
+      "POST /requests/{id}/deny"
+    ]
+  },
+  "RequestList": {
+    "file": "RequestList.json",
+    "direction": "response",
+    "routes": [
+      "GET /requests"
+    ]
+  },
+  "PlatformView": {
+    "file": "PlatformView.json",
+    "direction": "response",
+    "routes": [
+      "GET /platform"
+    ]
+  },
+  "PlatformSetting": {
+    "file": "PlatformSetting.json",
+    "direction": "response",
+    "routes": [
+      "PUT /platform/settings/{key}"
+    ]
+  },
+  "AdminList": {
+    "file": "AdminList.json",
+    "direction": "response",
+    "routes": [
+      "PUT /platform/admins"
+    ]
+  },
+  "EgressRules": {
+    "file": "EgressRules.json",
+    "direction": "response",
+    "routes": [
+      "PUT /platform/egress"
+    ]
+  },
+  "SelfCheckResult": {
+    "file": "SelfCheckResult.json",
+    "direction": "response",
+    "routes": [
+      "GET /platform",
+      "POST /platform/self-check"
+    ]
+  },
+  "AuditRow": {
+    "file": "AuditRow.json",
+    "direction": "response",
+    "routes": [
+      "GET /audit"
+    ]
+  },
+  "AuditList": {
+    "file": "AuditList.json",
+    "direction": "response",
+    "routes": [
+      "GET /audit"
+    ]
+  },
+  "MetricsRow": {
+    "file": "MetricsRow.json",
+    "direction": "response",
+    "routes": [
+      "GET /metrics"
+    ]
+  },
+  "MetricsResponse": {
+    "file": "MetricsResponse.json",
+    "direction": "response",
+    "routes": [
+      "GET /metrics"
+    ]
+  },
+  "PutAppEgressRequest": {
+    "file": "PutAppEgressRequest.json",
+    "direction": "request",
+    "routes": [
+      "PUT /apps/{app}/egress"
+    ]
+  },
+  "ReleaseUnchanged": {
+    "file": "ReleaseUnchanged.json",
+    "direction": "response",
+    "routes": [
+      "POST /apps/{app}/releases"
+    ]
+  },
+  "PlatformApp": {
+    "file": "PlatformApp.json",
+    "direction": "response",
+    "routes": [
+      "GET /platform"
+    ]
+  }
+}

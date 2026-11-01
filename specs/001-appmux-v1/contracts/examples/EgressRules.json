@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "action": "deny",
+      "cidr": "@container_ip/32",
+      "port": "any",
+      "comment": "the container's own address"
+    },
+    {
+      "action": "deny",
+      "cidr": "169.254.0.0/16",
+      "port": "any",
+      "comment": "metadata and link-local"
+    }
+  ]
+}

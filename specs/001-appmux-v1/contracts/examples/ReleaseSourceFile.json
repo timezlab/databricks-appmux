@@ -1,0 +1,6 @@
+{
+  "release_no": 7,
+  "path": "app.yaml",
+  "size_bytes": 311,
+  "content": "command: [\"uvicorn\", \"app:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]\nenv:\n  - name: LOG_LEVEL\n    value: info\n  - name: OPENAI_API_KEY\n    valueFrom: openai-api-key\n  - name: WAREHOUSE_ID\n    valueFrom: sql-warehouse\n  - name: MLFLOW_EXPERIMENT_ID\n    valueFrom: experiment\nresources:\n  - name: sql-warehouse\n"
+}

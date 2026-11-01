@@ -1,0 +1,167 @@
+{
+ "date": "2026-10-30",
+ "workspace": "Free Edition only (<workspace-host>)",
+ "caller": "the service principal of appmux-probe (OAuth client credentials, scope all-apis, read inside the process; never printed)",
+ "folder": "/Workspace/Users/<sp-client-id>/appmux-store (created by the SP with `workspace/mkdirs`, no grant and no workspace admin)",
+ "volume": "workspace.default.appmux_spike_4_store (MANAGED; created by the SP itself; the group of all workspace users holds USE_CATALOG, USE_SCHEMA and CREATE_VOLUME on workspace.default by default)",
+ "routes": {
+  "workspace_write": "POST /api/2.0/workspace-files/import-file/<path>?overwrite=true, raw body",
+  "workspace_read": "GET /api/2.0/workspace/export?path=<path>&direct_download=true",
+  "workspace_delete": "POST /api/2.0/workspace/delete",
+  "volume": "PUT / GET / DELETE /api/2.0/fs/files/Volumes/workspace/default/appmux_spike_4_store/<name>"
+ },
+ "large_files": [
+  {
+   "target": "workspace",
+   "size_mb": 10,
+   "write_s": 0.6,
+   "read_s": 0.4,
+   "sha256_match": true
+  },
+  {
+   "target": "workspace",
+   "size_mb": 100,
+   "write_s": 2.3,
+   "read_s": 1.3,
+   "sha256_match": true
+  },
+  {
+   "target": "workspace",
+   "size_mb": 500,
+   "write_s": 6.3,
+   "read_s": 5.3,
+   "sha256_match": true
+  },
+  {
+   "target": "workspace",
+   "size_mb": 501,
+   "result": "refused: the connection was closed after about 1 s with no HTTP status (SSLEOFError)"
+  },
+  {
+   "target": "workspace",
+   "size_mb": 600,
+   "result": "refused: the same"
+  },
+  {
+   "target": "volume",
+   "size_mb": 10,
+   "write_s": 0.6,
+   "read_s": 0.4,
+   "sha256_match": true
+  },
+  {
+   "target": "volume",
+   "size_mb": 100,
+   "write_s": 1.8,
+   "read_s": 1.4,
+   "sha256_match": true
+  },
+  {
+   "target": "volume",
+   "size_mb": 500,
+   "write_s": 3.5,
+   "read_s": 5.6,
+   "sha256_match": true
+  },
+  {
+   "target": "volume",
+   "size_mb": 1000,
+   "write_s": 5.6,
+   "read_s": 10.9,
+   "sha256_match": true
+  }
+ ],
+ "small_files": {
+  "note": "100 files of 4096 bytes named by their sha256 (as the content store names them), one new connection per call",
+  "workspace": [
+   {
+    "threads": 1,
+    "write_files_per_s": 9.4,
+    "read_files_per_s": 9.5,
+    "delete_files_per_s": 15.6,
+    "statuses": "all 200"
+   },
+   {
+    "threads": 2,
+    "write": {
+     "200": 86,
+     "429": 14
+    },
+    "read": {
+     "200": 86,
+     "404": 14
+    },
+    "delete": {
+     "200": 32,
+     "429": 68
+    }
+   },
+   {
+    "threads": 4,
+    "write": {
+     "200": 20,
+     "429": 80
+    },
+    "read": {
+     "200": 20,
+     "404": 30,
+     "429": 50
+    },
+    "delete": {
+     "200": 20,
+     "429": 80
+    }
+   },
+   {
+    "threads": 8,
+    "write": {
+     "200": 20,
+     "429": 80
+    },
+    "read": {
+     "200": 20,
+     "404": 39,
+     "429": 41
+    },
+    "delete": {
+     "200": 20,
+     "429": 80
+    }
+   }
+  ],
+  "volume": [
+   {
+    "threads": 1,
+    "write_files_per_s": 3.3,
+    "read_files_per_s": 3.8,
+    "delete_files_per_s": 3.9,
+    "statuses": "all ok"
+   },
+   {
+    "threads": 8,
+    "write_files_per_s": 22.4,
+    "read_files_per_s": 28.7,
+    "delete_files_per_s": 32.4,
+    "statuses": "all ok (300 calls, no 429)"
+   }
+  ],
+  "404_reading": "a read of a file whose write was refused with 429"
+ },
+ "access": {
+  "folder_acl": "CAN_MANAGE for the SP (inherited from its home) and for the `admins` group; no other entry",
+  "volume": "owned by the SP; no grants"
+ },
+ "not_measured": [
+  "volume files over 1000 MB",
+  "the 429 `Retry-After` value",
+  "other principals' access attempts",
+  "Free Edition storage quota",
+  "a workspace other than Free Edition"
+ ],
+ "created": [
+  "folder appmux-store and subfolder small under the SP's home",
+  "volume appmux_spike_4_store",
+  "/tmp/spike4 on appmux-probe"
+ ],
+ "removed": "folder (recursive) and volume deleted by `store_probe.py teardown`; `workspace list` of the SP home and `volumes list workspace default` confirmed; /tmp/spike4 removed. The SP's home folder itself remains (the platform created it with .db_internal and .conversations)."
+}

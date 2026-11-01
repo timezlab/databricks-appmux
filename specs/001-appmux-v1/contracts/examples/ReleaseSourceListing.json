@@ -1,0 +1,30 @@
+{
+  "release_no": 7,
+  "items": [
+    {
+      "path": "app.py",
+      "size_bytes": 1840,
+      "kind": "text"
+    },
+    {
+      "path": "app.yaml",
+      "size_bytes": 311,
+      "kind": "text"
+    },
+    {
+      "path": "databricks.yml",
+      "size_bytes": 698,
+      "kind": "text"
+    },
+    {
+      "path": "requirements.txt",
+      "size_bytes": 96,
+      "kind": "text"
+    },
+    {
+      "path": "static/logo.png",
+      "size_bytes": 20480,
+      "kind": "binary"
+    }
+  ]
+}

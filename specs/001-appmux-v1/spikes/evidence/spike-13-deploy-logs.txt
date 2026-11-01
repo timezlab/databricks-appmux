@@ -1,0 +1,71 @@
+# Spike 13 - deployment logs of throwaway app appmux-spike-13, 2026-10-30 (identifiers masked)
+# order: A (requirements.txt lines) 12:10 | A0 reused the venv, contaminated (12:11) | A1 control without the lines (12:12) | B1 bootstrap, no grant (12:13) | B2 bootstrap, SP granted read (12:14)
+
+2026-10-30T12:09:53Z [SYSTEM] [INFO] Starting Databricks Apps runtime...
+2026-10-30T12:10:40Z [BUILD] [INFO] Starting deployment 01f1d45aea101b64b25ee3771411354a...
+2026-10-30T12:10:40Z [BUILD] [INFO] Downloading source code from /Workspace/Users/<app-service-principal-id>/src/01f1d45aea101b64b25ee3771411354a
+2026-10-30T12:10:41Z [BUILD] [INFO] Updated file: python/source_code/requirements.txt
+2026-10-30T12:10:41Z [BUILD] [INFO] Updated file: python/source_code/wheels/appmux_spike13_marker_q7k2x-0.0.1-py3-none-any.whl
+2026-10-30T12:10:41Z [BUILD] [INFO] Updated file: python/source_code/wheels/humanize-4.11.0-py3-none-any.whl
+2026-10-30T12:10:42Z [BUILD] Looking in links: /app/python/source_code/./wheels
+2026-10-30T12:10:42Z [BUILD] Processing ./wheels/appmux_spike13_marker_q7k2x-0.0.1-py3-none-any.whl (from -r requirements.txt (line 3))
+2026-10-30T12:10:42Z [BUILD] Processing ./wheels/humanize-4.11.0-py3-none-any.whl (from appmux-spike13-marker-q7k2x==0.0.1->-r requirements.txt (line 3))
+2026-10-30T12:10:42Z [BUILD] Installing collected packages: humanize, appmux-spike13-marker-q7k2x
+2026-10-30T12:10:42Z [BUILD] Successfully installed appmux-spike13-marker-q7k2x-0.0.1 humanize-4.11.0
+2026-10-30T12:10:43Z [BUILD] 
+[notice] A new release of pip is available: 24.0 -> 26.2.2
+[notice] To update, run: python3_apps -m pip install --upgrade pip
+2026-10-30T12:10:43Z [BUILD] [INFO] Requirements installed successfully.
+2026-10-30T12:10:43Z [BUILD] [INFO] Starting app with command: [python app.py --port 8000]
+2026-10-30T12:10:43Z [APP] SPIKE13 {"variant": "a-requirements-lines", "python": "3.11.17", "executable": ".venv/bin/python", "appmux-spike13-marker-q7k2x": {"version": "0.0.1", "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/appmux_spike13_marker_q7k2x/__init__.py"}, "humanize": {"version": "4.11.0", "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/humanize/__init__.py"}}
+2026-10-30T12:10:45Z [BUILD] [INFO] Deployment 01f1d45aea101b64b25ee3771411354a ended in 4.375561391s
+2026-10-30T12:10:45Z [BUILD] [INFO] Deployment successful
+2026-10-30T12:11:25Z [BUILD] [INFO] Starting deployment 01f1d45b057c118187e41456b95c6d2a...
+2026-10-30T12:11:25Z [BUILD] [INFO] Downloading source code from /Workspace/Users/<app-service-principal-id>/src/01f1d45b057c118187e41456b95c6d2a
+2026-10-30T12:11:25Z [BUILD] [INFO] Updated file: python/source_code/requirements.txt
+2026-10-30T12:11:25Z [BUILD] [INFO] Updated file: python/source_code/wheels/appmux_spike13_marker_q7k2x-0.0.1-py3-none-any.whl
+2026-10-30T12:11:25Z [BUILD] [INFO] Updated file: python/source_code/wheels/humanize-4.11.0-py3-none-any.whl
+2026-10-30T12:11:26Z [BUILD] Requirement already satisfied: appmux-spike13-marker-q7k2x==0.0.1 in ./.venv/lib/python3.11/site-packages (from -r requirements.txt (line 1)) (0.0.1)
+2026-10-30T12:11:26Z [BUILD] Requirement already satisfied: humanize==4.11.0 in ./.venv/lib/python3.11/site-packages (from appmux-spike13-marker-q7k2x==0.0.1->-r requirements.txt (line 1)) (4.11.0)
+2026-10-30T12:11:26Z [BUILD] 
+[notice] A new release of pip is available: 24.0 -> 26.2.2
+[notice] To update, run: python3_apps -m pip install --upgrade pip
+2026-10-30T12:11:26Z [BUILD] [INFO] Requirements installed successfully.
+2026-10-30T12:11:26Z [BUILD] [INFO] Starting app with command: [python app.py --port 8000]
+2026-10-30T12:11:27Z [APP] SPIKE13 {"variant": "a-requirements-lines", "python": "3.11.17", "executable": ".venv/bin/python", "appmux-spike13-marker-q7k2x": {"version": "0.0.1", "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/appmux_spike13_marker_q7k2x/__init__.py"}, "humanize": {"version": "4.11.0", "file": "/app/python/source_code/.venv/lib/python3.11/site-packages/humanize/__init__.py"}}
+2026-10-30T12:11:28Z [BUILD] [INFO] Deployment 01f1d45b057c118187e41456b95c6d2a ended in 3.685547007s
+2026-10-30T12:11:28Z [BUILD] [INFO] Deployment successful
+2026-10-30T12:12:02Z [BUILD] [INFO] Starting deployment 01f1d45b1c3e114f92569da65b13a1a8...
+2026-10-30T12:12:02Z [BUILD] [INFO] Downloading source code from /Workspace/Users/<app-service-principal-id>/src/01f1d45b1c3e114f92569da65b13a1a8
+2026-10-30T12:12:03Z [BUILD] [INFO] Updated file: python/source_code/requirements.txt
+2026-10-30T12:12:03Z [BUILD] [INFO] Updated file: python/source_code/wheels/appmux_spike13_marker_c4v8n-0.0.1-py3-none-any.whl
+2026-10-30T12:12:03Z [BUILD] [INFO] Updated file: python/source_code/wheels/humanize-4.11.0-py3-none-any.whl
+2026-10-30T12:12:04Z [BUILD] ERROR: Could not find a version that satisfies the requirement appmux-spike13-marker-c4v8n==0.0.1 (from versions: none)
+2026-10-30T12:12:04Z [BUILD] ERROR: No matching distribution found for appmux-spike13-marker-c4v8n==0.0.1
+2026-10-30T12:12:04Z [BUILD] 
+[notice] A new release of pip is available: 24.0 -> 26.2.2
+[notice] To update, run: python3_apps -m pip install --upgrade pip
+2026-10-30T12:12:04Z [BUILD] [INFO] Deployment 01f1d45b1c3e114f92569da65b13a1a8 ended in 1.307931722s
+2026-10-30T12:12:04Z [BUILD] [ERROR] Error installing packages
+2026-10-30T12:13:29Z [BUILD] [INFO] Starting deployment 01f1d45b4f7c13b6b655e6d81464695c...
+2026-10-30T12:13:29Z [BUILD] [INFO] Downloading source code from /Workspace/Users/<app-service-principal-id>/src/01f1d45b4f7c13b6b655e6d81464695c
+2026-10-30T12:13:29Z [BUILD] [INFO] Updated file: python/source_code/start.py
+2026-10-30T12:13:29Z [BUILD] [INFO] No dependencies file found. Skipping installation.
+2026-10-30T12:13:29Z [BUILD] [INFO] Starting app with command: [python start.py]
+2026-10-30T12:13:30Z [APP] SPIKE13-BOOT {"step": "list", "wheel_count": 0, "object_types": []}
+2026-10-30T12:13:30Z [APP] SPIKE13-BOOT {"step": "download", "files": []}
+2026-10-30T12:13:30Z [APP] SPIKE13-BOOT {"step": "install", "returncode": 1, "tail": ["Looking in links: /tmp/appmux-wheels", "ERROR: Could not find a version that satisfies the requirement appmux-spike13-marker-b5m3z==0.0.1 (from versions: none)", "ERROR: No matching distribution found for appmux-spike13-marker-b5m3z==0.0.1"]}
+2026-10-30T12:13:30Z [BUILD] [ERROR] Could not start app. app crashed unexpectedly.
+2026-10-30T12:13:30Z [BUILD] [INFO] Deployment 01f1d45b4f7c13b6b655e6d81464695c ended in 1.461155762s
+2026-10-30T12:13:30Z [BUILD] [ERROR] Error: app crashed unexpectedly
+2026-10-30T12:14:25Z [BUILD] [INFO] Starting deployment 01f1d45b716011ba8addf264a3f764a1...
+2026-10-30T12:14:25Z [BUILD] [INFO] Downloading source code from /Workspace/Users/<app-service-principal-id>/src/01f1d45b716011ba8addf264a3f764a1
+2026-10-30T12:14:26Z [BUILD] [INFO] Updated file: python/source_code/start.py
+2026-10-30T12:14:26Z [BUILD] [INFO] No dependencies file found. Skipping installation.
+2026-10-30T12:14:26Z [BUILD] [INFO] Starting app with command: [python start.py]
+2026-10-30T12:14:26Z [APP] SPIKE13-BOOT {"step": "list", "wheel_count": 2, "object_types": ["FILE"]}
+2026-10-30T12:14:27Z [APP] SPIKE13-BOOT {"step": "download", "files": ["appmux_spike13_marker_b5m3z-0.0.1-py3-none-any.whl", "humanize-4.11.0-py3-none-any.whl"]}
+2026-10-30T12:14:28Z [APP] SPIKE13-BOOT {"step": "install", "returncode": 0, "tail": ["Successfully installed appmux-spike13-marker-b5m3z-0.0.1 humanize-4.11.0"]}
+2026-10-30T12:14:28Z [APP] SPIKE13 {"pythonpath": "/tmp/appmux-deps", "variant": "b-bootstrap", "python": "3.11.17", "executable": "/app/python/source_code/.venv/bin/python", "appmux-spike13-marker-b5m3z": {"version": "0.0.1", "file": "/tmp/appmux-deps/appmux_spike13_marker_b5m3z/__init__.py"}, "humanize": {"version": "4.11.0", "file": "/tmp/appmux-deps/humanize/__init__.py"}}
+2026-10-30T12:14:28Z [BUILD] [INFO] Deployment 01f1d45b716011ba8addf264a3f764a1 ended in 2.41582718s
+2026-10-30T12:14:28Z [BUILD] [INFO] Deployment successful

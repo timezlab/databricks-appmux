@@ -1,0 +1,1275 @@
+{
+  "spike": 6,
+  "measured_on": "Free Edition only",
+  "date": "2026-10-30",
+  "kernel": "6.1.188-233.393.amzn2023.x86_64",
+  "python": "3.11.17",
+  "cpus_visible": 4,
+  "slirp4netns": "v1.3.6 (sha256 checked against probe-archive)",
+  "runs": {
+    "6a": "first full run of the lab; superseded by 6b but kept for the reload timings of its first pass",
+    "6b": "full run: baseline, fragments, reload, port rules, allow-list, IPv6, neighbours, pump totals. Its 30 s open-connection arm was watched for only 12 s after the allow and shows 'not recovered'; 6c is the measurement for that arm",
+    "6c": "30 s deny watched for 90 s; IPv6 control arm repeated with route lookups and sysctls",
+    "6d": "the container's own listening ports, with no rule and with the design's deny of the container address",
+    "neighbour_controls": "the neighbour App to its own address and to a listener on the probe container"
+  },
+  "results": {
+    "6a": {
+      "date": "2026-10-30",
+      "kernel": "6.1.188-233.393.amzn2023.x86_64",
+      "python": "3.11.17",
+      "cpus_visible": 4,
+      "slirp4netns": "v1.3.6 (sha256 checked against probe-archive)",
+      "stack_start_s": 0.15,
+      "baseline": {
+        "tcp": "ok",
+        "udp": "ok",
+        "child": {
+          "uid": 0,
+          "cap_eff": "000001ffffffffff",
+          "interface_ipv4": "10.0.2.100",
+          "default_route": [
+            "eth0",
+            "10.0.2.2"
+          ],
+          "pid": 1
+        }
+      },
+      "fragments": {
+        "child before the capability drop": {
+          "uid": 0,
+          "cap_eff": "000001ffffffffff",
+          "interface_ipv4": "10.0.2.100",
+          "default_route": [
+            "eth0",
+            "10.0.2.2"
+          ],
+          "pid": 1
+        },
+        "A. port rule present, fragments dropped (the design)": {
+          "kernel-fragmented udp 4000 B to 47103": "timeout",
+          "unfragmented udp 1000 B to 47103": "ok",
+          "raw whole datagram to 47103": {
+            "packets_sent": 1,
+            "echo": true
+          },
+          "raw two fragments to 47103": {
+            "packets_sent": 2,
+            "echo": false,
+            "error": "timeout"
+          },
+          "raw second fragment only to 47103": {
+            "packets_sent": 1,
+            "echo": false,
+            "error": "timeout"
+          },
+          "raw datagram with IP options to 47103 (header 24 B)": {
+            "packets_sent": 1,
+            "echo": true
+          },
+          "raw datagram with IP options to the denied port 47104": {
+            "packets_sent": 1,
+            "echo": false,
+            "error": "timeout"
+          },
+          "pump decisions": {
+            "default:allow": 3,
+            "ipv6": 4,
+            "fragment": 6,
+            "rule:0:deny": 1
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            3,
+            0
+          ]
+        },
+        "B. port rule present, fragments passed (control: ports judged on the first fragment only)": {
+          "kernel-fragmented udp 4000 B to 47103": "ok",
+          "kernel-fragmented udp 4000 B to the denied port 47104": "timeout",
+          "raw two fragments to 47103": {
+            "packets_sent": 2,
+            "echo": true
+          },
+          "raw two fragments to the denied port 47104": {
+            "packets_sent": 2,
+            "echo": false,
+            "error": "timeout"
+          },
+          "raw second fragment only to 47103": {
+            "packets_sent": 1,
+            "echo": false,
+            "error": "timeout"
+          },
+          "pump decisions": {
+            "default:allow": 9,
+            "rule:0:deny": 2
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            2,
+            0
+          ]
+        },
+        "C. no port rule anywhere, fragments dropped only when port rules exist": {
+          "kernel-fragmented udp 4000 B to 47103": "ok",
+          "pump decisions": {
+            "default:allow": 3
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            1,
+            0
+          ]
+        },
+        "capabilities dropped": {
+          "uid": 0,
+          "cap_eff": "0000000000000000",
+          "interface_ipv4": "10.0.2.100",
+          "default_route": [
+            "eth0",
+            "10.0.2.2"
+          ],
+          "pid": 1
+        },
+        "raw socket after the drop": {
+          "command_error": "PermissionError: [Errno 1] Operation not permitted"
+        },
+        "D. after the drop, port rule present, fragments dropped": {
+          "kernel-fragmented udp 4000 B to 47103": "timeout",
+          "unfragmented udp 1000 B to 47103": "ok",
+          "pump decisions": {
+            "default:allow": 1,
+            "fragment": 3
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            1,
+            0
+          ]
+        }
+      },
+      "reload_new_connections": {
+        "attempts": 44,
+        "before_deny": {
+          "attempts": 16,
+          "ok": 16
+        },
+        "deny_file_to_pump_ms": 5.5,
+        "attempts_started_while_denied": {
+          "attempts": 4,
+          "ok": 0,
+          "errors": [
+            "timeout"
+          ]
+        },
+        "first_failing_attempt_started_after_load_ms": 91,
+        "allow_file_to_pump_ms": 5.7,
+        "first_success_started_after_load_ms": 393
+      },
+      "reload_open_connection": {
+        "sent": 388,
+        "echoed": 388,
+        "every_sent_line_echoed": true,
+        "connection_error": null,
+        "connection_closed_by_peer": true,
+        "deny_file_to_pump_ms": 7.0,
+        "echoes_received_while_denied": 0,
+        "last_echo_before_deny_ms": 1,
+        "denied_for_s": 6.7,
+        "first_echo_after_allow_s": 0.12,
+        "longest_echo_latency_s": 6.77,
+        "pump_drops_by_rule": {
+          "rule:0:deny": 16
+        }
+      },
+      "port_rules": {
+        "deny tcp 47102": {
+          "tcp 47101": "ok",
+          "tcp 47102": "timeout",
+          "tcp 47105": "ok",
+          "udp 47103": "ok",
+          "udp 47104": "ok",
+          "tcp to the UDP port 47103": "ECONNREFUSED",
+          "pump decisions": {
+            "default:allow": 15,
+            "rule:0:deny": 1
+          }
+        },
+        "deny udp 47104": {
+          "tcp 47101": "ok",
+          "tcp 47102": "ok",
+          "tcp 47105": "ok",
+          "udp 47103": "ok",
+          "udp 47104": "timeout",
+          "tcp to the UDP port 47103": "ECONNREFUSED",
+          "pump decisions": {
+            "default:allow": 20,
+            "rule:0:deny": 1
+          }
+        },
+        "deny tcp range 47101-47102": {
+          "tcp 47101": "timeout",
+          "tcp 47102": "timeout",
+          "tcp 47105": "ok",
+          "udp 47103": "ok",
+          "udp 47104": "ok",
+          "tcp to the UDP port 47103": "ECONNREFUSED",
+          "pump decisions": {
+            "default:allow": 9,
+            "rule:0:deny": 2
+          }
+        },
+        "allow tcp 47101, then deny all of the address": {
+          "tcp 47101": "ok",
+          "tcp 47102": "timeout",
+          "tcp 47105": "timeout",
+          "udp 47103": "timeout",
+          "udp 47104": "timeout",
+          "tcp to the UDP port 47103": "timeout",
+          "pump decisions": {
+            "rule:0:allow": 6,
+            "rule:1:deny": 5
+          }
+        },
+        "deny all of the address, then allow tcp 47101": {
+          "tcp 47101": "timeout",
+          "tcp 47102": "timeout",
+          "tcp 47105": "timeout",
+          "udp 47103": "timeout",
+          "udp 47104": "timeout",
+          "tcp to the UDP port 47103": "timeout",
+          "pump decisions": {
+            "rule:0:deny": 6
+          }
+        }
+      },
+      "allow_list": {
+        "default allow: dns pypi.org": "ok",
+        "default allow: tcp to pypi 443": "failed",
+        "virtual subnet always allowed": {
+          "dns pypi.org": "ok",
+          "tcp 47101 (allowed)": "ok",
+          "tcp 47102": "timeout",
+          "udp 47103": "timeout",
+          "tcp to pypi 443": "timeout"
+        },
+        "virtual subnet subject to the rules": {
+          "dns pypi.org": "timeout",
+          "tcp 47101 (allowed)": "ok",
+          "tcp 47102": "timeout",
+          "udp 47103": "timeout",
+          "tcp to pypi 443": "timeout"
+        }
+      },
+      "ipv6": {
+        "design arm (pump drops IPv6, slirp without --enable-ipv6)": {
+          "if_inet6": [
+            "00000000000000000000000000000001 01 80 10 80       lo",
+            "fe80000000000000248669fffe58d15a 02 40 20 80   vpump0",
+            "fe8000000000000070d751fffeb9ed1b 03 40 20 80     eth0",
+            ""
+          ],
+          "ipv6_route": [
+            [
+              "fe800000000000000000000000000000",
+              "40",
+              "vpump0"
+            ],
+            [
+              "fe800000000000000000000000000000",
+              "40",
+              "eth0"
+            ],
+            [
+              "00000000000000000000000000000000",
+              "00",
+              "lo"
+            ],
+            [
+              "00000000000000000000000000000001",
+              "80",
+              "lo"
+            ],
+            [
+              "fe80000000000000248669fffe58d15a",
+              "80",
+              "vpump0"
+            ],
+            [
+              "fe8000000000000070d751fffeb9ed1b",
+              "80",
+              "eth0"
+            ],
+            [
+              "ff000000000000000000000000000000",
+              "08",
+              "vpump0"
+            ],
+            [
+              "ff000000000000000000000000000000",
+              "08",
+              "eth0"
+            ]
+          ],
+          "public": {
+            "ok": false,
+            "error": "ENETUNREACH",
+            "ms": 0,
+            "started": 1793373129.1293662
+          },
+          "slirp_gateway": {
+            "ok": false,
+            "error": "ENETUNREACH",
+            "ms": 0,
+            "started": 1793373129.1294363
+          }
+        },
+        "pump decisions in the design arm": {}
+      },
+      "pump_totals": {
+        "decisions": {
+          "arp": 2,
+          "default:allow": 827,
+          "ipv6": 9,
+          "fragment": 9,
+          "rule:0:deny": 26,
+          "rule:0:allow": 18,
+          "rule:1:deny": 13,
+          "virtual-subnet": 2
+        },
+        "rule_hits": {
+          "rule:0:deny": 26,
+          "rule:0:allow": 18,
+          "rule:1:deny": 13
+        },
+        "to_slirp_frames": 849,
+        "to_child_frames": 793,
+        "errors": []
+      },
+      "ipv6_control_arm": {
+        "if_inet6": [
+          "fe800000000000008cc178fffeb4e0e8 03 40 20 80     eth0",
+          "fd000000000000008cc178fffeb4e0e8 03 40 00 00     eth0",
+          "fe8000000000000098c5dafffeeb4073 02 40 20 80   vpump0",
+          "00000000000000000000000000000001 01 80 10 80       lo",
+          ""
+        ],
+        "ipv6_route": [
+          [
+            "fd000000000000000000000000000000",
+            "40",
+            "eth0"
+          ],
+          [
+            "fe800000000000000000000000000000",
+            "40",
+            "vpump0"
+          ],
+          [
+            "fe800000000000000000000000000000",
+            "40",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000000",
+            "00",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000001",
+            "80",
+            "lo"
+          ],
+          [
+            "fd000000000000008cc178fffeb4e0e8",
+            "80",
+            "eth0"
+          ],
+          [
+            "fe800000000000008cc178fffeb4e0e8",
+            "80",
+            "eth0"
+          ],
+          [
+            "fe8000000000000098c5dafffeeb4073",
+            "80",
+            "vpump0"
+          ]
+        ],
+        "public": {
+          "ok": false,
+          "error": "ENETUNREACH",
+          "ms": 0,
+          "started": 1793373132.7469714
+        },
+        "slirp_gateway": {
+          "ok": false,
+          "error": "ENETUNREACH",
+          "ms": 0,
+          "started": 1793373132.747414
+        },
+        "pump decisions": {
+          "ipv6-pass": 9
+        }
+      }
+    },
+    "6b": {
+      "date": "2026-10-30",
+      "kernel": "6.1.188-233.393.amzn2023.x86_64",
+      "python": "3.11.17",
+      "cpus_visible": 4,
+      "slirp4netns": "v1.3.6 (sha256 checked against probe-archive)",
+      "stack_start_s": 0.15,
+      "baseline": {
+        "tcp": "ok",
+        "udp": "ok",
+        "child": {
+          "uid": 0,
+          "cap_eff": "000001ffffffffff",
+          "interface_ipv4": "10.0.2.100",
+          "default_route": [
+            "eth0",
+            "10.0.2.2"
+          ],
+          "pid": 1
+        }
+      },
+      "fragments": {
+        "child before the capability drop": {
+          "uid": 0,
+          "cap_eff": "000001ffffffffff",
+          "interface_ipv4": "10.0.2.100",
+          "default_route": [
+            "eth0",
+            "10.0.2.2"
+          ],
+          "pid": 1
+        },
+        "A. port rule present, fragments dropped (the design)": {
+          "kernel-fragmented udp 4000 B to 47103": "timeout",
+          "unfragmented udp 1000 B to 47103": "ok",
+          "raw whole datagram to 47103": {
+            "packets_sent": 1,
+            "echo": true
+          },
+          "raw two fragments to 47103": {
+            "packets_sent": 2,
+            "echo": false,
+            "error": "timeout"
+          },
+          "raw second fragment only to 47103": {
+            "packets_sent": 1,
+            "echo": false,
+            "error": "timeout"
+          },
+          "raw datagram with IP options to 47103 (header 24 B)": {
+            "packets_sent": 1,
+            "echo": true
+          },
+          "raw datagram with IP options to the denied port 47104": {
+            "packets_sent": 1,
+            "echo": false,
+            "error": "timeout"
+          },
+          "pump decisions": {
+            "default:allow": 3,
+            "ipv6": 4,
+            "fragment": 6,
+            "rule:0:deny": 1
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            3,
+            0
+          ]
+        },
+        "B. port rule present, fragments passed (control: ports judged on the first fragment only)": {
+          "kernel-fragmented udp 4000 B to 47103": "ok",
+          "kernel-fragmented udp 4000 B to the denied port 47104": "timeout",
+          "raw two fragments to 47103": {
+            "packets_sent": 2,
+            "echo": true
+          },
+          "raw two fragments to the denied port 47104": {
+            "packets_sent": 2,
+            "echo": false,
+            "error": "timeout"
+          },
+          "raw second fragment only to 47103": {
+            "packets_sent": 1,
+            "echo": false,
+            "error": "timeout"
+          },
+          "pump decisions": {
+            "default:allow": 9,
+            "rule:0:deny": 2
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            2,
+            0
+          ]
+        },
+        "C. no port rule anywhere, fragments dropped only when port rules exist": {
+          "kernel-fragmented udp 4000 B to 47103": "ok",
+          "pump decisions": {
+            "default:allow": 3
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            1,
+            0
+          ]
+        },
+        "capabilities dropped": {
+          "uid": 0,
+          "cap_eff": "0000000000000000",
+          "interface_ipv4": "10.0.2.100",
+          "default_route": [
+            "eth0",
+            "10.0.2.2"
+          ],
+          "pid": 1
+        },
+        "raw socket after the drop": {
+          "command_error": "PermissionError: [Errno 1] Operation not permitted"
+        },
+        "D. after the drop, port rule present, fragments dropped": {
+          "kernel-fragmented udp 4000 B to 47103": "timeout",
+          "unfragmented udp 1000 B to 47103": "ok",
+          "pump decisions": {
+            "default:allow": 1,
+            "fragment": 3
+          },
+          "datagrams that reached the echo server (udp 47103, 47104)": [
+            1,
+            0
+          ]
+        }
+      },
+      "reload_new_connections": {
+        "attempts": 44,
+        "before_deny": {
+          "attempts": 16,
+          "ok": 16
+        },
+        "deny_file_to_pump_ms": 10.2,
+        "attempts_started_while_denied": {
+          "attempts": 4,
+          "ok": 0,
+          "errors": [
+            "timeout"
+          ]
+        },
+        "first_failing_attempt_started_after_load_ms": 86,
+        "allow_file_to_pump_ms": 1.9,
+        "first_success_started_after_load_ms": 398
+      },
+      "reload_open_connection": {
+        "denied 2 s": {
+          "sent": 348,
+          "echoed": 348,
+          "every_sent_line_echoed": true,
+          "connection_error": null,
+          "connection_closed_by_peer": false,
+          "deny_file_to_pump_ms": 0.6,
+          "echoes_received_while_denied": 0,
+          "last_echo_before_deny_ms": 45,
+          "denied_for_s": 2.7,
+          "first_echo_after_allow_s": 0.66,
+          "longest_echo_latency_s": 3.35,
+          "pump_drops_by_rule": {
+            "rule:0:deny": 15
+          }
+        },
+        "denied 6 s": {
+          "sent": 427,
+          "echoed": 427,
+          "every_sent_line_echoed": true,
+          "connection_error": null,
+          "connection_closed_by_peer": false,
+          "deny_file_to_pump_ms": 0.3,
+          "echoes_received_while_denied": 0,
+          "last_echo_before_deny_ms": 45,
+          "denied_for_s": 6.7,
+          "first_echo_after_allow_s": 0.07,
+          "longest_echo_latency_s": 6.77,
+          "pump_drops_by_rule": {
+            "rule:0:deny": 24
+          }
+        },
+        "denied 15 s": {
+          "sent": 607,
+          "echoed": 607,
+          "every_sent_line_echoed": true,
+          "connection_error": null,
+          "connection_closed_by_peer": false,
+          "deny_file_to_pump_ms": 9.6,
+          "echoes_received_while_denied": 0,
+          "last_echo_before_deny_ms": 4,
+          "denied_for_s": 15.69,
+          "first_echo_after_allow_s": 12.47,
+          "longest_echo_latency_s": 28.12,
+          "pump_drops_by_rule": {
+            "rule:0:deny": 35
+          }
+        },
+        "denied 30 s": {
+          "sent": 906,
+          "echoed": 41,
+          "every_sent_line_echoed": false,
+          "connection_error": null,
+          "connection_closed_by_peer": false,
+          "deny_file_to_pump_ms": 8.1,
+          "echoes_received_while_denied": 0,
+          "last_echo_before_deny_ms": 3,
+          "denied_for_s": 30.7,
+          "first_echo_after_allow_s": null,
+          "longest_echo_latency_s": 0.0,
+          "pump_drops_by_rule": {
+            "rule:0:deny": 47
+          }
+        }
+      },
+      "port_rules": {
+        "deny tcp 47102": {
+          "tcp 47101": "ok",
+          "tcp 47102": "timeout",
+          "tcp 47105": "ok",
+          "udp 47103": "ok",
+          "udp 47104": "ok",
+          "tcp to the UDP port 47103": "ECONNREFUSED",
+          "pump decisions": {
+            "default:allow": 15,
+            "rule:0:deny": 1
+          }
+        },
+        "deny udp 47104": {
+          "tcp 47101": "ok",
+          "tcp 47102": "ok",
+          "tcp 47105": "ok",
+          "udp 47103": "ok",
+          "udp 47104": "timeout",
+          "tcp to the UDP port 47103": "ECONNREFUSED",
+          "pump decisions": {
+            "default:allow": 20,
+            "rule:0:deny": 1
+          }
+        },
+        "deny tcp range 47101-47102": {
+          "tcp 47101": "timeout",
+          "tcp 47102": "timeout",
+          "tcp 47105": "ok",
+          "udp 47103": "ok",
+          "udp 47104": "ok",
+          "tcp to the UDP port 47103": "ECONNREFUSED",
+          "pump decisions": {
+            "default:allow": 9,
+            "rule:0:deny": 2
+          }
+        },
+        "allow tcp 47101, then deny all of the address": {
+          "tcp 47101": "ok",
+          "tcp 47102": "timeout",
+          "tcp 47105": "timeout",
+          "udp 47103": "timeout",
+          "udp 47104": "timeout",
+          "tcp to the UDP port 47103": "timeout",
+          "pump decisions": {
+            "rule:0:allow": 18,
+            "rule:1:deny": 5
+          }
+        },
+        "deny all of the address, then allow tcp 47101": {
+          "tcp 47101": "timeout",
+          "tcp 47102": "timeout",
+          "tcp 47105": "timeout",
+          "udp 47103": "timeout",
+          "udp 47104": "timeout",
+          "tcp to the UDP port 47103": "timeout",
+          "pump decisions": {
+            "rule:0:deny": 6
+          }
+        }
+      },
+      "allow_list": {
+        "default allow: dns pypi.org": "ok",
+        "default allow: tcp to pypi 443": "ok",
+        "virtual subnet always allowed": {
+          "dns pypi.org": "ok",
+          "tcp 47101 (allowed)": "ok",
+          "tcp 47102": "timeout",
+          "udp 47103": "timeout",
+          "tcp to pypi 443": "timeout"
+        },
+        "virtual subnet subject to the rules": {
+          "dns pypi.org": "timeout",
+          "tcp 47101 (allowed)": "ok",
+          "tcp 47102": "timeout",
+          "udp 47103": "timeout",
+          "tcp to pypi 443": "timeout"
+        }
+      },
+      "ipv6": {
+        "design arm (pump drops IPv6, slirp without --enable-ipv6)": {
+          "if_inet6": [
+            "fe80000000000000641daefffe4f3ceb 02 40 20 80   vpump0",
+            "00000000000000000000000000000001 01 80 10 80       lo",
+            "fe800000000000007c56c4fffe02ad3e 03 40 20 80     eth0",
+            ""
+          ],
+          "ipv6_route": [
+            [
+              "fe800000000000000000000000000000",
+              "40",
+              "00000000000000000000000000000000",
+              "00000100",
+              "00000001",
+              "vpump0"
+            ],
+            [
+              "fe800000000000000000000000000000",
+              "40",
+              "00000000000000000000000000000000",
+              "00000100",
+              "00000001",
+              "eth0"
+            ],
+            [
+              "00000000000000000000000000000000",
+              "00",
+              "00000000000000000000000000000000",
+              "ffffffff",
+              "00200200",
+              "lo"
+            ],
+            [
+              "00000000000000000000000000000001",
+              "80",
+              "00000000000000000000000000000000",
+              "00000000",
+              "80200001",
+              "lo"
+            ],
+            [
+              "fe80000000000000641daefffe4f3ceb",
+              "80",
+              "00000000000000000000000000000000",
+              "00000000",
+              "80200001",
+              "vpump0"
+            ],
+            [
+              "fe800000000000007c56c4fffe02ad3e",
+              "80",
+              "00000000000000000000000000000000",
+              "00000000",
+              "80200001",
+              "eth0"
+            ],
+            [
+              "ff000000000000000000000000000000",
+              "08",
+              "00000000000000000000000000000000",
+              "00000100",
+              "00000001",
+              "vpump0"
+            ],
+            [
+              "ff000000000000000000000000000000",
+              "08",
+              "00000000000000000000000000000000",
+              "00000100",
+              "00000001",
+              "eth0"
+            ],
+            [
+              "00000000000000000000000000000000",
+              "00",
+              "00000000000000000000000000000000",
+              "ffffffff",
+              "00200200",
+              "lo"
+            ]
+          ],
+          "public": {
+            "ok": false,
+            "error": "ENETUNREACH",
+            "ms": 0,
+            "started": 1793373538.1607156
+          },
+          "slirp_gateway": {
+            "ok": false,
+            "error": "ENETUNREACH",
+            "ms": 0,
+            "started": 1793373538.16079
+          },
+          "dns_over_ipv6_to_slirp": {
+            "ok": false,
+            "error": "ENETUNREACH"
+          }
+        },
+        "pump decisions in the design arm": {}
+      },
+      "neighbours": {
+        "routes": [
+          {
+            "interface": "eth0",
+            "destination": "0.0.0.0",
+            "gateway": "<gateway-ip>",
+            "prefix_length": 0
+          },
+          {
+            "interface": "eth0",
+            "destination": "<route-host-ip>",
+            "gateway": "<gateway-ip>",
+            "prefix_length": 32
+          },
+          {
+            "interface": "eth0",
+            "destination": "<pod-subnet>",
+            "gateway": "0.0.0.0",
+            "prefix_length": 19
+          },
+          {
+            "interface": "eth0",
+            "destination": "<gateway-ip>",
+            "gateway": "0.0.0.0",
+            "prefix_length": 32
+          },
+          {
+            "interface": "cni_dev0",
+            "destination": "<cni-subnet>",
+            "gateway": "0.0.0.0",
+            "prefix_length": 27
+          }
+        ],
+        "arp_table_rows": 1,
+        "container_subnet_prefix": 19,
+        "addresses_in_that_subnet": 8190,
+        "neighbour_inside_the_container_subnet": true,
+        "plain container to the neighbour port 47200": {
+          "result": "TimeoutError",
+          "ms": 3003
+        },
+        "plain container to the neighbour port 8000": {
+          "result": "TimeoutError",
+          "ms": 3001
+        },
+        "sandbox, no rule": {
+          "port 47200": "timeout",
+          "port 8000": "timeout"
+        },
+        "sandbox, deny the subnet": {
+          "port 47200": "timeout",
+          "port 8000": "timeout"
+        },
+        "sandbox, deny only the neighbour address": {
+          "port 47200": "timeout",
+          "port 8000": "timeout"
+        }
+      },
+      "pump_totals": {
+        "decisions": {
+          "arp": 4,
+          "default:allow": 1659,
+          "ipv6": 10,
+          "fragment": 9,
+          "rule:0:deny": 65,
+          "rule:0:allow": 30,
+          "rule:1:deny": 12,
+          "virtual-subnet": 2
+        },
+        "rule_hits": {
+          "rule:0:deny": 65,
+          "rule:0:allow": 30,
+          "rule:1:deny": 12
+        },
+        "to_slirp_frames": 1695,
+        "to_child_frames": 1635,
+        "errors": []
+      },
+      "ipv6_control_arm": {
+        "if_inet6": [
+          "00000000000000000000000000000001 01 80 10 80       lo",
+          "fe80000000000000b8d5b5fffe75bf6e 03 40 20 80     eth0",
+          "fe80000000000000f8a317fffee958de 02 40 20 80   vpump0",
+          "fd00000000000000b8d5b5fffe75bf6e 03 40 00 00     eth0",
+          ""
+        ],
+        "ipv6_route": [
+          [
+            "fd000000000000000000000000000000",
+            "40",
+            "00000000000000000000000000000000",
+            "00000100",
+            "004c0001",
+            "eth0"
+          ],
+          [
+            "fe800000000000000000000000000000",
+            "40",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "vpump0"
+          ],
+          [
+            "fe800000000000000000000000000000",
+            "40",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000000",
+            "00",
+            "fe800000000000000000000000000002",
+            "00000400",
+            "00450003",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000001",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "lo"
+          ],
+          [
+            "fd00000000000000b8d5b5fffe75bf6e",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "eth0"
+          ],
+          [
+            "fe80000000000000b8d5b5fffe75bf6e",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "eth0"
+          ],
+          [
+            "fe80000000000000f8a317fffee958de",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "vpump0"
+          ],
+          [
+            "ff000000000000000000000000000000",
+            "08",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "vpump0"
+          ],
+          [
+            "ff000000000000000000000000000000",
+            "08",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000000",
+            "00",
+            "00000000000000000000000000000000",
+            "ffffffff",
+            "00200200",
+            "lo"
+          ]
+        ],
+        "public": {
+          "ok": false,
+          "error": "ENETUNREACH",
+          "ms": 0,
+          "started": 1793373561.9417262
+        },
+        "slirp_gateway": {
+          "ok": false,
+          "error": "ENETUNREACH",
+          "ms": 0,
+          "started": 1793373561.9421194
+        },
+        "dns_over_ipv6_to_slirp": {
+          "ok": false,
+          "error": "timeout"
+        },
+        "pump decisions": {
+          "ipv6-pass": 11
+        }
+      }
+    },
+    "6c": {
+      "date": "2026-10-30",
+      "reload_open_connection": {
+        "denied 30 s": {
+          "sent": 2462,
+          "echoed": 2462,
+          "every_sent_line_echoed": true,
+          "connection_error": null,
+          "connection_closed_by_peer": false,
+          "deny_file_to_pump_ms": 7.8,
+          "echoes_received_while_denied": 0,
+          "last_echo_before_deny_ms": 2,
+          "denied_for_s": 30.7,
+          "observed_after_allow_s": 90.0,
+          "first_echo_after_allow_s": 24.72,
+          "longest_echo_latency_s": 55.37,
+          "pump_drops_by_rule": {
+            "rule:0:deny": 12
+          }
+        }
+      },
+      "ipv6_control_arm": {
+        "if_inet6": [
+          "fe8000000000000008662ffffed77a4e 02 40 20 80   vpump0",
+          "fe8000000000000038dfeefffece642a 03 40 20 80     eth0",
+          "00000000000000000000000000000001 01 80 10 80       lo",
+          "fd0000000000000038dfeefffece642a 03 40 00 00     eth0",
+          ""
+        ],
+        "ipv6_route": [
+          [
+            "fd000000000000000000000000000000",
+            "40",
+            "00000000000000000000000000000000",
+            "00000100",
+            "004c0001",
+            "eth0"
+          ],
+          [
+            "fe800000000000000000000000000000",
+            "40",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "vpump0"
+          ],
+          [
+            "fe800000000000000000000000000000",
+            "40",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000000",
+            "00",
+            "fe800000000000000000000000000002",
+            "00000400",
+            "00450003",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000001",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "lo"
+          ],
+          [
+            "fd0000000000000038dfeefffece642a",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "eth0"
+          ],
+          [
+            "fe8000000000000008662ffffed77a4e",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "vpump0"
+          ],
+          [
+            "fe8000000000000038dfeefffece642a",
+            "80",
+            "00000000000000000000000000000000",
+            "00000000",
+            "80200001",
+            "eth0"
+          ],
+          [
+            "ff000000000000000000000000000000",
+            "08",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "vpump0"
+          ],
+          [
+            "ff000000000000000000000000000000",
+            "08",
+            "00000000000000000000000000000000",
+            "00000100",
+            "00000001",
+            "eth0"
+          ],
+          [
+            "00000000000000000000000000000000",
+            "00",
+            "00000000000000000000000000000000",
+            "ffffffff",
+            "00200200",
+            "lo"
+          ]
+        ],
+        "public": {
+          "ok": false,
+          "error": "ENETUNREACH",
+          "ms": 0,
+          "started": 1793373928.112705
+        },
+        "public (route lookup)": {
+          "ok": true,
+          "source_prefix": "fd00::"
+        },
+        "slirp_gateway": {
+          "ok": false,
+          "error": "ENETUNREACH",
+          "ms": 0,
+          "started": 1793373928.1131513
+        },
+        "slirp_gateway (route lookup)": {
+          "ok": true,
+          "source_prefix": "fd00::"
+        },
+        "sysctl": {
+          "all/disable_ipv6": "0",
+          "eth0/disable_ipv6": "0",
+          "eth0/accept_ra": "1",
+          "eth0/forwarding": "0",
+          "eth0/autoconf": "1"
+        },
+        "dns_over_ipv6_to_slirp": {
+          "ok": false,
+          "error": "timeout"
+        },
+        "pump decisions": {
+          "ipv6-pass": 11
+        }
+      }
+    },
+    "6d": {
+      "date": "2026-10-30",
+      "own_address": {
+        "listening_ports_on_the_container_address": [
+          111,
+          1095,
+          1105,
+          4315,
+          4316,
+          4317,
+          4318,
+          6000,
+          7270,
+          7769,
+          7778,
+          7781,
+          7783,
+          7808,
+          7850,
+          8000,
+          8070,
+          8184,
+          8686,
+          8687,
+          8696,
+          8697,
+          9080,
+          19098,
+          22005,
+          22006,
+          22007,
+          22014
+        ],
+        "sandbox, no rule": {
+          "connected": [
+            111,
+            1095,
+            1105,
+            4315,
+            4316,
+            4317,
+            4318,
+            6000,
+            7270,
+            7769,
+            7778,
+            7781,
+            7783,
+            7808,
+            7850,
+            8000,
+            8070,
+            8184,
+            8686,
+            8687,
+            8696,
+            8697,
+            9080,
+            19098,
+            22005,
+            22006,
+            22007,
+            22014
+          ],
+          "not_connected": []
+        },
+        "sandbox, the design's deny of the container address": {
+          "connected": [],
+          "not_connected": [
+            111,
+            1095,
+            1105,
+            4315,
+            4316,
+            4317,
+            4318,
+            6000,
+            7270,
+            7769,
+            7778,
+            7781,
+            7783,
+            7808,
+            7850,
+            8000,
+            8070,
+            8184,
+            8686,
+            8687,
+            8696,
+            8697,
+            9080,
+            19098,
+            22005,
+            22006,
+            22007,
+            22014
+          ]
+        }
+      }
+    },
+    "neighbour_controls": {
+      "date": "2026-10-30",
+      "neighbour_to_its_own_pod_address": {
+        "47200": "connected",
+        "8000": "connected"
+      },
+      "neighbour_to_the_probe_listener": {
+        "result": "TimeoutError"
+      },
+      "connections_the_probe_listener_counted": {
+        "connections_that_reached_the_listener": 0
+      }
+    }
+  }
+}

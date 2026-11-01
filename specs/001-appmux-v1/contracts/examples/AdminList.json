@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "type": "user",
+      "name": "dana@example.com"
+    },
+    {
+      "type": "group",
+      "name": "data-platform"
+    }
+  ]
+}

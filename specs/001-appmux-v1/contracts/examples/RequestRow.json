@@ -1,0 +1,20 @@
+{
+  "request_id": 4,
+  "app_slug": "sales",
+  "kind": "settings",
+  "payload": {
+    "slug": "revenue"
+  },
+  "reason": "the dashboard now covers all revenue, not only sales",
+  "requested_by": "alice@example.com",
+  "requested_at": "2026-10-30T09:35:00Z",
+  "status": "pending",
+  "closed_by": null,
+  "closed_at": null,
+  "closed_note": null,
+  "current": {
+    "slug": "sales"
+  },
+  "requires_reason": false,
+  "app_version": null
+}

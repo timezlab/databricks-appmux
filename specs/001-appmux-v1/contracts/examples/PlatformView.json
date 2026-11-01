@@ -1,0 +1,164 @@
+{
+  "settings": {
+    "memory_reserve_mb": 1024,
+    "package_mode": "wheelhouse",
+    "default_wheel_sources": [
+      "/Workspace/Shared/appmux/wheelhouse"
+    ],
+    "shared_sp_delegation_allowed": false,
+    "max_releases_per_app": 10,
+    "max_locked_releases": 3,
+    "request_timeout_s": 120,
+    "max_request_body_mb": 100,
+    "max_concurrent_requests": 64,
+    "build_timeout_s": 600,
+    "max_processes_per_child": 256,
+    "child_cpu_pin": true,
+    "attach_check_warehouse_id": "a1b2c3d4e5f67890"
+  },
+  "admins": [
+    {
+      "type": "user",
+      "name": "dana@example.com"
+    },
+    {
+      "type": "group",
+      "name": "data-platform"
+    }
+  ],
+  "egress_global": [
+    {
+      "action": "deny",
+      "cidr": "@container_ip/32",
+      "port": "any",
+      "comment": "the container's own address"
+    },
+    {
+      "action": "deny",
+      "cidr": "169.254.0.0/16",
+      "port": "any",
+      "comment": "metadata and link-local"
+    }
+  ],
+  "self_check": {
+    "passed": true,
+    "ran_at": "2026-10-30T08:00:03Z",
+    "duration_ms": 840,
+    "checks": [
+      {
+        "name": "environ_isolation",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "pid_isolation",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "loopback_and_container_ip",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "metadata_address",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "platform_files",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "capabilities",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "read_only_environment",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "sibling_sockets",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "appmux_directories",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "sysv_ipc",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "nested_user_namespace",
+        "passed": true,
+        "detail": null
+      },
+      {
+        "name": "inherited_descriptors",
+        "passed": true,
+        "detail": null
+      }
+    ]
+  },
+  "memory": {
+    "limit_mb": 8192,
+    "reserve_mb": 1024,
+    "committed_mb": 5775,
+    "free_mb": 1393
+  },
+  "apps": [
+    {
+      "slug": "sales",
+      "display_name": "Sales dashboard",
+      "source_path": "/Workspace/Shared/apps/sales",
+      "memory_budget_mb": 512,
+      "owner": "alice@example.com",
+      "obo_delegated": true,
+      "shared_sp_delegated": false,
+      "egress": [
+        {
+          "action": "allow",
+          "cidr": "10.20.0.0/16",
+          "port": "443",
+          "comment": "warehouse subnet"
+        },
+        {
+          "action": "deny",
+          "cidr": "0.0.0.0/0",
+          "port": "any",
+          "comment": ""
+        }
+      ],
+      "version": 3
+    },
+    {
+      "slug": "docs",
+      "display_name": "Team docs",
+      "source_path": "/Workspace/Shared/apps/docs",
+      "memory_budget_mb": 256,
+      "owner": "frank@example.com",
+      "obo_delegated": false,
+      "shared_sp_delegated": false,
+      "egress": [],
+      "version": 2
+    },
+    {
+      "slug": "reports",
+      "display_name": "Weekly reports",
+      "source_path": "/Workspace/Shared/apps/reports",
+      "memory_budget_mb": 256,
+      "owner": "grace@example.com",
+      "obo_delegated": false,
+      "shared_sp_delegated": false,
+      "egress": [],
+      "version": 1
+    }
+  ]
+}

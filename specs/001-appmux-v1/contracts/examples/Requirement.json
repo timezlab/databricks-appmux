@@ -1,0 +1,11 @@
+{
+  "key": "forecast-model",
+  "state": "missing",
+  "offer": {
+    "key": "forecast-model",
+    "type": "serving_endpoint",
+    "target": null,
+    "permission": "CAN_QUERY"
+  },
+  "suggested_type": null
+}

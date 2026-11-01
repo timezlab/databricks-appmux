@@ -1,0 +1,384 @@
+{
+ "date": "2026-10-30",
+ "earlier_run_without_chroot_or_overmounts": {
+  "nested_userns": {
+   "caps_in_nested": "0000000000000000",
+   "mount_tmpfs_on_tmp": "ok",
+   "remount_release_rw": "EPERM",
+   "remount_root_rw": "EPERM",
+   "remount_usr_rw": "EPERM",
+   "remount_venv_rw": "EPERM",
+   "root_listing_after": [
+    "app",
+    "bin",
+    "dev",
+    "etc",
+    "home",
+    "lib",
+    "lib64",
+    "proc",
+    "run",
+    "sbin",
+    "srv",
+    "tmp",
+    "usr",
+    "var"
+   ],
+   "umount_usr": "EINVAL",
+   "unshare_newns": "ok",
+   "unshare_newuser": "ok",
+   "write_gid_map": "ok",
+   "write_setgroups": "EACCES",
+   "write_uid_map": "ok"
+  },
+  "proc_self_leaks": {
+   "cgroup_first_line_prefix": "11:devices:/kubepods/burstable/pod<masked>",
+   "environ_names": [
+    "HOME",
+    "PATH"
+   ],
+   "mountinfo_overlay_has_host_paths": true,
+   "mountinfo_root_field_samples": [
+    "/",
+    "/251",
+    "/app/python/source_code/.venv",
+    "/cpuinfo",
+    "/etc/ca-certificates",
+    "/etc/group",
+    "/etc/ld.so.cache",
+    "/etc/ld.so.conf"
+   ],
+   "proc_self_readable_files": 44
+  },
+  "unshare_user_alone_after_cap_drop": "ok"
+ },
+ "final_run_with_chroot_and_overmounts": {
+  "check": {
+   "app_environment_imports": {
+    "dash": "ok",
+    "fastapi": "ok",
+    "gradio": "ok",
+    "pandas": "ok",
+    "requests": "ok",
+    "streamlit": "ok",
+    "uvicorn": "ok"
+   },
+   "canaries": {
+    "/app/static/logz.html": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/databricks/customer-logs/apps-runtime/databricksapps.log": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/databricks/dynamic-secrets/shared/configs/deployment.json": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/databricks/dynamic-secrets/shared/deployment-unit-info.json": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/databricks/runtime-secrets/runtime.cfg": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/dev/termination-log": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/etc/hostname": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/proc/1/cmdline": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/proc/1/environ": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "/sys/class/dmi/id/sys_vendor": {
+     "open_r": "ENOENT",
+     "open_w": "ENOENT"
+    },
+    "app-dir": {
+     "read": "ENOENT",
+     "stat": "ENOENT"
+    },
+    "dev-shm": {
+     "read": "ENOENT",
+     "stat": "ENOENT"
+    },
+    "home": {
+     "read": "ENOENT",
+     "stat": "ENOENT"
+    },
+    "sibling-release": {
+     "read": "ENOENT",
+     "stat": "ENOENT"
+    },
+    "sibling-run-file": {
+     "read": "ENOENT",
+     "stat": "ENOENT"
+    },
+    "sibling-socket": {
+     "connect": "ENOENT"
+    },
+    "tmp": {
+     "read": "ENOENT",
+     "stat": "ENOENT"
+    },
+    "var-tmp": {
+     "read": "ENOENT",
+     "stat": "ENOENT"
+    }
+   },
+   "escapes": {
+    "chroot_dot": "EPERM",
+    "listdir_dotdot_of_root": "same as /",
+    "mount_tmpfs": "EPERM",
+    "open_by_handle_at": "EPERM",
+    "open_proc_self_root_dotdot": [
+     "proc",
+     "etc",
+     "home",
+     "dev",
+     "var",
+     "tmp",
+     "run",
+     "srv",
+     "app",
+     "usr",
+     "lib64",
+     "lib",
+     "sbin",
+     "bin"
+    ],
+    "pivot_root": "EPERM",
+    "proc_self_cwd": "/"
+   },
+   "fd_targets": {
+    "0": "/dev/null",
+    "1": "pipe:[168860]",
+    "2": "pipe:[168861]",
+    "3": "pipe:[170638]",
+    "4": "pipe:[170639]",
+    "5": "socket:[170640]",
+    "6": "ENOENT"
+   },
+   "identity": {
+    "CapBnd": "0000000000000000",
+    "CapEff": "0000000000000000",
+    "NoNewPrivs": "1",
+    "gid": 0,
+    "open_fds": [
+     "0",
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6"
+    ],
+    "proc_entries": [
+     "cpuinfo",
+     "meminfo",
+     "self"
+    ],
+    "uid": 0
+   },
+   "mountinfo": [],
+   "nested_userns": {
+    "unshare_newuser": "EPERM"
+   },
+   "node": "v22.23.4",
+   "open_fds_probe": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "proc_self_leaks": {
+    "cgroup_first_line_prefix": "",
+    "environ_names": [
+     "HOME",
+     "PATH"
+    ],
+    "mountinfo_overlay_has_host_paths": false,
+    "mountinfo_root_field_samples": [],
+    "proc_self_readable_files": 40
+   },
+   "readonly_checks": {
+    "chmod_usr": "EROFS",
+    "etc": "EROFS",
+    "modify_existing_usr_file": "EACCES",
+    "release": "EROFS",
+    "root": "EROFS",
+    "usr": "EROFS",
+    "venv": "EROFS"
+   },
+   "secret_named_files_visible_outside_venv": {
+    "count": 0,
+    "sample": []
+   },
+   "unshare_user_alone_after_cap_drop": "EPERM",
+   "visible": {
+    "by_top": {
+     "/": {
+      "dirs": 1,
+      "files": 0,
+      "readable": 0
+     },
+     "/app": {
+      "dirs": 3504,
+      "files": 31188,
+      "readable": 31188
+     },
+     "/dev": {
+      "dirs": 2,
+      "files": 8,
+      "readable": 8
+     },
+     "/etc": {
+      "dirs": 6,
+      "files": 254,
+      "readable": 254
+     },
+     "/home": {
+      "dirs": 2,
+      "files": 0,
+      "readable": 0
+     },
+     "/proc": {
+      "dirs": 27,
+      "files": 341,
+      "readable": 255
+     },
+     "/run": {
+      "dirs": 2,
+      "files": 0,
+      "readable": 0
+     },
+     "/srv": {
+      "dirs": 2,
+      "files": 1,
+      "readable": 1
+     },
+     "/tmp": {
+      "dirs": 1,
+      "files": 0,
+      "readable": 0
+     },
+     "/usr": {
+      "dirs": 2928,
+      "files": 18630,
+      "readable": 18522
+     },
+     "/var": {
+      "dirs": 2,
+      "files": 0,
+      "readable": 0
+     }
+    },
+    "top_level_entries": [
+     "app",
+     "bin",
+     "dev",
+     "etc",
+     "home",
+     "lib",
+     "lib64",
+     "proc",
+     "run",
+     "sbin",
+     "srv",
+     "tmp",
+     "usr",
+     "var"
+    ]
+   },
+   "writable": {
+    "by_top": {
+     "/dev": 1,
+     "/home": 1,
+     "/run": 1,
+     "/tmp": 1,
+     "/var": 1
+    },
+    "count": 5,
+    "roots": [
+     "/dev/shm",
+     "/home/app",
+     "/run/appmux",
+     "/tmp",
+     "/var/tmp"
+    ]
+   }
+  },
+  "launcher_rc": 0,
+  "raw_tail": "",
+  "stage1": {
+   "build_seconds": 0.003,
+   "steps": {
+    "bind /dev/full": "ok",
+    "bind /dev/null": "ok",
+    "bind /dev/random": "ok",
+    "bind /dev/urandom": "ok",
+    "bind /dev/zero": "ok",
+    "bind /proc/cpuinfo": "ok",
+    "bind /proc/meminfo": "ok",
+    "bind /proc/self": "ok",
+    "chroot /rootfs": "ok",
+    "detach_old_root": "ok",
+    "drop_capabilities": "ok",
+    "make_mounts_private": "ok",
+    "overmount /proc/self/cgroup": "ok",
+    "overmount /proc/self/mountinfo": "ok",
+    "overmount /proc/self/mounts": "ok",
+    "overmount /proc/self/mountstats": "ok",
+    "pivot_root": "ok",
+    "remount ro /dev": "ok",
+    "remount ro /etc": "ok",
+    "remount ro /proc": "ok",
+    "remount ro pivot": "ok",
+    "ro /app/python/source_code/.venv": "ok",
+    "ro /etc/ca-certificates": "ok",
+    "ro /etc/group": "ok",
+    "ro /etc/ld.so.cache": "ok",
+    "ro /etc/ld.so.conf": "ok",
+    "ro /etc/ld.so.conf.d": "ok",
+    "ro /etc/localtime": "ok",
+    "ro /etc/nsswitch.conf": "ok",
+    "ro /etc/os-release": "ok",
+    "ro /etc/passwd": "ok",
+    "ro /etc/ssl": "ok",
+    "ro /srv/app": "ok",
+    "ro /usr": "ok",
+    "rw /run/appmux": "ok",
+    "tmpfs /dev": "ok",
+    "tmpfs /dev/shm": "ok",
+    "tmpfs /etc": "ok",
+    "tmpfs /home/app": "ok",
+    "tmpfs /proc": "ok",
+    "tmpfs /tmp": "ok",
+    "tmpfs /var/tmp": "ok",
+    "tmpfs_pivot": "ok"
+   }
+  },
+  "stderr": ""
+ },
+ "ipc_with_unshare_ipc": {
+  "sysv_msgqueue_visible": "ENOENT",
+  "sysv_shm_visible": "ENOENT"
+ },
+ "ipc_without_unshare_ipc": {
+  "sysv_msgqueue_visible": "VISIBLE",
+  "sysv_shm_visible": "VISIBLE"
+ },
+ "where": "appmux-probe harness, unshare --user --map-root-user --mount --pid --fork, then the mount table in scripts/spike-02/sandbox_fs.py"
+}

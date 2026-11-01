@@ -1,0 +1,15 @@
+{
+  "release_no": 5,
+  "status": "superseded",
+  "status_reason": null,
+  "status_at": "2026-10-29T10:20:00Z",
+  "name": "before pagination",
+  "tags": [
+    "legacy-ui"
+  ],
+  "is_target": false,
+  "locked_by": "alice@example.com",
+  "locked_at": "2026-10-28T09:00:00Z",
+  "created_by": "alice@example.com",
+  "created_at": "2026-10-27T15:02:00Z"
+}

@@ -1,0 +1,85 @@
+{
+  "items": [
+    {
+      "request_id": 4,
+      "app_slug": "sales",
+      "kind": "settings",
+      "payload": {
+        "slug": "revenue"
+      },
+      "reason": "the dashboard now covers all revenue, not only sales",
+      "requested_by": "alice@example.com",
+      "requested_at": "2026-10-30T09:35:00Z",
+      "status": "pending",
+      "closed_by": null,
+      "closed_at": null,
+      "closed_note": null,
+      "current": {
+        "slug": "sales"
+      },
+      "requires_reason": false,
+      "app_version": null
+    },
+    {
+      "request_id": 5,
+      "app_slug": "docs",
+      "kind": "delegation",
+      "payload": {
+        "obo": true
+      },
+      "reason": "show each reader their own workspace files",
+      "requested_by": "frank@example.com",
+      "requested_at": "2026-10-30T09:50:00Z",
+      "status": "pending",
+      "closed_by": null,
+      "closed_at": null,
+      "closed_note": null,
+      "current": {
+        "obo": false
+      },
+      "requires_reason": true,
+      "app_version": null
+    },
+    {
+      "request_id": 6,
+      "app_slug": null,
+      "kind": "register",
+      "payload": {
+        "slug": "wiki",
+        "display_name": "Team wiki",
+        "source_path": "/Workspace/Shared/apps/wiki",
+        "memory_budget_mb": 128
+      },
+      "reason": "the team wiki, a small Flask app",
+      "requested_by": "frank@example.com",
+      "requested_at": "2026-10-30T09:55:00Z",
+      "status": "pending",
+      "closed_by": null,
+      "closed_at": null,
+      "closed_note": null,
+      "current": null,
+      "requires_reason": true,
+      "app_version": null
+    },
+    {
+      "request_id": 8,
+      "app_slug": "docs",
+      "kind": "settings",
+      "payload": {
+        "slug": "reports"
+      },
+      "reason": "docs is becoming the reports hub",
+      "requested_by": "frank@example.com",
+      "requested_at": "2026-10-30T10:08:00Z",
+      "status": "denied",
+      "closed_by": "dana@example.com",
+      "closed_at": "2026-10-30T10:20:00Z",
+      "closed_note": "slug 'reports' is already taken (automatic)",
+      "current": {
+        "slug": "docs"
+      },
+      "requires_reason": false,
+      "app_version": null
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+command: ["python", "app.py"]
+env:
+  - name: SPIKE_OWNER
+    value: "owner@example.com"

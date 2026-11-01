@@ -1,0 +1,93 @@
+d 755 uid=0     4096 r=1 /databricks/autoscaling
+d 777 uid=0     4096 r=1 /databricks/customer-logs
+f 555 uid=0     1655 r=1 /databricks/deadsnakes.asc
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets
+f 644 uid=0      287 r=1 /databricks/one_location.json
+f 555 uid=0  4210219 r=1 /databricks/pnpm-corepack.tgz
+d 755 uid=0     4096 r=1 /databricks/preinstalled-uv-env
+d 755 uid=0     4096 r=1 /databricks/runtime-secrets
+f 555 uid=0 213034264 r=1 /databricks/uv-packages.tar.gz
+f 555 uid=0      664 r=1 /databricks/preinstalled-uv-env/pyproject.toml
+f 555 uid=0   211621 r=1 /databricks/preinstalled-uv-env/uv.lock
+f 755 uid=0      152 r=1 /databricks/runtime-secrets/m2m-auth-secret-expiration
+f 755 uid=0      712 r=1 /databricks/runtime-secrets/runtime.cfg
+f 755 uid=0      152 r=1 /databricks/runtime-secrets/u2m-auth-secret-expiration
+d 755 uid=1000     4096 r=1 /databricks/customer-logs/apps-runtime
+f 600 uid=1000    63433 r=1 /databricks/customer-logs/apps-runtime/databricksapps.log
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/apps-runtime
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/reserved-platform
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/shared
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/reserved-platform/app-metadata
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/reserved-platform/system-metadata
+f 644 uid=0       11 r=1 /databricks/dynamic-secrets/reserved-platform/system-metadata/system
+f 644 uid=0        4 r=1 /databricks/dynamic-secrets/reserved-platform/app-metadata/app
+f 644 uid=0       44 r=1 /databricks/dynamic-secrets/reserved-platform/app-metadata/app-instance
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/shared/autoscaling
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/shared/configs
+f 644 uid=0      308 r=1 /databricks/dynamic-secrets/shared/deployment-statuses.json
+f 644 uid=0      350 r=1 /databricks/dynamic-secrets/shared/deployment-unit-info.json
+d 755 uid=0     4096 r=1 /databricks/dynamic-secrets/shared/metadata
+f 644 uid=0        0 r=1 /databricks/dynamic-secrets/shared/network-block-passed.txt
+f 644 uid=0       12 r=1 /databricks/dynamic-secrets/shared/metadata/app-name
+f 644 uid=0       13 r=1 /databricks/dynamic-secrets/shared/metadata/spec-compile-time
+f 644 uid=0        4 r=1 /databricks/dynamic-secrets/shared/metadata/spec-version
+f 644 uid=0      251 r=1 /databricks/dynamic-secrets/shared/configs/deployment.json
+f 644 uid=0       35 r=1 /databricks/dynamic-secrets/shared/configs/effective-scopes.json
+f 644 uid=0      351 r=1 /databricks/dynamic-secrets/shared/configs/fluent-bit.yaml.TEMPLATE
+f 644 uid=0        5 r=1 /databricks/dynamic-secrets/shared/configs/fluentbit-version
+f 644 uid=0        5 r=1 /databricks/dynamic-secrets/shared/configs/telemetry-enabled
+f 644 uid=0       36 r=1 /databricks/dynamic-secrets/shared/configs/telemetry-table-names.json
+== /app/deployments 0
+
+== /app/lha-runtime 0
+
+== /app/scanner 0
+
+== /app/static 3
+f 555 uid=0     1077 r=1 /app/static/favicon.ico
+f 555 uid=0    18911 r=1 /app/static/logz.html
+f 555 uid=0    14627 r=1 /app/static/styles.css
+== /app/.uv-python 0
+
+== /home/app 4
+f 644 uid=1000      220 r=1 /home/app/.bash_logout
+f 644 uid=1000     3771 r=1 /home/app/.bashrc
+d 755 uid=1000     4096 r=1 /home/app/.cache
+f 644 uid=1000      807 r=1 /home/app/.profile
+== /var/lib/python 2
+f 644 uid=0        0 r=1 /var/lib/python/python3.10_installed
+f 644 uid=0        0 r=1 /var/lib/python/python3.11_installed
+== /etc/databricks 0
+
+termination-log 0o100666 0 0
+
+--- shapes of /databricks/dynamic-secrets (lengths only) ---
+shared/deployment-statuses.json [{"pod_bundle_statuses": [{"allocation_state": "<str len=26>", "pod_statuses": [{"pod_name": "<str len=71 TOKEN-LIKE>", "ip": "<str len=13>"}], "name": "<str len=66 TOKEN-LIKE>"}], "deployment_spec_name": "<str len=4>"}]
+shared/deployment-unit-info.json {"app_name": "<str len=4>", "app_instance_name": "<str len=36>", "deployment_name": "<str len=11>", "deployment_unit_name": "<str len=66 TOKEN-LIKE>", "node_name": "<str len=53 TOKEN-LIKE>", "node_uid": "<str len=36>", "deployment_spec_name": "<str len=4>"}
+shared/configs/deployment.json {"deployment_id": "<str len=32>", "source_code_path": "<str len=90 TOKEN-LIKE>", "auto_sync": false, "flags": ["<str len=17>", "<str len=12>", "<str len=21>"]}
+shared/configs/effective-scopes.json {"scopes": [], "last_updated_time": 0}
+shared/configs/telemetry-table-names.json {"logs": "<str len=0>", "metrics": "<str len=0>", "traces": "<str len=0>"}
+reserved-platform/system-metadata/system <len=11> system:apps
+reserved-platform/app-metadata/app <len=4> apps
+reserved-platform/app-metadata/app-instance <len=44> papuea#-###f#f##-####-###d-be##-f###fcf###f#
+shared/metadata/app-name <len=12> appmux-probe
+shared/metadata/spec-version <len=4> V#_#
+shared/configs/fluentbit-version <len=5> #.#.#
+shared/configs/telemetry-enabled <len=5> false
+service:
+  flush: 5
+  grace: 10
+  daemon: off
+  log_level: info
+  hot_reload: on
+  http_server: on
+  http_listen: 0.0.0.0
+  http_port: 7270
+  health_check: true
+
+  # Global filesystem storage for zero data loss during restarts
+  storage.path: /databricks/fluentbit-storage
+  storage.sync: normal
+  storage.checksum: on
+  storage.backlog.mem_limit: 5M
+runtime.cfg keys: ['app_name', 'app_id', 'app_url', 'workspace_id', 'host', 'client_id', 'client_secret', 'app_deployment_config_path', 'app_log_file', 'block_on_network', 'extra_builds', 'allowed_origins', 'enable_security_scanner', 'enable_community_rules', 'enable_classic_scan_bounds']

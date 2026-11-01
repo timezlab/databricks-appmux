@@ -1,0 +1,7 @@
+{
+  "slug": "sales",
+  "display_name": "Sales dashboard",
+  "source_path": "/Workspace/Shared/apps/sales",
+  "memory_budget_mb": 512,
+  "owner": "alice@example.com"
+}

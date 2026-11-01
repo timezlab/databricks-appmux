@@ -1,0 +1,25 @@
+{
+ "date": "2026-10-30",
+ "workspace": "Free Edition only (<workspace-host>)",
+ "script": "scripts/spike-15/workspace_read_probe.py (runs on appmux-probe)",
+ "folder": "a folder in the owner's home with two files (app.py, app.yaml of the probe harness); the SP has no grant on it; the owner is a workspace admin",
+ "obo_with_workspace_workspace_read": {
+  "app_user_api_scopes": ["workspace.workspace:read", "files.files:read", "sql", "serving.serving-endpoints:read", "catalog.catalogs:read", "catalog.schemas:read", "catalog.tables:read", "catalog.connections:read", "vectorsearch.vector-search-indexes:read", "dashboards.genie:read", "apps", "ai-gateway"],
+  "owner_folder": {"get-status": 200, "list": "200, 2 objects, both FILE", "export_first_file": "200, 10220 bytes"},
+  "sp_home_folder": {"get-status": 200, "list": "200, 3 objects, all DIRECTORY (the owner is an admin and can read it)"},
+  "write_attempt_mkdirs": "HTTP 403: Provided OAuth token does not have required scopes: workspace"
+ },
+ "sp_token_no_grant": {
+  "owner_folder": {"get-status": 200, "list": "200, 0 objects", "export_of_a_file_known_to_exist": "404: Path (...) doesn't exist."},
+  "note": "no access error: the folder shows, its contents do not"
+ },
+ "obo_without_app_scopes": {
+  "app_user_api_scopes": null,
+  "owner_folder_get-status_list_and_mkdirs": "HTTP 403: Invalid scope, required scopes: workspace"
+ },
+ "scope_names": {
+  "valid": ["workspace.workspace", "workspace.workspace:read"],
+  "invalid": ["workspace", "workspace.repos"],
+  "required_by_the_call": "workspace"
+ }
+}

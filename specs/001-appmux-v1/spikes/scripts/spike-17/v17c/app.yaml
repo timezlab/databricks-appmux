@@ -1,0 +1,6 @@
+command: ["python", "app.py"]
+env:
+  - name: SPIKE_VARIANT
+    value: "c-missing-valuefrom"
+  - name: MISSING_RES
+    valueFrom: appmux-spike-17-no-such-resource

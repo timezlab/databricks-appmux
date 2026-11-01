@@ -1,0 +1,61 @@
+{
+  "run": "T068, scripts/run-remote-tests.sh tests/integration/test_self_check_container.py",
+  "date": "2026-10-31",
+  "where": "Free Edition dev App only",
+  "passed": true,
+  "duration_ms": 7447,
+  "checks": [
+    {
+      "name": "environ_isolation",
+      "passed": true
+    },
+    {
+      "name": "pid_isolation",
+      "passed": true
+    },
+    {
+      "name": "loopback_and_container_ip",
+      "passed": true
+    },
+    {
+      "name": "metadata_address",
+      "passed": true
+    },
+    {
+      "name": "platform_files",
+      "passed": true
+    },
+    {
+      "name": "capabilities",
+      "passed": true
+    },
+    {
+      "name": "read_only_environment",
+      "passed": true
+    },
+    {
+      "name": "sibling_sockets",
+      "passed": true
+    },
+    {
+      "name": "appmux_directories",
+      "passed": true
+    },
+    {
+      "name": "sysv_ipc",
+      "passed": true
+    },
+    {
+      "name": "nested_user_namespace",
+      "passed": true
+    },
+    {
+      "name": "inherited_descriptors",
+      "passed": true
+    },
+    {
+      "name": "cpu_pin",
+      "passed": true
+    }
+  ]
+}

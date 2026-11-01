@@ -1,0 +1,5 @@
+{
+  "type": "group",
+  "name": "sales-team",
+  "permission": "CAN_USE"
+}

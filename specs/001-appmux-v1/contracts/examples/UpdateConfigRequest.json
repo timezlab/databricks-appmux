@@ -1,0 +1,22 @@
+{
+  "version": 12,
+  "env": [
+    {
+      "name": "LOG_LEVEL",
+      "value": "info",
+      "value_from": null
+    },
+    {
+      "name": "WAREHOUSE",
+      "value": null,
+      "value_from": "sql-warehouse"
+    }
+  ],
+  "wheel_sources": [
+    "/Workspace/Users/alice@example.com/wheels/sales"
+  ],
+  "health_path": "/",
+  "health_deadline_s": 60,
+  "own_sp_client_id_key": "sp-client-id",
+  "own_sp_client_secret_key": "sp-client-secret"
+}

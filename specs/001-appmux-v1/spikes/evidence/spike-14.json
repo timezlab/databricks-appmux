@@ -1,0 +1,628 @@
+{
+ "date": "2026-10-30",
+ "workspace": "Free Edition only",
+ "python": {
+  "target": "cp311, manylinux2014_x86_64",
+  "cutoff": "uv pip compile --exclude-newer 2026-10-16T00:00:00Z --no-build",
+  "environment_distributions": 132,
+  "stub_environment_pip_check": "All installed packages are compatible",
+  "fixtures": {
+   "fastapi": {
+    "literal_subtraction": {
+     "entries": 15,
+     "same": 1,
+     "other": 14,
+     "absent": 0,
+     "detail": {
+      "same": [
+       "h11==0.16.0"
+      ],
+      "other": [
+       "annotated-doc==0.0.5 (env 0.0.4)",
+       "annotated-types==0.8.0 (env 0.7.0)",
+       "anyio==4.15.1 (env 4.13.0)",
+       "click==8.5.0 (env 8.4.1)",
+       "fastapi==0.143.2 (env 0.115.0)",
+       "idna==3.20 (env 3.17)",
+       "opentelemetry-api==1.45.1 (env 1.42.1)",
+       "pydantic==2.14.1 (env 2.13.4)",
+       "pydantic-core==2.50.1 (env 2.46.4)",
+       "starlette==1.8.0 (env 0.38.6)",
+       "typing-extensions==4.16.0 (env 4.15.0)",
+       "typing-inspection==0.4.4 (env 0.4.2)",
+       "uvicorn==0.54.0 (env 0.30.6)",
+       "websockets==17.2 (env 12.0)"
+      ],
+      "absent": []
+     }
+    },
+    "environment_first_unpinned": "uv pip install --dry-run: Would make no changes",
+    "environment_first_pinned_top_level": {
+     "installed": 5,
+     "replaced_in_environment": [
+      "fastapi==0.143.2",
+      "opentelemetry-api==1.45.1",
+      "starlette==1.8.0",
+      "uvicorn==0.54.0",
+      "websockets==17.2"
+     ],
+     "new_to_environment": [],
+     "not_in_lock_at_that_version": [],
+     "check_returncode": 1,
+     "check_output": [
+      "Using Python 3.11.14 environment at: stubenv-fastapi",
+      "Checked 132 packages in 59ms",
+      "Found 3 incompatibilities",
+      "The package `opentelemetry-sdk` requires `opentelemetry-api==1.42.1`, but `1.45.1` is installed",
+      "The package `opentelemetry-semantic-conventions` requires `opentelemetry-api==1.42.1`, but `1.45.1` is installed",
+      "The package `gradio-client` requires `websockets>=10.0,<13.0`, but `17.2` is installed"
+     ]
+    },
+    "wheel_availability": {
+     "literal_missing": {
+      "wheels": 14,
+      "pure_python": 12,
+      "compiled": [
+       "pydantic_core==2.50.1",
+       "websockets==17.2"
+      ],
+      "megabytes": 3.6
+     },
+     "environment_first_plan": {
+      "wheels": 5,
+      "pure_python": 4,
+      "compiled": [
+       "websockets==17.2"
+      ],
+      "megabytes": 0.6
+     }
+    }
+   },
+   "streamlit": {
+    "literal_subtraction": {
+     "entries": 36,
+     "same": 10,
+     "other": 26,
+     "absent": 0,
+     "detail": {
+      "same": [
+       "attrs==26.1.0",
+       "h11==0.16.0",
+       "itsdangerous==2.2.0",
+       "jinja2==3.1.6",
+       "jsonschema==4.26.0",
+       "jsonschema-specifications==2025.9.1",
+       "python-dateutil==2.9.0.post0",
+       "referencing==0.37.0",
+       "requests==2.34.2",
+       "six==1.17.0"
+      ],
+      "other": [
+       "altair==6.3.0 (env 5.5.0)",
+       "anyio==4.15.1 (env 4.13.0)",
+       "certifi==2026.7.22 (env 2026.5.20)",
+       "charset-normalizer==3.5.2 (env 3.4.7)",
+       "click==8.5.0 (env 8.4.1)",
+       "idna==3.20 (env 3.17)",
+       "markupsafe==3.0.4 (env 2.1.5)",
+       "narwhals==2.27.1 (env 2.22.0)",
+       "numpy==2.2.6 (env 1.26.4)",
+       "packaging==26.3 (env 24.2)",
+       "pandas==2.3.2 (env 2.2.3)",
+       "pillow==12.2.0 (env 10.4.0)",
+       "protobuf==7.36.2 (env 5.29.6)",
+       "pyarrow==20.0.0 (env 16.1.0)",
+       "pydeck==0.9.3 (env 0.9.2)",
+       "python-multipart==0.0.32 (env 0.0.30)",
+       "pytz==2026.5 (env 2026.2)",
+       "rpds-py==2026.9.1 (env 2026.5.1)",
+       "starlette==1.8.0 (env 0.38.6)",
+       "streamlit==1.66.0 (env 1.38.0)",
+       "typing-extensions==4.16.0 (env 4.15.0)",
+       "tzdata==2026.5 (env 2026.2)",
+       "urllib3==2.8.0 (env 2.7.0)",
+       "uvicorn==0.54.0 (env 0.30.6)",
+       "watchdog==6.0.0 (env 4.0.2)",
+       "websockets==17.2 (env 12.0)"
+      ],
+      "absent": []
+     }
+    },
+    "environment_first_unpinned": "uv pip install --dry-run: Would make no changes",
+    "environment_first_pinned_top_level": {
+     "installed": 2,
+     "replaced_in_environment": [
+      "starlette==1.8.0",
+      "streamlit==1.66.0"
+     ],
+     "new_to_environment": [],
+     "not_in_lock_at_that_version": [],
+     "check_returncode": 1,
+     "check_output": [
+      "Using Python 3.11.14 environment at: stubenv-streamlit",
+      "Checked 132 packages in 56ms",
+      "Found 1 incompatibility",
+      "The package `fastapi` requires `starlette>=0.37.2,<0.39.0`, but `1.8.0` is installed"
+     ]
+    },
+    "wheel_availability": {
+     "literal_missing": {
+      "wheels": 26,
+      "pure_python": 16,
+      "compiled": [
+       "charset_normalizer==3.5.2",
+       "markupsafe==3.0.4",
+       "numpy==2.2.6",
+       "pandas==2.3.2",
+       "pillow==12.2.0",
+       "protobuf==7.36.2",
+       "pyarrow==20.0.0",
+       "rpds_py==2026.9.1",
+       "watchdog==6.0.0",
+       "websockets==17.2"
+      ],
+      "megabytes": 105.9
+     },
+     "environment_first_plan": {
+      "wheels": 2,
+      "pure_python": 2,
+      "compiled": [],
+      "megabytes": 10.4
+     }
+    }
+   },
+   "dash": {
+    "literal_subtraction": {
+     "entries": 28,
+     "same": 6,
+     "other": 20,
+     "absent": 2,
+     "detail": {
+      "same": [
+       "blinker==1.9.0",
+       "itsdangerous==2.2.0",
+       "jinja2==3.1.6",
+       "nest-asyncio==1.6.0",
+       "requests==2.34.2",
+       "retrying==1.4.2"
+      ],
+      "other": [
+       "annotated-types==0.8.0 (env 0.7.0)",
+       "certifi==2026.7.22 (env 2026.5.20)",
+       "charset-normalizer==3.5.2 (env 3.4.7)",
+       "click==8.5.0 (env 8.4.1)",
+       "dash==4.4.1 (env 2.18.1)",
+       "flask==3.1.3 (env 3.0.3)",
+       "idna==3.20 (env 3.17)",
+       "importlib-metadata==9.0.1 (env 8.9.0)",
+       "markupsafe==3.0.4 (env 2.1.5)",
+       "narwhals==2.27.1 (env 2.22.0)",
+       "packaging==26.3 (env 24.2)",
+       "plotly==7.1.0 (env 5.24.1)",
+       "pydantic==2.14.1 (env 2.13.4)",
+       "pydantic-core==2.50.1 (env 2.46.4)",
+       "setuptools==84.0.0 (env 82.0.1)",
+       "typing-extensions==4.16.0 (env 4.15.0)",
+       "typing-inspection==0.4.4 (env 0.4.2)",
+       "urllib3==2.8.0 (env 2.7.0)",
+       "werkzeug==3.1.9 (env 3.0.6)",
+       "zipp==4.1.1 (env 4.1.0)"
+      ],
+      "absent": [
+       "comm==0.2.3",
+       "janus==2.0.0"
+      ]
+     }
+    },
+    "environment_first_unpinned": "uv pip install --dry-run: Would make no changes",
+    "environment_first_pinned_top_level": {
+     "installed": 3,
+     "replaced_in_environment": [
+      "dash==4.4.1"
+     ],
+     "new_to_environment": [
+      "comm==0.2.3",
+      "janus==2.0.0"
+     ],
+     "not_in_lock_at_that_version": [],
+     "check_returncode": 0,
+     "check_output": [
+      "Using Python 3.11.14 environment at: stubenv-dash",
+      "Checked 134 packages in 61ms",
+      "All installed packages are compatible"
+     ]
+    },
+    "wheel_availability": {
+     "literal_missing": {
+      "wheels": 22,
+      "pure_python": 19,
+      "compiled": [
+       "charset_normalizer==3.5.2",
+       "markupsafe==3.0.4",
+       "pydantic_core==2.50.1"
+      ],
+      "megabytes": 23.9
+     },
+     "environment_first_plan": {
+      "wheels": 3,
+      "pure_python": 3,
+      "compiled": [],
+      "megabytes": 9.0
+     }
+    }
+   },
+   "gradio": {
+    "literal_subtraction": {
+     "entries": 53,
+     "same": 12,
+     "other": 34,
+     "absent": 7,
+     "detail": {
+      "same": [
+       "h11==0.16.0",
+       "httpcore==1.0.9",
+       "httpx==0.28.1",
+       "jinja2==3.1.6",
+       "markdown-it-py==4.2.0",
+       "mdurl==0.1.2",
+       "pydub==0.25.1",
+       "python-dateutil==2.9.0.post0",
+       "pyyaml==6.0.3",
+       "semantic-version==2.10.0",
+       "shellingham==1.5.4",
+       "six==1.17.0"
+      ],
+      "other": [
+       "annotated-doc==0.0.5 (env 0.0.4)",
+       "annotated-types==0.8.0 (env 0.7.0)",
+       "anyio==4.15.1 (env 4.13.0)",
+       "certifi==2026.7.22 (env 2026.5.20)",
+       "click==8.5.0 (env 8.4.1)",
+       "fastapi==0.143.2 (env 0.115.0)",
+       "filelock==4.2.0 (env 3.29.0)",
+       "fsspec==2026.9.0 (env 2026.4.0)",
+       "gradio==6.30.0 (env 4.44.0)",
+       "gradio-client==2.7.2 (env 1.3.0)",
+       "hf-xet==1.7.0 (env 1.5.0)",
+       "huggingface-hub==2.2.0 (env 0.35.3)",
+       "idna==3.20 (env 3.17)",
+       "markupsafe==3.0.4 (env 2.1.5)",
+       "numpy==2.2.6 (env 1.26.4)",
+       "opentelemetry-api==1.45.1 (env 1.42.1)",
+       "orjson==3.13.0 (env 3.11.9)",
+       "packaging==26.3 (env 24.2)",
+       "pandas==2.3.2 (env 2.2.3)",
+       "pillow==12.2.0 (env 10.4.0)",
+       "pydantic==2.14.1 (env 2.13.4)",
+       "pydantic-core==2.50.1 (env 2.46.4)",
+       "pygments==2.21.0 (env 2.20.0)",
+       "python-multipart==0.0.32 (env 0.0.30)",
+       "pytz==2026.5 (env 2026.2)",
+       "rich==15.0.0 (env 13.9.4)",
+       "starlette==1.8.0 (env 0.38.6)",
+       "tomlkit==0.14.0 (env 0.12.0)",
+       "tqdm==4.70.1 (env 4.67.3)",
+       "typer==0.27.3 (env 0.26.5)",
+       "typing-extensions==4.16.0 (env 4.15.0)",
+       "typing-inspection==0.4.4 (env 0.4.2)",
+       "tzdata==2026.5 (env 2026.2)",
+       "uvicorn==0.54.0 (env 0.30.6)"
+      ],
+      "absent": [
+       "brotli==1.2.0",
+       "groovy==0.1.2",
+       "hf-gradio==0.4.1",
+       "httpcore2==2.13.1",
+       "httpx2==2.13.1",
+       "safehttpx==0.1.7",
+       "truststore==0.10.5"
+      ]
+     }
+    },
+    "environment_first_unpinned": "uv pip install --dry-run: Would make no changes",
+    "environment_first_pinned_top_level": {
+     "installed": 16,
+     "replaced_in_environment": [
+      "click==8.5.0",
+      "fastapi==0.143.2",
+      "gradio-client==2.7.2",
+      "gradio==6.30.0",
+      "hf-xet==1.7.0",
+      "huggingface-hub==2.2.0",
+      "idna==3.20",
+      "opentelemetry-api==1.45.1",
+      "starlette==1.8.0"
+     ],
+     "new_to_environment": [
+      "brotli==1.2.0",
+      "groovy==0.1.2",
+      "hf-gradio==0.4.1",
+      "httpcore2==2.13.1",
+      "httpx2==2.13.1",
+      "safehttpx==0.1.7",
+      "truststore==0.10.5"
+     ],
+     "not_in_lock_at_that_version": [],
+     "check_returncode": 1,
+     "check_output": [
+      "Using Python 3.11.14 environment at: stubenv-gradio",
+      "Checked 139 packages in 68ms",
+      "Found 2 incompatibilities",
+      "The package `opentelemetry-sdk` requires `opentelemetry-api==1.42.1`, but `1.45.1` is installed",
+      "The package `opentelemetry-semantic-conventions` requires `opentelemetry-api==1.42.1`, but `1.45.1` is installed"
+     ]
+    },
+    "wheel_availability": {
+     "literal_missing": {
+      "wheels": 41,
+      "pure_python": 33,
+      "compiled": [
+       "brotli==1.2.0",
+       "hf_xet==1.7.0",
+       "markupsafe==3.0.4",
+       "numpy==2.2.6",
+       "orjson==3.13.0",
+       "pandas==2.3.2",
+       "pillow==12.2.0",
+       "pydantic_core==2.50.1"
+      ],
+      "megabytes": 82.3
+     },
+     "environment_first_plan": {
+      "wheels": 16,
+      "pure_python": 14,
+      "compiled": [
+       "brotli==1.2.0",
+       "hf_xet==1.7.0"
+      ],
+      "megabytes": 38.6
+     }
+    }
+   }
+  }
+ },
+ "osv_python": {
+  "pins_checked": 61,
+  "with_advisories": [
+   {
+    "pin": "brotli==1.2.0",
+    "ids": [
+     "GHSA-9v8h-qqgm-4m35",
+     "PYSEC-2026-4322"
+    ]
+   },
+   {
+    "pin": "certifi==2026.7.22",
+    "ids": [
+     "GHSA-6q48-6c7w-9gw2",
+     "PYSEC-2026-4320"
+    ]
+   },
+   {
+    "pin": "filelock==4.2.0",
+    "ids": [
+     "GHSA-2g95-wg33-c5x2",
+     "GHSA-567q-5qvw-pf92",
+     "GHSA-6627-m3xw-93mp",
+     "GHSA-69hj-f68j-2879",
+     "GHSA-8mx5-7m5m-r77g",
+     "GHSA-9c4x-gm8v-wgc4",
+     "GHSA-9j6q-wvj5-jgjg",
+     "GHSA-9vhv-jxww-xfm5",
+     "GHSA-crv4-6mhj-j5jh",
+     "GHSA-cwqr-hh33-gh44",
+     "GHSA-fj95-fr6c-h845",
+     "GHSA-fq56-3cx3-fjxp",
+     "GHSA-jqc4-5cvw-7w85",
+     "GHSA-m462-7rxw-wvpg",
+     "GHSA-rfpc-qcw5-3pc4",
+     "GHSA-v4x8-3wr5-3wq8",
+     "GHSA-wfhq-q4j2-c37m"
+    ]
+   },
+   {
+    "pin": "pillow==12.2.0",
+    "ids": [
+     "GHSA-22hg-r758-rrw9",
+     "GHSA-24rc-8hj2-v98c",
+     "GHSA-254f-3936-288h",
+     "GHSA-27h8-gf7j-v5hc",
+     "GHSA-332p-7hrc-92wf",
+     "GHSA-3j72-p6qg-6xp7",
+     "GHSA-4558-3h8r-v8xp",
+     "GHSA-45hq-cxwh-f6vc",
+     "GHSA-462x-pgg6-55fp",
+     "GHSA-4rm8-3hmm-39fg",
+     "GHSA-4rr5-89j8-mwwm",
+     "GHSA-4x4j-2g7c-83w6",
+     "GHSA-58r4-6rv3-gfh8",
+     "GHSA-5x8w-8jj5-q52h",
+     "GHSA-5x94-69rx-g8h2",
+     "GHSA-5xm2-6676-qcp9",
+     "GHSA-62p4-gmf7-7g93",
+     "GHSA-654x-cwwv-5j9c",
+     "GHSA-65qm-jvmh-6pqg",
+     "GHSA-6r8x-57c9-28j4",
+     "GHSA-74r2-7ff9-mjj2",
+     "GHSA-78g4-xqwv-q3g8",
+     "GHSA-7mwm-ghpf-9vrm",
+     "GHSA-8g5g-8vmr-9782",
+     "GHSA-8v84-f9pq-wr9x",
+     "GHSA-9hw9-ch79-4vh6",
+     "GHSA-9v9v-9qvf-h2hj",
+     "GHSA-c6hw-5grf-ff96",
+     "GHSA-cp9v-662q-vvx9",
+     "GHSA-f2g6-542v-9j58",
+     "GHSA-fc9g-5qg7-mf45",
+     "GHSA-fj7v-r99m-22gq",
+     "GHSA-g4qv-2jxx-769h",
+     "GHSA-g7cr-3p24-7wf7",
+     "GHSA-g842-9rc4-69pw",
+     "GHSA-gg2r-wvfm-q9rx",
+     "GHSA-j4m9-6w36-pw47",
+     "GHSA-jg86-v3jv-hrpm",
+     "GHSA-jjj6-mw9f-p565",
+     "GHSA-mrfp-p49p-3hf2",
+     "GHSA-p4wg-p73j-c528",
+     "GHSA-p8hx-v2p6-rp84",
+     "GHSA-pchr-8j38-3x4p",
+     "GHSA-pg7v-jwj7-p798",
+     "GHSA-phj9-mv4w-65pm",
+     "GHSA-q45j-58j2-45rg",
+     "GHSA-rfgq-q3w2-pmv2",
+     "GHSA-v9pv-5gc8-w2m6",
+     "GHSA-vjc4-5qp5-m44j",
+     "GHSA-vx6w-vv9f-6gvg",
+     "GHSA-w889-685w-c8fh",
+     "GHSA-xgh8-jp6q-p5x8",
+     "GHSA-xj96-63gp-2gmr",
+     "GHSA-xvh5-g6gv-559v",
+     "PYSEC-2026-2253",
+     "PYSEC-2026-2254",
+     "PYSEC-2026-2255",
+     "PYSEC-2026-2256",
+     "PYSEC-2026-2257",
+     "PYSEC-2026-3451",
+     "PYSEC-2026-3452",
+     "PYSEC-2026-3453",
+     "PYSEC-2026-3454",
+     "PYSEC-2026-3493",
+     "PYSEC-2026-3494",
+     "PYSEC-2026-3495",
+     "PYSEC-2026-3496",
+     "PYSEC-2026-4326",
+     "PYSEC-2026-4327",
+     "PYSEC-2026-4328",
+     "PYSEC-2026-4329",
+     "PYSEC-2026-4330",
+     "PYSEC-2026-4331",
+     "PYSEC-2026-4332",
+     "PYSEC-2026-4333",
+     "PYSEC-2026-4334",
+     "PYSEC-2026-4335",
+     "PYSEC-2026-4336",
+     "PYSEC-2026-4337",
+     "PYSEC-2026-4338",
+     "PYSEC-2026-4339",
+     "PYSEC-2026-4340",
+     "PYSEC-2026-4341",
+     "PYSEC-2026-4342",
+     "PYSEC-2026-4343"
+    ]
+   },
+   {
+    "pin": "pyarrow==20.0.0",
+    "ids": [
+     "GHSA-rgxp-2hwp-jwgg",
+     "PYSEC-2026-113"
+    ]
+   },
+   {
+    "pin": "setuptools==84.0.0",
+    "ids": [
+     "GHSA-xmj3-9gf7-h52w"
+    ]
+   }
+  ]
+ },
+ "node": {
+  "vetting": {
+   "entries": 66,
+   "osv_advisories": [
+    {
+     "pin": "body-parser@2.3.0",
+     "ids": [
+      "GHSA-27r3-jxmh-p828"
+     ]
+    }
+   ],
+   "newest": [
+    {
+     "pin": "qs@6.16.1",
+     "published": "2026-10-14T22:06:17.002Z"
+    },
+    {
+     "pin": "express@5.3.0",
+     "published": "2026-10-09T12:56:54.505Z"
+    },
+    {
+     "pin": "ws@8.22.0",
+     "published": "2026-09-26T15:00:57.748Z"
+    }
+   ]
+  },
+  "sandbox": {
+   "build": {
+    "launcher_rc": 0,
+    "stage1_failed_steps": {},
+    "result": {
+     "versions": {
+      "node": [
+       "v22.23.4"
+      ],
+      "npm": [
+       "10.9.9"
+      ]
+     },
+     "network_probe": "gaierror: [Errno -3] Temporary failure in name resolution",
+     "positive_read_only_cache": {
+      "rc": 0,
+      "seconds": 0.65,
+      "tail": [
+       "added 66 packages in 586ms"
+      ]
+     },
+     "empty_cache": {
+      "rc": 1,
+      "seconds": 0.31,
+      "tail": [
+       "npm error code ENOTCACHED",
+       "npm error request to https://registry.npmjs.org/ws/-/ws-8.22.0.tgz failed: cache mode is 'only-if-cached' but no cached response is available.",
+       "npm error A complete log of this run can be found in: /tmp/empty-cache/_logs/2026-10-30T12_30_02_478Z-debug-0.log"
+      ]
+     },
+     "tampered_integrity": {
+      "rc": 1,
+      "seconds": 0.56,
+      "tail": [
+       "npm error code ENOTCACHED",
+       "npm error request to https://registry.npmjs.org/express/-/express-5.3.0.tgz failed: cache mode is 'only-if-cached' but no cached response is available.",
+       "npm error Log files were not written due to an error writing to the directory: /srv/npm-cache/_logs",
+       "npm error You can rerun the command with `--loglevel=verbose` to see the logs in your terminal"
+      ]
+     },
+     "node_modules": {
+      "top_level_dirs": 66,
+      "files": 605,
+      "bytes": 2413021,
+      "express": "5.3.0",
+      "ws": "8.22.0"
+     }
+    },
+    "stderr": "",
+    "raw_tail": ""
+   },
+   "run": {
+    "launcher_rc": 0,
+    "stage1_failed_steps": {},
+    "result": {
+     "ping": "{\"ok\":true}",
+     "index_status": 200,
+     "websocket": {
+      "rc": 0,
+      "reply": "echo:hi"
+     },
+     "write_checks": {
+      "new file in project": "EROFS",
+      "new file in node_modules": "EROFS",
+      "new file in node_modules/express": "EROFS",
+      "append to server.js": "EROFS",
+      "append to express/index.js": "EROFS"
+     }
+    },
+    "stderr": "",
+    "raw_tail": ""
+   }
+  }
+ }
+}

@@ -1,0 +1,80 @@
+{
+ "date": "2026-10-30",
+ "workspace": "Free Edition only (<workspace-host>)",
+ "scripts": [
+  "scripts/spike-11/secrets_probe.py",
+  "scripts/spike-11/scope_probe.py",
+  "scripts/spike-11/acl_poll.py",
+  "scripts/spike-11/secret_sql_probe.py"
+ ],
+ "caller": "appmux-probe: the app's service principal (<sp-client-id>, not a workspace admin) and the owner's OBO token read inside the app",
+ "scopes_created": {
+  "appmux-spike-11-secrets": "key k1; SP given READ",
+  "appmux-spike-11-other": "key k2; SP given READ, later removed (revocation test)",
+  "appmux-spike-11-nogrant": "key k3; SP never granted, later given READ, then removed (grant and revocation tests)",
+  "appmux-spike-11-spcreated": "created, written, listed and deleted by the SP itself"
+ },
+ "values": "random, piped in from /dev/urandom, never printed; the probe compares the SHA-256 of what it reads with the expected one",
+ "service_principal_token": {
+  "rest_get_secret": "HTTP 200, 32 bytes, SHA-256 equals the expected",
+  "rest_list_secrets": "HTTP 200, key names",
+  "rest_list_scopes": "HTTP 200, both scopes",
+  "sdk_dbutils_secrets_get": "value returned, SHA-256 equals the expected",
+  "sdk_secrets_get_secret": "value returned, SHA-256 equals the expected",
+  "second_scope_with_READ": "get HTTP 200, SHA-256 equals the expected; list HTTP 200",
+  "scope_never_granted": "get and list HTTP 403 PERMISSION_DENIED (secret-scopes.secrets/get and /list)",
+  "scope_created_by_the_sp": "create, put, list and delete all HTTP 200 (the SP is not a workspace admin)"
+ },
+ "obo_token": {
+  "with_12_broad_app_scopes": "list and get HTTP 403 `Invalid scope, required scopes: secrets`",
+  "with_no_app_scopes": "list and get HTTP 403 `Invalid scope, required scopes: secrets`",
+  "valid_app_scope_for_secrets": "none: `secrets`, `workspace.secrets`, `workspace.secrets:read`, `secrets.secrets`, `secrets:read`, `secret` and `workspace.secret` are all refused by `apps update` with `The specified scope X is not a valid scope`",
+  "secret_function_with_sql_scope_only": "works: see secret_function_through_sql"
+ },
+ "acl_propagation": {
+  "grant": {
+   "scope": "appmux-spike-11-nogrant",
+   "granted_at": "14:18:10",
+   "observation": "80 polls, 3 s apart, started seconds later: get and list HTTP 200 on every call, including the first (0.2 s)"
+  },
+  "revocation_scope_other": {
+   "revoked_at": "about 14:11 (time not recorded to the second)",
+   "observation": "get 403 / list 200 on the first checks, then get 200 / list 403 at 14:15:35; a 4 s poll from 14:15:52 alternated between allowed and denied for 90 s (last allowed answer at t+89.8 s, 14:17:22, about 6 min after the revocation) and was 403/403 from t+93.9 s",
+   "poll_t_plus_s_get_list": "0.1 403/403; 4.2 200/403; 8.2 200/200; 12.3 403/200; 16.4 403/403; 20.5 403/403; 24.6 403/403; 28.6 200/200; 32.7 403/403; 36.8 403/200; 40.9 403/200; 44.9 403/200; 49.0 200/403; 53.1 403/200; 57.2 403/403; 61.3 200/200; 65.3 200/200; 69.4 403/200; 73.5 200/200; 77.5 403/200; 81.6 200/403; 85.7 403/200; 89.8 200/403; 93.9 and every later call 403/403 to 118.4"
+  },
+  "revocation_scope_nogrant": {
+   "revoked_at": "14:20:33 (a 3 s poll was already running from 14:20:29)",
+   "observation": "get and list stayed HTTP 200 for 163 s; get became 403 at t+166.7 s and list at t+169.8 s; 403/403 on every later call to t+219 s"
+  }
+ },
+ "created_and_removed": "see the README entry",
+ "secret_function_through_sql": {
+  "statement": "SELECT length(secret('<scope>', '<key>')) on the Serverless Starter Warehouse; returns the length of the value, never the value",
+  "app_user_api_scopes": [
+   "sql"
+  ],
+  "results": [
+   {
+    "scope_key": "appmux-spike-11-secrets/k1",
+    "obo": "SUCCEEDED (owner, MANAGE)",
+    "sp": "SUCCEEDED (READ)"
+   },
+   {
+    "scope_key": "appmux-spike-11-secrets/nokey",
+    "obo": "FAILED INVALID_SECRET_LOOKUP",
+    "sp": "FAILED INVALID_SECRET_LOOKUP"
+   },
+   {
+    "scope_key": "appmux-spike-11-other/k2",
+    "obo": "SUCCEEDED",
+    "sp": "FAILED INVALID_SECRET_LOOKUP (no READ)"
+   },
+   {
+    "scope_key": "appmux-spike-11-nogrant/k3",
+    "obo": "SUCCEEDED",
+    "sp": "FAILED INVALID_SECRET_LOOKUP (no READ)"
+   }
+  ],
+  "reading": "the HTTP status is 200 in every case; the outcome is the statement state. A missing key and a scope the caller cannot read give the same error, so the call does not reveal which keys exist. The caller needs CAN_USE on a warehouse."
+ }
+}

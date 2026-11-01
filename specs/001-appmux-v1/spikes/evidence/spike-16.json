@@ -1,0 +1,513 @@
+{
+ "date": "2026-10-30",
+ "workspace": "Free Edition only (<workspace-host>)",
+ "script": "scripts/spike-16/attach_probe.py (runs on appmux-probe; OBO = the owner's token read inside the app, SP = the app's service principal, a principal with no grant on the objects)",
+ "objects_created": [
+  "experiment appmux-spike-16-exp",
+  "job appmux-spike-16-job (never run)",
+  "volume workspace.default.appmux_spike_16_vol",
+  "table workspace.default.appmux_spike_16_t",
+  "function workspace.default.appmux_spike_16_f"
+ ],
+ "objects_used_not_created": [
+  "the Serverless Starter Warehouse",
+  "the system serving endpoint databricks-gte-large-en",
+  "the connection named `a`",
+  "the Bakehouse Sales Starter Space (Genie)",
+  "the app appmux-spike-19"
+ ],
+ "run_with_scopes": {
+  "app_user_api_scopes": [
+   "workspace.workspace:read",
+   "files.files:read",
+   "sql",
+   "serving.serving-endpoints:read",
+   "catalog.catalogs:read",
+   "catalog.schemas:read",
+   "catalog.tables:read",
+   "catalog.connections:read",
+   "vectorsearch.vector-search-indexes:read",
+   "dashboards.genie:read",
+   "apps",
+   "ai-gateway"
+  ],
+  "calls": [
+   {
+    "type": "sql_warehouse",
+    "call": "warehouse get",
+    "obo": {
+     "status": 200
+    },
+    "sp": {
+     "status": 200
+    }
+   },
+   {
+    "type": "sql_warehouse",
+    "call": "permissions",
+    "obo": {
+     "status": 200
+    },
+    "sp": {
+     "status": 403,
+     "note": "<sp-client-id> does not have Manage permissions on SQL EndpointId: <warehouse-id>. Please contac"
+    }
+   },
+   {
+    "type": "mlflow_experiment",
+    "call": "experiment get",
+    "obo": {
+     "status": 403,
+     "note": "Provided OAuth token does not have required scopes: mlflow"
+    },
+    "sp": {
+     "status": 403,
+     "note": "User '<sp-client-id>' does not have permission to 'View' experiment with id <experiment-id>"
+    }
+   },
+   {
+    "type": "mlflow_experiment",
+    "call": "permissions",
+    "obo": {
+     "status": 403,
+     "note": "Provided OAuth token does not have required scopes: access-management"
+    },
+    "sp": {
+     "status": 403,
+     "note": "<sp-client-id> does not have Manage permissions on /Users/<owner-email>/appmux-spike-16-ex"
+    }
+   },
+   {
+    "type": "serving_endpoint",
+    "call": "endpoint get",
+    "obo": {
+     "status": 200,
+     "level": "CAN_MANAGE"
+    },
+    "sp": {
+     "status": 200,
+     "level": "CAN_QUERY"
+    }
+   },
+   {
+    "type": "job",
+    "call": "job get",
+    "obo": {
+     "status": 403,
+     "note": "Provided OAuth token does not have required scopes: jobs"
+    },
+    "sp": {
+     "status": 403,
+     "note": "User <sp-client-id> does not have View or Admin or Manage Run or Owner permissions on job 77834069"
+    }
+   },
+   {
+    "type": "job",
+    "call": "permissions",
+    "obo": {
+     "status": 403,
+     "note": "Provided OAuth token does not have required scopes: access-management"
+    },
+    "sp": {
+     "status": 403,
+     "note": "<sp-client-id> does not have Manage permissions on Job with ID: <job-id> Ple"
+    }
+   },
+   {
+    "type": "uc_table",
+    "call": "table get",
+    "obo": {
+     "status": 200
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have SELECT on Table 'workspace.default.appmux_spike_16_t'."
+    }
+   },
+   {
+    "type": "uc_volume",
+    "call": "volume get",
+    "obo": {
+     "status": 403,
+     "note": "Provided OAuth token does not have required scopes: unity-catalog"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have READ VOLUME on Volume 'workspace.default.appmux_spike_16_vol'."
+    }
+   },
+   {
+    "type": "uc_function",
+    "call": "function get",
+    "obo": {
+     "status": 403,
+     "note": "Provided OAuth token does not have required scopes: unity-catalog"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have EXECUTE on Routine or Model 'workspace.default.appmux_spike_16_f'."
+    }
+   },
+   {
+    "type": "uc_connection",
+    "call": "connection get",
+    "obo": {
+     "status": 200
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have any privileges on Connection 'a'."
+    }
+   },
+   {
+    "type": "genie_space",
+    "call": "space get",
+    "obo": {
+     "status": 200
+    },
+    "sp": {
+     "status": 403,
+     "note": "You need \"Can View\" permission to perform this action"
+    }
+   },
+   {
+    "type": "vector_search_index",
+    "call": "index get",
+    "obo": {
+     "status": 404,
+     "note": "Unity Catalog entity workspace.default.appmux_spike_16_index does not exist."
+    },
+    "sp": {
+     "status": 404,
+     "note": "Unity Catalog entity workspace.default.appmux_spike_16_index does not exist."
+    }
+   },
+   {
+    "type": "databricks_app",
+    "call": "app get",
+    "obo": {
+     "status": 200
+    },
+    "sp": {
+     "status": 200
+    }
+   },
+   {
+    "type": "uc_volume",
+    "call": "files directory",
+    "obo": {
+     "status": 200
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have READ VOLUME on Volume 'workspace.default.appmux_spike_16_vol'."
+    }
+   },
+   {
+    "type": "uc_table",
+    "call": "sql DESCRIBE TABLE",
+    "obo": {
+     "status": 200,
+     "state": "SUCCEEDED"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have SELECT on Table 'workspace.default.appmux_spike_16_"
+    }
+   },
+   {
+    "type": "uc_function",
+    "call": "sql DESCRIBE FUNCTION",
+    "obo": {
+     "status": 200,
+     "state": "SUCCEEDED"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have EXECUTE on Routine or Model 'workspace.default.appm"
+    }
+   },
+   {
+    "type": "uc_volume",
+    "call": "sql LIST",
+    "obo": {
+     "status": 200,
+     "state": "SUCCEEDED"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have READ VOLUME on Volume 'workspace.default.appmux_spi"
+    }
+   },
+   {
+    "type": "uc_connection",
+    "call": "sql DESCRIBE CONNECTION",
+    "obo": {
+     "status": 200,
+     "state": "SUCCEEDED"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have any privileges on Connection 'a'."
+    }
+   }
+  ]
+ },
+ "run_without_scopes": {
+  "app_user_api_scopes": null,
+  "note": "the OBO token alone; every call is refused and the error names the scope the call requires",
+  "calls": [
+   {
+    "type": "sql_warehouse",
+    "call": "warehouse get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: sql"
+    },
+    "sp": {
+     "status": 200
+    }
+   },
+   {
+    "type": "sql_warehouse",
+    "call": "permissions",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: access-management"
+    },
+    "sp": {
+     "status": 403,
+     "note": "<sp-client-id> does not have Manage permissions on SQL EndpointId: <warehouse-id>. Please contac"
+    }
+   },
+   {
+    "type": "mlflow_experiment",
+    "call": "experiment get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: mlflow"
+    },
+    "sp": {
+     "status": 403,
+     "note": "User '<sp-client-id>' does not have permission to 'View' experiment with id <experiment-id>"
+    }
+   },
+   {
+    "type": "mlflow_experiment",
+    "call": "permissions",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: access-management"
+    },
+    "sp": {
+     "status": 403,
+     "note": "<sp-client-id> does not have Manage permissions on /Users/<owner-email>/appmux-spike-16-ex"
+    }
+   },
+   {
+    "type": "serving_endpoint",
+    "call": "endpoint get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: model-serving"
+    },
+    "sp": {
+     "status": 200,
+     "level": "CAN_QUERY"
+    }
+   },
+   {
+    "type": "job",
+    "call": "job get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: jobs"
+    },
+    "sp": {
+     "status": 403,
+     "note": "User <sp-client-id> does not have View or Admin or Manage Run or Owner permissions on job 77834069"
+    }
+   },
+   {
+    "type": "job",
+    "call": "permissions",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: access-management"
+    },
+    "sp": {
+     "status": 403,
+     "note": "<sp-client-id> does not have Manage permissions on Job with ID: <job-id> Ple"
+    }
+   },
+   {
+    "type": "uc_table",
+    "call": "table get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: unity-catalog"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have SELECT on Table 'workspace.default.appmux_spike_16_t'."
+    }
+   },
+   {
+    "type": "uc_volume",
+    "call": "volume get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: unity-catalog"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have READ VOLUME on Volume 'workspace.default.appmux_spike_16_vol'."
+    }
+   },
+   {
+    "type": "uc_function",
+    "call": "function get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: unity-catalog"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have EXECUTE on Routine or Model 'workspace.default.appmux_spike_16_f'."
+    }
+   },
+   {
+    "type": "uc_connection",
+    "call": "connection get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: unity-catalog"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have any privileges on Connection 'a'."
+    }
+   },
+   {
+    "type": "genie_space",
+    "call": "space get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: genie"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Unable to get space [01f0f03b23c8158db86396d71d628579]. Caused by User <sp-client-id> does not hav"
+    }
+   },
+   {
+    "type": "vector_search_index",
+    "call": "index get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: vector-search"
+    },
+    "sp": {
+     "status": 404,
+     "note": "Unity Catalog entity workspace.default.appmux_spike_16_index does not exist."
+    }
+   },
+   {
+    "type": "databricks_app",
+    "call": "app get",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: apps"
+    },
+    "sp": {
+     "status": 200
+    }
+   },
+   {
+    "type": "uc_volume",
+    "call": "files directory",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: files"
+    },
+    "sp": {
+     "status": 403,
+     "note": "Principal '<sp-name>' does not have READ VOLUME on Volume 'workspace.default.appmux_spike_16_vol'."
+    }
+   },
+   {
+    "type": "sql_warehouse",
+    "call": "sql SELECT 1",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: sql"
+    },
+    "sp": {
+     "status": 200,
+     "state": "SUCCEEDED"
+    }
+   },
+   {
+    "type": "uc_table",
+    "call": "sql DESCRIBE TABLE",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: sql"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have SELECT on Table 'workspace.default.appmux_spike_16_"
+    }
+   },
+   {
+    "type": "uc_function",
+    "call": "sql DESCRIBE FUNCTION",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: sql"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have EXECUTE on Routine or Model 'workspace.default.appm"
+    }
+   },
+   {
+    "type": "uc_volume",
+    "call": "sql LIST",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: sql"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have READ VOLUME on Volume 'workspace.default.appmux_spi"
+    }
+   },
+   {
+    "type": "uc_connection",
+    "call": "sql DESCRIBE CONNECTION",
+    "obo": {
+     "status": 403,
+     "note": "Invalid scope, required scopes: sql"
+    },
+    "sp": {
+     "status": 200,
+     "state": "FAILED",
+     "note": "PERMISSION_DENIED: Principal '<sp-name>' does not have any privileges on Connection 'a'."
+    }
+   }
+  ]
+ },
+ "warehouse_use_check": {
+  "setup": "the `users` group's CAN_USE on the warehouse removed at 14:30:37, restored at 14:33:00 (owner stays IS_OWNER, admins CAN_MANAGE)",
+  "warehouse_get_for_sp": "HTTP 200 throughout, with or without CAN_USE",
+  "select_1_for_sp": "SUCCEEDED for about 90 s, then PERMISSION_DENIED (14:32:06), SUCCEEDED again (14:32:23), PERMISSION_DENIED (14:32:41)"
+ }
+}

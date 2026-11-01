@@ -1,0 +1,10 @@
+{
+  "slug": "sales",
+  "display_name": "Sales dashboard",
+  "state": "running",
+  "permission": "CAN_MANAGE",
+  "open_modes": [
+    "without_token",
+    "as_user"
+  ]
+}

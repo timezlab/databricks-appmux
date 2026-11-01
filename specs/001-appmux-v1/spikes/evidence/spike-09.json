@@ -1,0 +1,342 @@
+{
+ "spike": 9,
+ "date": "2026-10-30",
+ "scope": "Free Edition workspace only; Lakebase project appmux-spike-1, scratch database appmux_spike9",
+ "postgres": "PostgreSQL 17.11 on aarch64 (Lakebase)",
+ "data_model_doc": "docs/product/v1-data-model.md, sections 4 and 6",
+ "ddl_as_written": {
+  "ddl_fences": 9,
+  "statements": 14,
+  "errors": [
+   {
+    "statement": "CREATE TABLE app_config",
+    "sqlstate": "42P01",
+    "message": "relation \"releases\" does not exist",
+    "cause": "the three composite foreign keys point at releases and app_resources, created later in the file"
+   }
+  ],
+  "tables_created": 8
+ },
+ "ddl_corrected": {
+  "ddl_fences": 10,
+  "statements": 15,
+  "errors": [],
+  "tables_created": 9,
+  "change": "the three composite keys moved out of CREATE TABLE app_config into one ALTER TABLE at the end of section 4.7"
+ },
+ "grants_as_written": {
+  "statements": 11,
+  "errors": [
+   {
+    "statement": "CREATE ROLE appmux_platform_writers NOLOGIN",
+    "sqlstate": "42710",
+    "message": "role already exists",
+    "cause": "the role was created in spike 1 and is shared by the cluster; expected, not a defect of the grants"
+   }
+  ]
+ },
+ "default_grantees_by_table_after_grants": {
+  "app_config": {
+   "appmux_platform_writers": "ar",
+   "appmux_sp": "rw",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "app_grants": {
+   "appmux_platform_writers": "r",
+   "appmux_sp": "arwd",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "app_resources": {
+   "appmux_platform_writers": "r",
+   "appmux_sp": "arwd",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "apps": {
+   "appmux_platform_writers": "arwd",
+   "appmux_sp": "r",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "audit_log": {
+   "appmux_platform_writers": "ar",
+   "appmux_sp": "ar",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "metrics": {
+   "appmux_platform_writers": "r",
+   "appmux_sp": "ard",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "permission_requests": {
+   "appmux_platform_writers": "rw",
+   "appmux_sp": "arw",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "platform_settings": {
+   "appmux_platform_writers": "arwd",
+   "appmux_sp": "r",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  },
+  "releases": {
+   "appmux_platform_writers": "r",
+   "appmux_sp": "arw",
+   "databricks_gateway": "r",
+   "databricks_reader_<n>": "r",
+   "databricks_superuser": "a*r*w*d*D*x*t*m*"
+  }
+ },
+ "default_grantees_note": "databricks_gateway, databricks_reader_<n> and databricks_superuser are added by Lakebase to every new table; the first two read, the third holds every privilege with grant option",
+ "tests": {
+  "summary": {
+   "pass": 28,
+   "fail": 0
+  },
+  "results": [
+   {
+    "step": "identity memberships (role, admin, inherit, set)",
+    "outcome": "INFO",
+    "detail": "[('appmux_platform_writers', False, True, True), ('appmux_platform_writers', True, False, False), ('appmux_sp', True, False, False), ('appmux_spike1_owner', True, False, False), ('appmux_spike9_owner', True, False, False)]"
+   },
+   {
+    "step": "identity inherits appmux_spike9_owner",
+    "outcome": "INFO",
+    "detail": "False"
+   },
+   {
+    "step": "identity inherits appmux_sp",
+    "outcome": "INFO",
+    "detail": "False"
+   },
+   {
+    "step": "identity inherits databricks_superuser",
+    "outcome": "INFO",
+    "detail": "False"
+   },
+   {
+    "step": "identity inherits appmux_platform_writers",
+    "outcome": "INFO",
+    "detail": "True"
+   },
+   {
+    "step": "identity attributes (super, createrole, createdb, bypassrls)",
+    "outcome": "INFO",
+    "detail": "(False, True, True, True)"
+   },
+   {
+    "step": "appmux_platform_writers: INSERT/UPDATE/DELETE grants equal section 6",
+    "outcome": "PASS",
+    "detail": ""
+   },
+   {
+    "step": "appmux_sp: INSERT/UPDATE/DELETE grants equal section 6",
+    "outcome": "PASS",
+    "detail": ""
+   },
+   {
+    "step": "identity (writer only) holds no UPDATE on app_config and no DELETE on releases",
+    "outcome": "PASS",
+    "detail": "(False, False)"
+   },
+   {
+    "step": "SET LOCAL ROLE to the group role works",
+    "outcome": "PASS",
+    "detail": "expected ok, got ok"
+   },
+   {
+    "step": "current_user is back to the session user after that transaction",
+    "outcome": "PASS",
+    "detail": ""
+   },
+   {
+    "step": "SET LOCAL ROLE to appmux_sp is refused (not a member)",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied to set role \"appmux_sp\")"
+   },
+   {
+    "step": "SET LOCAL ROLE to the table owner is refused (not a member)",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied to set role \"appmux_spike9_owner\")"
+   },
+   {
+    "step": "identity no longer inherits appmux_sp",
+    "outcome": "PASS",
+    "detail": ""
+   },
+   {
+    "step": "seeded apps with one row in every child table",
+    "outcome": "INFO",
+    "detail": "{'sales': {'app_config': 1, 'app_grants': 1, 'releases': 1, 'app_resources': 2, 'permission_requests': 1}, 'hr': {'app_config': 1, 'app_grants': 1, 'releases': 1, 'app_resources': 2, 'permission_requests': 1}}"
+   },
+   {
+    "step": "writer UPDATE app_config is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table app_config)"
+   },
+   {
+    "step": "writer DELETE FROM app_config is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table app_config)"
+   },
+   {
+    "step": "writer INSERT INTO releases is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table releases)"
+   },
+   {
+    "step": "writer UPDATE app_grants is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table app_grants)"
+   },
+   {
+    "step": "writer DELETE FROM permission_requests is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table permission_requests)"
+   },
+   {
+    "step": "writer INSERT INTO metrics is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table metrics)"
+   },
+   {
+    "step": "writer DELETE FROM audit_log is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table audit_log)"
+   },
+   {
+    "step": "writer UPDATE audit_log is refused",
+    "outcome": "PASS",
+    "detail": "expected 42501, got 42501 (InsufficientPrivilege: permission denied for table audit_log)"
+   },
+   {
+    "step": "writer INSERT INTO app_config is allowed (the first row of a registered app)",
+    "outcome": "PASS",
+    "detail": "expected ok, got ok"
+   },
+   {
+    "step": "writer UPDATE permission_requests (answer) is allowed",
+    "outcome": "PASS",
+    "detail": "expected ok, got ok"
+   },
+   {
+    "step": "rename sales -> sales2 in one transaction (ON UPDATE CASCADE, deferred composite keys)",
+    "outcome": "PASS",
+    "detail": "expected ok, got ok"
+   },
+   {
+    "step": "every child row followed the rename",
+    "outcome": "PASS",
+    "detail": "{'before': {'app_config': 1, 'app_grants': 1, 'releases': 1, 'app_resources': 2, 'permission_requests': 1}, 'old slug': {'app_config': 0, 'app_grants': 0, 'releases': 0, 'app_resources': 0, 'permission_requests': 0}, 'new slug': {'app_config': 1, 'app_grants': 1, 'releases': 1, 'app_resources': 2, 'permission_requests': 1}}"
+   },
+   {
+    "step": "app_config composite keys after the rename",
+    "outcome": "INFO",
+    "detail": "[('sales2', 1, 'cid', 'csec')]"
+   },
+   {
+    "step": "delete hr in one transaction (ON DELETE CASCADE into tables the writer cannot delete from)",
+    "outcome": "PASS",
+    "detail": "expected ok, got ok"
+   },
+   {
+    "step": "every child row of the deleted app is gone",
+    "outcome": "PASS",
+    "detail": "{'before': {'app_config': 1, 'app_grants': 1, 'releases': 1, 'app_resources': 2, 'permission_requests': 1}, 'after': {'app_config': 0, 'app_grants': 0, 'releases': 0, 'app_resources': 0, 'permission_requests': 0}}"
+   },
+   {
+    "step": "audit_log and metrics keep the deleted app's rows (no foreign key)",
+    "outcome": "INFO",
+    "detail": "{'audit_log': 1, 'metrics': 1}"
+   },
+   {
+    "step": "delete tmp and rename ops -> ops2 in the same transaction",
+    "outcome": "PASS",
+    "detail": "expected ok, got ok"
+   },
+   {
+    "step": "tmp gone, ops2 complete, ops empty",
+    "outcome": "PASS",
+    "detail": "{'tmp': {'app_config': 0, 'app_grants': 0, 'releases': 0, 'app_resources': 0, 'permission_requests': 0}, 'ops': {'app_config': 0, 'app_grants': 0, 'releases': 0, 'app_resources': 0, 'permission_requests': 0}, 'ops2': {'app_config': 1, 'app_grants': 1, 'releases': 1, 'app_resources': 2, 'permission_requests': 1}}"
+   },
+   {
+    "step": "control: rename onto a taken slug fails (23505)",
+    "outcome": "PASS",
+    "detail": "expected 23505, got 23505 (UniqueViolation: duplicate key value violates unique constraint \"apps_pkey\")"
+   },
+   {
+    "step": "ops2 untouched after the failed rename",
+    "outcome": "PASS",
+    "detail": "{'app_config': 1, 'app_grants': 1, 'releases': 1, 'app_resources': 2, 'permission_requests': 1}"
+   },
+   {
+    "step": "control: a dangling target_release_no (SP role) passes the statement and fails at COMMIT (23503)",
+    "outcome": "PASS",
+    "detail": "expected 23503, got 23503 at COMMIT (ForeignKeyViolation: insert or update on table \"app_config\" violates foreign key constraint \"app_config_app_slug_target_release_no_fkey\")"
+   },
+   {
+    "step": "control: a dangling own_sp key (SP role) passes the statement and fails at COMMIT (23503)",
+    "outcome": "PASS",
+    "detail": "expected 23503, got 23503 at COMMIT (ForeignKeyViolation: insert or update on table \"app_config\" violates foreign key constraint \"app_config_app_slug_own_sp_client_id_key_fkey\")"
+   },
+   {
+    "step": "composite keys of app_config set to NOT DEFERRABLE",
+    "outcome": "INFO",
+    "detail": "3"
+   },
+   {
+    "step": "variant: rename with the composite keys NOT DEFERRABLE",
+    "outcome": "INFO",
+    "detail": "ok "
+   },
+   {
+    "step": "composite keys of app_config set to DEFERRABLE INITIALLY DEFERRED",
+    "outcome": "INFO",
+    "detail": "3"
+   }
+  ]
+ },
+ "variant_not_deferrable": "with the three composite keys NOT DEFERRABLE the rename of an app that has a target release and own-SP keys still succeeded in this fixture",
+ "licence": {
+  "program": "slirp4netns v1.3.6 (the version the probe binary reports; v1.3.3 has the same COPYING and the same SPDX headers)",
+  "source_archive": "github.com/rootless-containers/slirp4netns, tag v1.3.6, tar.gz sha256 1e58c3a22d1f8361c9dfd7e518f621bc5510df519d00dbdd40954b77c0e1102f",
+  "COPYING": "GNU General Public License version 2 (sha256 58db3cfabf8ec806bc060e54ab5466a31de4a3ae80fe4a8aa02fb6b1c053c93f)",
+  "README_license_section": "GPL-2.0-or-later",
+  "spdx_in_source_headers": {
+   "GPL-2.0-or-later": [
+    "api.c",
+    "api.h",
+    "main.c",
+    "sandbox.c",
+    "sandbox.h",
+    "seccompfilter.c",
+    "seccompfilter.h",
+    "seccompfilter_rules.h",
+    "slirp4netns.c",
+    "slirp4netns.h"
+   ],
+   "LGPL-2.1+": [
+    "seccomparch.h"
+   ],
+   "MIT": [
+    "vendor/parson/parson.c",
+    "vendor/parson/parson.h"
+   ]
+  },
+  "release_binary": "static (sha256 411167abceff1fc8a7c562f53ed9f26d3ec8a17df4e2fe6eaa3bd53f1c1e1d48); Dockerfile.artifact builds libslirp v4.9.5 with glib, libcap and libseccomp (their licences were not read)",
+  "spdx_identifier_recorded": "GPL-2.0-or-later"
+ }
+}

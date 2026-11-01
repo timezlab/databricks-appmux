@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "slug": "sales",
+      "display_name": "Sales dashboard",
+      "state": "running",
+      "permission": "CAN_MANAGE",
+      "open_modes": [
+        "without_token",
+        "as_user"
+      ]
+    },
+    {
+      "slug": "docs",
+      "display_name": "Team docs",
+      "state": "stopped",
+      "permission": "CAN_MANAGE",
+      "open_modes": []
+    },
+    {
+      "slug": "reports",
+      "display_name": "Weekly reports",
+      "state": "running",
+      "permission": "CAN_MANAGE",
+      "open_modes": []
+    }
+  ]
+}

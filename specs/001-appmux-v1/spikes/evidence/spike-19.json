@@ -1,0 +1,165 @@
+{
+ "date": "2026-10-30",
+ "scope": "local half and Free Edition half (Free Edition only)",
+ "toolchain": {
+  "next": "16.4.3 (Turbopack)",
+  "react": "19.3.1",
+  "react-dom": "19.3.1",
+  "browser": "headless Chromium (Playwright, chrome-headless-shell)",
+  "lockfile_packages": 54,
+  "osv_malware_or_advisories": "none for the 54 packages in the lockfile",
+  "install": "npm install --ignore-scripts --save-exact"
+ },
+ "build": {
+  "output": "export",
+  "basePath": "/_appmux",
+  "trailingSlash": true,
+  "app_router": {
+   "files": 23,
+   "kb": 696,
+   "inline_scripts_per_page": "3, all executable (210 B + 43 B + 4-5 KB carrying the page's data)"
+  },
+  "pages_router": {
+   "files": 15,
+   "kb": 444,
+   "inline_scripts_per_page": "2: one executable (about 327 B) and one JSON data block that is not executed"
+  }
+ },
+ "server": "Python standard library, serves the export under /_appmux/ and a JSON status endpoint; the page polls it every 500 ms",
+ "policies": {
+  "open": "no Content-Security-Policy header (control)",
+  "strict": "default-src 'none'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self'",
+  "hashes": "the strict policy with script-src 'self' plus the 'sha256-\u2026' of every executable inline script of the page, computed from the file as it is served"
+ },
+ "pass_condition": "page renders and polls (4 polls within 10 s) with zero CSP violations",
+ "results": [
+  {
+   "router": "app-router",
+   "policy": "open",
+   "rendered": true,
+   "polls_seen": 4,
+   "status_text": "ok #4",
+   "csp_violations": 0,
+   "violation_examples": [],
+   "failed_requests": []
+  },
+  {
+   "router": "app-router",
+   "policy": "strict",
+   "rendered": true,
+   "polls_seen": 0,
+   "status_text": "loading",
+   "csp_violations": 3,
+   "violation_examples": [
+    {
+     "directive": "script-src-elem",
+     "blocked": "inline",
+     "sample": ""
+    },
+    {
+     "directive": "script-src-elem",
+     "blocked": "inline",
+     "sample": ""
+    },
+    {
+     "directive": "script-src-elem",
+     "blocked": "inline",
+     "sample": ""
+    }
+   ],
+   "failed_requests": []
+  },
+  {
+   "router": "app-router",
+   "policy": "hashes",
+   "rendered": true,
+   "polls_seen": 4,
+   "status_text": "ok #4",
+   "csp_violations": 0,
+   "violation_examples": [],
+   "failed_requests": []
+  },
+  {
+   "router": "pages-router",
+   "policy": "open",
+   "rendered": true,
+   "polls_seen": 4,
+   "status_text": "ok #4",
+   "csp_violations": 0,
+   "violation_examples": [],
+   "failed_requests": []
+  },
+  {
+   "router": "pages-router",
+   "policy": "strict",
+   "rendered": true,
+   "polls_seen": 0,
+   "status_text": "loading",
+   "csp_violations": 1,
+   "violation_examples": [
+    {
+     "directive": "script-src-elem",
+     "blocked": "inline",
+     "sample": ""
+    }
+   ],
+   "failed_requests": []
+  },
+  {
+   "router": "pages-router",
+   "policy": "hashes",
+   "rendered": true,
+   "polls_seen": 4,
+   "status_text": "ok #4",
+   "csp_violations": 0,
+   "violation_examples": [],
+   "failed_requests": []
+  }
+ ],
+ "free_edition": {
+  "app": "appmux-spike-19 (throwaway Python app: app.py serves the export under /_appmux/ and sets the hash-based CSP per HTML file; no package.json in the first deployment)",
+  "caller": "the owner's CLI bearer token, sent as Authorization on every request to the app (browser-session cookies not tested)",
+  "prebuilt_export": {
+   "what": "the App Router export built locally, shipped in export/",
+   "proxy_left_response_header_intact": true,
+   "chromium_through_the_proxy": {
+    "http_status": 200,
+    "policy_seen_by_the_browser": "default-src 'none'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self' 'sha256-\u2026' 'sha256-\u2026' 'sha256-\u2026'",
+    "hash_count": 3,
+    "rendered": true,
+    "status_text": "ok #4",
+    "polls_seen": 4,
+    "csp_violations": 0,
+    "violation_examples": [],
+    "failed_requests": []
+   },
+   "build_log": "No dependencies file found. Skipping installation. Deployment ended in 5 s."
+  },
+  "platform_build": {
+   "what": "package.json (next 16.4.3, react 19.3.1, react-dom 19.3.1, scripts.build = next build) + package-lock.json + pages/ + next.config.mjs shipped in a Python app, no export/",
+   "log_lines": [
+    "[INFO] Installing dependencies...",
+    "added 27 packages, and audited 28 packages in 7s  /  found 0 vulnerabilities  (npm 10.9.9)",
+    "[INFO] Dependencies installed successfully.",
+    "[INFO] Running build script next build",
+    "Next.js 16.4.3 (Turbopack) ... Compiled successfully in 2.6s ... Exporting using 3 workers (3/3) in 279ms",
+    "[INFO] Build completed successfully.",
+    "[INFO] Starting app with command: [python app.py]"
+   ],
+   "seconds": "install 13:58:38-13:58:45 (7 s), build 13:58:45-13:58:50 (5 s)",
+   "result": "out/ produced next to the source; node_modules/ left in the app directory (both visible to the running app)",
+   "chromium_through_the_proxy": {
+    "http_status": 200,
+    "policy_seen_by_the_browser": "default-src 'none'; style-src 'self'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self' 'sha256-\u2026'",
+    "hash_count": 1,
+    "rendered": true,
+    "status_text": "ok #4",
+    "polls_seen": 4,
+    "csp_violations": 0,
+    "violation_examples": [],
+    "failed_requests": []
+   }
+  },
+  "request_headers_the_app_saw": "the proxy adds X-Forwarded-Access-Token, X-Forwarded-Email, X-Forwarded-User, X-Forwarded-For, X-Real-Ip and X-Databricks-* headers (names only recorded)"
+ }
+}

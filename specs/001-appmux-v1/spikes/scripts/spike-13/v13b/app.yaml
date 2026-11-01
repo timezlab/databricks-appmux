@@ -1,0 +1,10 @@
+command: ["python", "start.py"]
+env:
+  - name: WHEEL_FOLDER
+    value: "/Workspace/Users/<owner-email>/appmux-spike-13-wheels"
+  - name: MARKER_REQUIREMENT
+    value: "appmux-spike13-marker-b5m3z==0.0.1"
+  - name: MARKER_DIST
+    value: "appmux-spike13-marker-b5m3z"
+  - name: MARKER_MODULE
+    value: "appmux_spike13_marker_b5m3z"

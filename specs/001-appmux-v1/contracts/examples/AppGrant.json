@@ -1,0 +1,7 @@
+{
+  "type": "user",
+  "name": "carol@example.com",
+  "permission": "CAN_MANAGE",
+  "granted_by": "alice@example.com",
+  "granted_at": "2026-10-30T08:53:00Z"
+}

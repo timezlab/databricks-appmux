@@ -1,0 +1,6 @@
+{
+  "key": "forecast-model",
+  "type": "serving_endpoint",
+  "target": null,
+  "permission": "CAN_QUERY"
+}

@@ -1,0 +1,309 @@
+{
+ "date": "2026-10-30",
+ "python": "3.12.3 (local; the container has 3.11)",
+ "versions": {
+  "fastapi": "0.143.2",
+  "uvicorn": "0.54.0",
+  "streamlit": "1.66.0",
+  "dash": "4.4.1",
+  "gradio": "6.30.0",
+  "express": "5.3.0",
+  "ws": "8.22.0",
+  "playwright": "1.64.0"
+ },
+ "scenarios": [
+  {
+   "scenario": "fastapi-root-path",
+   "framework": "FastAPI",
+   "setting": {
+    "UVICORN_ROOT_PATH": "/sales"
+   },
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": true,
+   "detail": "api:true ws:echo:hi",
+   "requests_forwarded": 4,
+   "websocket_upgrades": 1,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [],
+   "console_errors": []
+  },
+  {
+   "scenario": "fastapi-control-no-setting",
+   "framework": "FastAPI",
+   "setting": "none",
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": false,
+   "detail": "TimeoutError: Page.wait_for_function: Timeout 15000ms exceeded.",
+   "requests_forwarded": 1,
+   "websocket_upgrades": 0,
+   "stray_requests": [
+    "GET /static/app.js"
+   ],
+   "stray_count": 1,
+   "http_errors_seen": [
+    "404 /static/app.js"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "scenario": "fastapi-hardcoded-links",
+   "framework": "FastAPI",
+   "setting": {
+    "UVICORN_ROOT_PATH": "/sales"
+   },
+   "prefix_stripped": true,
+   "page": "/sales/hard",
+   "works": false,
+   "detail": "TimeoutError: Page.wait_for_function: Timeout 15000ms exceeded.",
+   "requests_forwarded": 1,
+   "websocket_upgrades": 0,
+   "stray_requests": [
+    "GET /static/app.js"
+   ],
+   "stray_count": 1,
+   "http_errors_seen": [
+    "404 /static/app.js"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "scenario": "streamlit-baseurl-strip",
+   "framework": "Streamlit",
+   "setting": {
+    "STREAMLIT_SERVER_BASE_URL_PATH": "sales"
+   },
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": false,
+   "detail": "TimeoutError: Locator.wait_for: Timeout 30000ms exceeded.\nCall log:\n  - waiting for get_by_text(\"hello streamlit\").first to be visible\n",
+   "requests_forwarded": 1,
+   "websocket_upgrades": 0,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [
+    "404 /sales/"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "scenario": "streamlit-baseurl-keep",
+   "framework": "Streamlit",
+   "setting": {
+    "STREAMLIT_SERVER_BASE_URL_PATH": "sales"
+   },
+   "prefix_stripped": false,
+   "page": "/sales/",
+   "works": true,
+   "detail": "title rendered and server echo received over the websocket",
+   "requests_forwarded": 82,
+   "websocket_upgrades": 1,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [],
+   "console_errors": []
+  },
+  {
+   "scenario": "streamlit-control-no-setting",
+   "framework": "Streamlit",
+   "setting": "none",
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": true,
+   "detail": "title rendered and server echo received over the websocket",
+   "requests_forwarded": 82,
+   "websocket_upgrades": 1,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [],
+   "console_errors": []
+  },
+  {
+   "scenario": "dash-prefix-env",
+   "framework": "Dash",
+   "setting": {
+    "DASH_REQUESTS_PATHNAME_PREFIX": "/sales/",
+    "DASH_ROUTES_PATHNAME_PREFIX": "/"
+   },
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": true,
+   "detail": "layout rendered and callback round trip",
+   "requests_forwarded": 14,
+   "websocket_upgrades": 0,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [],
+   "console_errors": []
+  },
+  {
+   "scenario": "dash-control-no-setting",
+   "framework": "Dash",
+   "setting": "none",
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": false,
+   "detail": "TimeoutError: Page.wait_for_selector: Timeout 20000ms exceeded.\nCall log:\n  - waiting for locator(\"#o:has-text('echo:a')\") to be visible\n",
+   "requests_forwarded": 1,
+   "websocket_upgrades": 0,
+   "stray_requests": [
+    "GET /_dash-component-suites/dash/dash-renderer/build/dash_renderer.v4_4_1m1793359892.min.js",
+    "GET /_dash-component-suites/dash/dash_table/bundle.v7_4_1m1793359892.js",
+    "GET /_dash-component-suites/dash/dcc/dash_core_components-shared.v4_4_1m1793359893.js",
+    "GET /_dash-component-suites/dash/dcc/dash_core_components.v4_4_1m1793359893.js",
+    "GET /_dash-component-suites/dash/deps/polyfill@7.v4_4_1m1793359893.12.1.min.js",
+    "GET /_dash-component-suites/dash/deps/prop-types@15.v4_4_1m1793359893.8.1.min.js",
+    "GET /_dash-component-suites/dash/deps/react-dom@18.v4_4_1m1793359893.3.1.min.js",
+    "GET /_dash-component-suites/dash/deps/react@18.v4_4_1m1793359893.3.1.min.js"
+   ],
+   "stray_count": 9,
+   "http_errors_seen": [
+    "404 /_dash-component-suites/dash/deps/polyfill@7.v4_4_1m1793359893.12.1.min.js",
+    "404 /_dash-component-suites/dash/deps/react@18.v4_4_1m1793359893.3.1.min.js",
+    "404 /_dash-component-suites/dash/deps/react-dom@18.v4_4_1m1793359893.3.1.min.js",
+    "404 /_dash-component-suites/dash/deps/prop-types@15.v4_4_1m1793359893.8.1.min.js",
+    "404 /_dash-component-suites/dash/dash-renderer/build/dash_renderer.v4_4_1m1793359892.min.js",
+    "404 /_dash-component-suites/dash/dcc/dash_core_components.v4_4_1m1793359893.js"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "scenario": "gradio-root-path-env",
+   "framework": "Gradio",
+   "setting": {
+    "GRADIO_ROOT_PATH": "/sales"
+   },
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": true,
+   "detail": "event round trip through the queue",
+   "requests_forwarded": 47,
+   "websocket_upgrades": 0,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [],
+   "console_errors": []
+  },
+  {
+   "scenario": "gradio-control-no-setting",
+   "framework": "Gradio",
+   "setting": "none",
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": false,
+   "detail": "TimeoutError: Page.wait_for_function: Timeout 20000ms exceeded.",
+   "requests_forwarded": 40,
+   "websocket_upgrades": 0,
+   "stray_requests": [
+    "GET /static/js/iframeResizer.contentWindow.min.js",
+    "GET /theme.css?v=8ad6f9b14414574fe6c6d9b4362dcdd63dfdc66d8c34cbef0982888dfc44ff04",
+    "POST /gradio_api/queue/join?"
+   ],
+   "stray_count": 3,
+   "http_errors_seen": [
+    "404 /static/js/iframeResizer.contentWindow.min.js",
+    "404 /theme.css?v=8ad6f9b14414574fe6c6d9b4362dcdd63dfdc66d8c34cbef0982888dfc44ff04",
+    "404 /gradio_api/queue/join?"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Unable to preload CSS for http://127.0.0.1:46361/theme.css?v=8ad6f9b14414574fe6c6d9b4362dcdd63dfdc66d8c34cbef0982888dfc44ff04",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "scenario": "express-relative-links",
+   "framework": "Express",
+   "setting": "none",
+   "prefix_stripped": true,
+   "page": "/sales/",
+   "works": true,
+   "detail": "api:true ws:echo:hi",
+   "requests_forwarded": 4,
+   "websocket_upgrades": 1,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [],
+   "console_errors": []
+  },
+  {
+   "scenario": "express-hardcoded-links",
+   "framework": "Express",
+   "setting": "none",
+   "prefix_stripped": true,
+   "page": "/sales/hard",
+   "works": false,
+   "detail": "TimeoutError: Page.wait_for_function: Timeout 15000ms exceeded.",
+   "requests_forwarded": 1,
+   "websocket_upgrades": 0,
+   "stray_requests": [
+    "GET /static/app.js"
+   ],
+   "stray_count": 1,
+   "http_errors_seen": [
+    "404 /static/app.js"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "scenario": "streamlit-deeplink-no-setting",
+   "framework": "Streamlit",
+   "setting": "none",
+   "prefix_stripped": true,
+   "page": "/sales/p2",
+   "works": true,
+   "detail": "deep link to page two rendered",
+   "requests_forwarded": 67,
+   "websocket_upgrades": 1,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [
+    "404 /sales/p2/_stcore/host-config",
+    "404 /sales/p2/_stcore/health"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "scenario": "streamlit-deeplink-baseurl-keep",
+   "framework": "Streamlit",
+   "setting": {
+    "STREAMLIT_SERVER_BASE_URL_PATH": "sales"
+   },
+   "prefix_stripped": false,
+   "page": "/sales/p2",
+   "works": true,
+   "detail": "deep link to page two rendered",
+   "requests_forwarded": 67,
+   "websocket_upgrades": 1,
+   "stray_requests": [],
+   "stray_count": 0,
+   "http_errors_seen": [
+    "404 /sales/p2/_stcore/host-config",
+    "404 /sales/p2/_stcore/health"
+   ],
+   "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  }
+ ]
+}

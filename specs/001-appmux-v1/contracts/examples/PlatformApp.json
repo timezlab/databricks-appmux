@@ -1,0 +1,24 @@
+{
+  "slug": "sales",
+  "display_name": "Sales dashboard",
+  "source_path": "/Workspace/Shared/apps/sales",
+  "memory_budget_mb": 512,
+  "owner": "alice@example.com",
+  "obo_delegated": true,
+  "shared_sp_delegated": false,
+  "egress": [
+    {
+      "action": "allow",
+      "cidr": "10.20.0.0/16",
+      "port": "443",
+      "comment": "warehouse subnet"
+    },
+    {
+      "action": "deny",
+      "cidr": "0.0.0.0/0",
+      "port": "any",
+      "comment": ""
+    }
+  ],
+  "version": 3
+}

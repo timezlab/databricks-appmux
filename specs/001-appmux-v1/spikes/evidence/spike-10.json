@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-30",
+  "workspace": "Free Edition only (<workspace-host>)",
+  "scripts": [
+    "scripts/spike-10/refresh_test.py (runs on the throwaway app appmux-spike-10)",
+    "scripts/spike-10/narrow_scope.py and scripts/spike-10/narrow_sql_secret.py (run on appmux-probe)"
+  ],
+  "refresh_run": {
+    "setup": "a supervisor process holds the SP client id and secret; it started three child processes with no client id, secret or inherited token, each calling WorkspaceClient().current_user.me() with an unmodified Databricks SDK every 300 s for 4200 s. A: DATABRICKS_METADATA_SERVICE_URL pointing at a local HTTP endpoint the supervisor serves. B: DATABRICKS_AUTH_TYPE=databricks-cli with DATABRICKS_CLI_PATH naming a stub script that prints a token file the supervisor rewrites. C (control): DATABRICKS_TOKEN set once to the token minted at start. The supervisor re-minted when less than 600 s of life was left.",
+    "child_sandbox": "none: the children were plain subprocesses of the supervisor, not namespace-sandboxed",
+    "token_life_s": 3600,
+    "mints": [
+      "   0s  supervisor minted a token a3097df9, real life 3600 s, advertised 3600 s",
+      "3000s  supervisor minted a token 2b8fd306, real life 3600 s, advertised 3600 s"
+    ],
+    "children": {
+      "C-static": {
+        "calls": 15,
+        "ok": 12,
+        "failed": 3,
+        "tokens_seen": [
+          "a3097df9"
+        ],
+        "first_failure_at_s": 3603,
+        "failure_type": "PermissionDenied"
+      },
+      "B-command": {
+        "calls": 15,
+        "ok": 15,
+        "failed": 0,
+        "tokens_seen": [
+          "a3097df9",
+          "2b8fd306"
+        ],
+        "first_failure_at_s": null,
+        "failure_type": null
+      },
+      "A-metadata": {
+        "calls": 15,
+        "ok": 15,
+        "failed": 0,
+        "tokens_seen": [
+          "a3097df9",
+          "2b8fd306"
+        ],
+        "first_failure_at_s": null,
+        "failure_type": null
+      }
+    },
+    "sdk_behaviour": "A and B switched to the new token only after the old one expired (first call after t+3600 s used the token minted at t+3000 s); the SDK asked the metadata service for a new token at t+3605 s",
+    "control_failure": "C failed from its first call after expiry (t+3603 s) with PermissionDenied: 'unable to parse response' (the 401 body is not JSON); it succeeded at t+3302 s"
+  },
+  "dry_run": "advertised token life 90 s, 180 s, children A and B every 20 s: both children picked up each of the four tokens minted (t+0, 60, 120 s and 180 s) with no failed call",
+  "narrow_scope_token_request": {
+    "no_scope_parameter": "HTTP 400 invalid_scope 'Request must specify at least one valid scope'",
+    "unknown_scope": "HTTP 400 invalid_scope 'Invalid scope: bogus-scope-xyz'",
+    "granted_scope_echoed_in_answer": true,
+    "rows": [
+      {
+        "token_scope": "all-apis",
+        "secrets_get": 200,
+        "scim_me": 200,
+        "apps_list": 200,
+        "warehouses_list": 200
+      },
+      {
+        "token_scope": "secrets",
+        "secrets_get": 200,
+        "scim_me": 200,
+        "apps_list": "403 required scopes: apps",
+        "warehouses_list": "403 required scopes: sql"
+      },
+      {
+        "token_scope": "sql",
+        "secrets_get": "403 Invalid scope, required scopes: secrets",
+        "scim_me": 200,
+        "apps_list": "403 required scopes: apps",
+        "warehouses_list": 200
+      },
+      {
+        "token_scope": "unity-catalog",
+        "secrets_get": "403 required scopes: secrets",
+        "scim_me": 200,
+        "apps_list": "403 required scopes: apps",
+        "warehouses_list": "403 required scopes: sql"
+      },
+      {
+        "token_scope": "iam.current-user:read",
+        "secrets_get": "403 required scopes: secrets",
+        "scim_me": 200,
+        "apps_list": "403 required scopes: apps",
+        "warehouses_list": "403 required scopes: sql"
+      },
+      {
+        "token_scope": "sql unity-catalog",
+        "secrets_get": "403 required scopes: secrets",
+        "scim_me": 200,
+        "apps_list": "403 required scopes: apps",
+        "warehouses_list": 200
+      },
+      {
+        "token_scope": "secrets sql",
+        "secrets_get": 200,
+        "scim_me": 200,
+        "apps_list": "403 required scopes: apps",
+        "warehouses_list": 200
+      }
+    ]
+  },
+  "narrowed_token_through_sql": {
+    "setup": "scope appmux-spike-10-secrets with key k1 (random value, never printed), READ for the app's SP; statement SELECT length(secret(scope, key)) on the Serverless Starter Warehouse with a token minted for the SP with the stated scope",
+    "rows": [
+      {
+        "token_scope": "sql",
+        "secrets_get_api": 403,
+        "sql_secret_length": "SUCCEEDED"
+      },
+      {
+        "token_scope": "all-apis",
+        "secrets_get_api": 200,
+        "sql_secret_length": "SUCCEEDED"
+      },
+      {
+        "token_scope": "secrets",
+        "secrets_get_api": 200,
+        "sql_secret_length": "HTTP 403 required scopes: sql"
+      }
+    ]
+  },
+  "created_and_removed": "scope appmux-spike-10-secrets (deleted; list-scopes shows none); app appmux-spike-10 and workspace folder spike-10-harness (removed at the end, see README)"
+}
