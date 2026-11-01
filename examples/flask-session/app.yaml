@@ -1,0 +1,6 @@
+# One worker on purpose: the session signing key is random per process (see app.py), and
+# gunicorn would otherwise take its worker count from WEB_CONCURRENCY.
+command: ["python", "-m", "gunicorn", "--workers", "1", "--threads", "4", "app:app"]
+env:
+  - name: APP_GREETING
+    value: "Hello from flask-session"

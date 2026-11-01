@@ -1,0 +1,3 @@
+# Held by the App environment, so a release of this app needs no wheel and no index.
+# st.context (the request headers) needs 1.37 or later.
+streamlit>=1.37

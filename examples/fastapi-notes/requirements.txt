@@ -1,0 +1,3 @@
+# Both are held by the App environment, so a release of this app needs no wheel and no index.
+fastapi>=0.110
+uvicorn>=0.30
