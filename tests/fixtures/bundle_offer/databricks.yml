@@ -1,0 +1,73 @@
+# Bundle file of the bundle_offer fixture. appmux reads only resources.apps.<key>.resources[] and
+# turns each entry into an offer; nothing is attached until an app admin confirms it (design 5.4,
+# spec US6). Every id, scope, name and host below is a placeholder, not a real workspace object.
+#
+# Expected offers (key -> type -> target -> permission):
+#   sql-warehouse   sql_warehouse      0000000000000000                 CAN_USE
+#   experiment      mlflow_experiment  1111111111                       CAN_EDIT
+#   openai-api-key  secret             example-scope/openai-api-key     READ
+#   forecast-model  serving_endpoint   (unresolved ${var.endpoint})     CAN_QUERY
+#   ops-job         job                2222222222                       IS_OWNER -> warning, admin picks
+#   unused-table    uc_table           example_catalog.example_schema.example_table   SELECT
+# app.yaml mentions sql-warehouse, experiment and openai-api-key by valueFrom; the other three are
+# declared here and mentioned by no valueFrom, so the Requirements panel lists them separately.
+#
+# Expected warnings (the keys are read and ignored): variables, targets, and under the app:
+# config, permissions, user_api_scopes.
+bundle:
+  name: bundle-offer-fixture
+
+variables:
+  endpoint:
+    description: Serving endpoint name, left unresolved by appmux.
+    default: example-endpoint
+
+resources:
+  apps:
+    bundle_offer:
+      name: bundle-offer
+      description: Fixture app whose bundle file declares resources.
+      source_code_path: .
+      config:
+        command: ["python", "app.py"]
+        env:
+          - name: LOG_LEVEL
+            value: debug
+      user_api_scopes:
+        - sql
+      permissions:
+        - user_name: user@example.com
+          level: CAN_MANAGE
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: "0000000000000000"
+            permission: CAN_USE
+        - name: experiment
+          experiment:
+            experiment_id: "1111111111"
+            permission: CAN_EDIT
+        - name: openai-api-key
+          secret:
+            scope: example-scope
+            key: openai-api-key
+            permission: READ
+        - name: forecast-model
+          serving_endpoint:
+            name: "${var.endpoint}"
+            permission: CAN_QUERY
+        - name: ops-job
+          job:
+            id: "2222222222"
+            permission: IS_OWNER
+        - name: unused-table
+          uc_securable:
+            securable_full_name: example_catalog.example_schema.example_table
+            securable_type: TABLE
+            permission: SELECT
+
+targets:
+  dev:
+    default: true
+    workspace:
+      host: https://workspace.example.invalid

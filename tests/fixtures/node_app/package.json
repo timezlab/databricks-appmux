@@ -1,0 +1,12 @@
+{
+  "name": "appmux-fixture-node-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "appmux test fixture: a Node app with no dependency, registered in index mode. See server.js.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

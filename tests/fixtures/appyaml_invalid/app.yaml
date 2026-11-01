@@ -1,0 +1,6 @@
+# This file is valid on its own. It is invalid only because app.yml sits next to it: a snapshot with
+# both files is refused at Update (design 5.4). Delete app.yml to get a valid snapshot.
+command: ["python", "app.py"]
+env:
+  - name: LOG_LEVEL
+    value: info

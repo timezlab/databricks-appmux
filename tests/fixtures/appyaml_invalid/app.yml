@@ -1,0 +1,8 @@
+# Two faults, on purpose. The file exists next to app.yaml (the Update is refused for having both),
+# and the entry below sets both value and valueFrom (the Update is refused, naming the entry
+# GREETING). Delete app.yaml to see the second refusal alone; delete this file to see a valid app.
+command: ["python", "app.py"]
+env:
+  - name: GREETING
+    value: hello
+    valueFrom: greeting-resource

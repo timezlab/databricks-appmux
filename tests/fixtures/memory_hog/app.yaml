@@ -1,0 +1,2 @@
+# Hostile fixture: run it only inside an appmux sandbox. It allocates until it is stopped.
+command: ["python", "app.py"]

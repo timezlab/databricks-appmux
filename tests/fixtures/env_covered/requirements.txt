@@ -1,0 +1,8 @@
+# Every line is met by the App environment (fastapi 0.115.0, uvicorn 0.30.6, starlette 0.38.6,
+# pydantic 2.13.4, appdirs 1.4.4 on the Free Edition workspace), so no wheel and no hash is needed
+# and a build must fetch nothing.
+fastapi==0.115.0
+uvicorn==0.30.6
+starlette>=0.37
+pydantic>=2
+appdirs>=1.4,<2

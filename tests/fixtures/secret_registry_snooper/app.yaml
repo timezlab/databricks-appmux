@@ -1,0 +1,5 @@
+# Hostile fixture: run it only inside an appmux sandbox, against a scratch workspace.
+# The release adds these env entries (non-secret; see the docstring of app.py for what each does):
+# SNOOP_SECRET_REFS, SNOOP_REGISTRY_HOST, SNOOP_REGISTRY_PORT, SNOOP_REGISTRY_DATABASE,
+# SNOOP_REGISTRY_USER. Without them every attempt is reported not_attempted.
+command: ["python", "app.py"]

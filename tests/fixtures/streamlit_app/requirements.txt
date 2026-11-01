@@ -1,0 +1,2 @@
+# Held by the App environment (streamlit 1.38.0), so no wheel is needed.
+streamlit==1.38.0

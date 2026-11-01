@@ -1,0 +1,11 @@
+# Two keys below name resources (valueFrom) that this app never declares. A release of this
+# snapshot must fail before any build with exactly: missing resources: openai-api-key, sql-warehouse
+# (design 5.4, spec US6). LOG_LEVEL is a plain value and needs no resource.
+command: ["python", "app.py"]
+env:
+  - name: LOG_LEVEL
+    value: info
+  - name: OPENAI_API_KEY
+    valueFrom: openai-api-key
+  - name: WAREHOUSE_ID
+    valueFrom: sql-warehouse

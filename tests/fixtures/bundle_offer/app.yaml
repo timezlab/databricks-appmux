@@ -1,0 +1,16 @@
+# The contract appmux honours. The three valueFrom keys are declared in databricks.yml, so the
+# Requirements panel offers each one pre-filled; until an app admin attaches them the release fails
+# with: missing resources: experiment, openai-api-key, sql-warehouse
+# That alphabetical order is this fixture's own choice, not a design rule: design 5.4 says only that
+# all the missing keys are listed at once. A test compares the set of keys, not their order (the
+# env below is declared in yet another order).
+command: ["python", "app.py"]
+env:
+  - name: LOG_LEVEL
+    value: info
+  - name: OPENAI_API_KEY
+    valueFrom: openai-api-key
+  - name: WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: MLFLOW_EXPERIMENT_ID
+    valueFrom: experiment

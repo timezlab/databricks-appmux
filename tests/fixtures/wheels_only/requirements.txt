@@ -1,0 +1,9 @@
+# fastapi and uvicorn are in the App environment at these versions: no wheel, no hash needed.
+fastapi==0.115.0
+uvicorn==0.30.6
+# The two packages below exist only as the wheels that make_wheels.py builds. Their sha256 is the
+# digest of those wheels (the script checks it). beta needs alpha, so the lock lists both.
+appmux-fixture-alpha==1.0.0 \
+    --hash=sha256:0e88e843d9933be0de37cdd9b60d0171cc1814da0f5e8d0e03ac119b74839e44
+appmux-fixture-beta==1.0.0 \
+    --hash=sha256:cd67008a524fefc8f87f455145607e850869b6c799e5e4dd7057cd6e49dd8e9c

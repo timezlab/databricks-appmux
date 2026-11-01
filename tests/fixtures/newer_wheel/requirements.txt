@@ -1,0 +1,7 @@
+# fastapi and uvicorn are in the App environment at these versions: no wheel, no hash needed.
+fastapi==0.115.0
+uvicorn==0.30.6
+# The App environment holds appdirs 1.4.4, so this pin cannot be met by it. The sha256 is the digest
+# of the wheel that make_wheels.py builds (the script checks it); that wheel must win.
+appdirs==99.0.0 \
+    --hash=sha256:484cdd6662dfefc446bd34ab97830e18331798b15b6ca3f658befaf136637ab4
