@@ -1,0 +1,16 @@
+# appmux's own App configuration (design 13.1, item 4). The platform reads it
+# from the root of the deployed folder; scripts/assemble-deploy.sh copies it
+# there. Keep it free of secrets: the Lakebase host arrives (as PGHOST) through
+# the Lakebase resource attached to the App, never through a value written here.
+command: ["python", "-m", "appmux"]
+env:
+  # Honoured only while platform_admins is unset. Replace the placeholder with
+  # the first administrator's e-mail address before the first deployment.
+  - name: APPMUX_BOOTSTRAP_ADMINS
+    value: dana@example.com
+  # The database's name, not a secret. A `valueFrom` on the Lakebase resource
+  # yields the endpoint path (data model 4.7), which is not a database name: the
+  # first container start logged "the database does not exist" with it. A new
+  # Lakebase project's default database is databricks_postgres.
+  - name: APPMUX_LAKEBASE_DATABASE
+    value: databricks_postgres
