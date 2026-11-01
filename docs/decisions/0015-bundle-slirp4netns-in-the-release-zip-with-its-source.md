@@ -118,9 +118,11 @@ URL pinned in `scripts/fetch-slirp4netns.sh` and names the release tag.
   (`SOURCE_OFFER_CONTACT_URL` in `scripts/fetch-slirp4netns.sh`, today the issue
   tracker of `timezlab/databricks-appmux`) is reachable by a recipient of the
   zip, and stays so for three years after the last release that carried the
-  binary. The repository is private at the time of writing, which a recipient
-  cannot reach; making it public or changing the constant is the owner's call.
-  Nothing in the workflow can check this.
+  binary. The repository was private when this was accepted; the owner made it
+  public on 2026-11-01 (its issues page answered an unauthenticated request),
+  so the URL is reachable today. Making it private again, deleting the repository,
+  or moving it without changing the constant ends that, and the owner then owes a
+  replacement contact. Nothing in the workflow can check this.
 - `assemble-deploy.sh` fails when `bin/slirp4netns`, `COPYING`, `SOURCE.txt`,
   `LICENSE-LGPL-2.1` or the source archive is missing from the assembled folder.
 - No `slirp4netns` binary or source is committed (FR-054).
