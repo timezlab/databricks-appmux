@@ -1,0 +1,86 @@
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "appmux"
+version = "0.0.0"
+description = "A reverse proxy that runs as one Databricks App and hosts many child apps in that single slot."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = "==3.11.*"
+# Pinned to the versions the Databricks App environment already holds
+# (specs/001-appmux-v1/spikes/evidence/spike-18-environment-packages.txt), so
+# the platform installs none of them. psycopg is the one addition: it is
+# vendored as a hashed wheel by scripts/vendor-wheels.sh (ADR 0014).
+dependencies = [
+  "uvicorn==0.30.6",
+  "starlette==0.38.6",
+  "httpx==0.28.1",
+  "websockets==12.0",
+  "pydantic==2.13.4",
+  "pyyaml==6.0.3",
+  "packaging==24.2",
+  "databricks-sdk==0.33.0",
+  "psycopg[binary]==3.3.6",
+]
+
+[dependency-groups]
+dev = [
+  "ruff==0.17.1",
+  "mypy==2.4.0",
+  "pytest==9.1.1",
+  "types-PyYAML==6.0.12.20260906",
+]
+
+[tool.uv]
+# The deployment folder is built by scripts/assemble-deploy.sh from an
+# allow-list; pyproject.toml and uv.lock never reach it.
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# The agent harness (.agents, .claude, .specify) and the frozen spike prototypes are not the
+# project's package; the formatter and linter must not rewrite them.
+extend-exclude = [".agents", ".claude", ".specify", "web", "build", "specs/001-appmux-v1/spikes"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "ASYNC", "S"]
+ignore = [
+  # Subprocesses are always started with an argument array and never with
+  # external data in a shell string (rules/common/security.md), so these two
+  # only add noise at the sandbox launcher and the scripts.
+  "S603",
+  "S607",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Assertions are how pytest tests assert.
+"tests/**" = ["S101"]
+# The hostile fixtures do the unsafe things on purpose, inside a sandbox, to prove it holds.
+"tests/fixtures/**" = ["S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["appmux"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+# Async tests use the anyio plugin that Starlette already brings (ADR 0014);
+# tests/conftest.py provides the anyio_backend fixture.
+markers = [
+  "integration: needs a Databricks container; skipped elsewhere",
+]
