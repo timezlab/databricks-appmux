@@ -32,16 +32,19 @@ FIXTURE_COPYING = b"fixture GNU GENERAL PUBLIC LICENSE Version 2\n"
 FIXTURE_PARSON_LICENSE = b"fixture MIT License, Krzysztof Gabis\n"
 FIXTURE_LIBSLIRP_LICENSE = b"fixture BSD-3-Clause, Danny Gasparovski\n"
 FIXTURE_LIBSLIRP_COPYRIGHT = b"fixture Slirp was written by Danny Gasparovski\n"
+FIXTURE_LGPL_TEXT = b"fixture GNU LESSER GENERAL PUBLIC LICENSE Version 2.1\n"
 
 HASH_CONSTANTS = (
     "SLIRP4NETNS_BINARY_SHA256",
     "SLIRP4NETNS_SOURCE_SHA256",
     "LIBSLIRP_SOURCE_SHA256",
+    "LGPL21_TEXT_SHA256",
 )
 URL_CONSTANTS = (
     "SLIRP4NETNS_BINARY_URL",
     "SLIRP4NETNS_SOURCE_URL",
     "LIBSLIRP_SOURCE_URL",
+    "LGPL21_TEXT_URL",
 )
 OUTPUT_MARKER = ".appmux-slirp4netns-output"
 CONSTANT_LINE = re.compile(r'^readonly (?P<name>[A-Z0-9_]+)="(?P<value>[^"]*)"$')
@@ -52,6 +55,7 @@ class Fixtures:
     binary: Path
     slirp_source: Path
     libslirp_source: Path
+    lgpl_text: Path
     output: Path
 
     def environment(self) -> dict[str, str]:
@@ -60,6 +64,7 @@ class Fixtures:
             APPMUX_SLIRP4NETNS_BINARY_URL=self.binary.as_uri(),
             APPMUX_SLIRP4NETNS_SOURCE_URL=self.slirp_source.as_uri(),
             APPMUX_LIBSLIRP_SOURCE_URL=self.libslirp_source.as_uri(),
+            APPMUX_LGPL21_TEXT_URL=self.lgpl_text.as_uri(),
             APPMUX_SLIRP4NETNS_OUTPUT_DIR=str(self.output),
         )
         return environment
@@ -99,7 +104,11 @@ def fixtures(tmp_path: Path) -> Fixtures:
             "libslirp-4.9.5/COPYRIGHT": FIXTURE_LIBSLIRP_COPYRIGHT,
         },
     )
-    return Fixtures(binary, slirp_source, libslirp_source, tmp_path / "work" / "slirp4netns")
+    lgpl_text = download_folder / "lgpl-2.1.txt"
+    lgpl_text.write_bytes(FIXTURE_LGPL_TEXT)
+    return Fixtures(
+        binary, slirp_source, libslirp_source, lgpl_text, tmp_path / "work" / "slirp4netns"
+    )
 
 
 def script_pinned_to_fixtures(fixtures: Fixtures, destination: Path) -> Path:
@@ -109,6 +118,7 @@ def script_pinned_to_fixtures(fixtures: Fixtures, destination: Path) -> Path:
         "SLIRP4NETNS_BINARY_SHA256": sha256_of(fixtures.binary),
         "SLIRP4NETNS_SOURCE_SHA256": sha256_of(fixtures.slirp_source),
         "LIBSLIRP_SOURCE_SHA256": sha256_of(fixtures.libslirp_source),
+        "LGPL21_TEXT_SHA256": sha256_of(fixtures.lgpl_text),
     }
     for name, digest in replacements.items():
         text, count = re.subn(
@@ -167,6 +177,7 @@ def test_script_pins_its_constants_at_the_top() -> None:
     assert set(top) == {
         "SLIRP4NETNS_RELEASE",
         "LIBSLIRP_RELEASE",
+        "SOURCE_OFFER_CONTACT_URL",
         *HASH_CONSTANTS,
         *URL_CONSTANTS,
     }, "the pinned block must hold exactly the release, URL and SHA-256 constants"
@@ -188,6 +199,8 @@ def test_script_pins_its_constants_at_the_top() -> None:
     assert top["LIBSLIRP_SOURCE_URL"] == (
         f"https://github.com/qemu/libslirp/archive/refs/tags/{top['LIBSLIRP_RELEASE']}.tar.gz"
     )
+    assert top["LGPL21_TEXT_URL"] == "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt"
+    assert top["SOURCE_OFFER_CONTACT_URL"].startswith("https://"), "the offer names a place to ask"
     assert os.access(SCRIPT, os.X_OK), "scripts/fetch-slirp4netns.sh must be executable"
 
 
@@ -234,6 +247,21 @@ def test_refuses_a_libslirp_archive_whose_hash_differs_and_writes_nothing(
     assert leftovers_beside(fixtures.output) == []
 
 
+def test_refuses_an_lgpl_text_whose_hash_differs_and_writes_nothing(
+    fixtures: Fixtures, tmp_path: Path
+) -> None:
+    script = script_pinned_to_fixtures(fixtures, tmp_path)
+    fixtures.lgpl_text.write_bytes(b"tampered after pinning\n")
+
+    result = run(script, fixtures)
+
+    assert result.returncode != 0
+    assert "SHA-256" in result.stderr
+    assert "lgpl-2.1.txt" in result.stderr
+    assert not fixtures.output.exists(), "a binary must not be left behind without the LGPL text"
+    assert leftovers_beside(fixtures.output) == []
+
+
 def test_a_failed_run_keeps_the_previous_output(fixtures: Fixtures) -> None:
     fixtures.output.mkdir(parents=True)
     (fixtures.output / OUTPUT_MARKER).write_text("written by an earlier run\n", encoding="utf-8")
@@ -261,6 +289,7 @@ def test_writes_the_layout_the_assembler_expects(fixtures: Fixtures, tmp_path: P
     assert (licences / "LICENSE-parson").read_bytes() == FIXTURE_PARSON_LICENSE
     assert (licences / "LICENSE-libslirp").read_bytes() == FIXTURE_LIBSLIRP_LICENSE
     assert (licences / "COPYRIGHT-libslirp").read_bytes() == FIXTURE_LIBSLIRP_COPYRIGHT
+    assert (licences / "LICENSE-LGPL-2.1").read_bytes() == FIXTURE_LGPL_TEXT
 
     slirp_archives = sorted(p.name for p in licences.glob("slirp4netns-*.tar.gz"))
     assert slirp_archives == ["slirp4netns-1.3.6.tar.gz"]
@@ -280,6 +309,8 @@ def test_writes_the_layout_the_assembler_expects(fixtures: Fixtures, tmp_path: P
     assert sha256_of(fixtures.libslirp_source) in source_note, (
         "SOURCE.txt must carry the libslirp SHA-256"
     )
+    assert constants["LGPL21_TEXT_URL"] in source_note
+    assert sha256_of(fixtures.lgpl_text) in source_note, "SOURCE.txt must carry the LGPL SHA-256"
     assert "unmodified upstream build" in source_note
     assert (
         "The source of this release is the archive beside this file, slirp4netns-1.3.6.tar.gz."
@@ -320,6 +351,7 @@ def test_source_note_states_what_the_folder_holds_and_what_it_does_not(
         "LICENSE-parson",
         "LICENSE-libslirp",
         "COPYRIGHT-libslirp",
+        "LICENSE-LGPL-2.1",
         "slirp4netns-1.3.6.tar.gz",
         "libslirp-4.9.5.tar.gz",
     ):
@@ -344,19 +376,31 @@ def test_source_note_states_what_the_folder_holds_and_what_it_does_not(
         assert f"`{package}`" in note, f"SOURCE.txt must name the Ubuntu source package {package}"
     assert "jammy" in note
 
-    # The redistribution terms are an open decision; the file promises nothing.
-    assert "open owner decision" in flat
-    assert "ADR 0015" in note
-    assert "written offer" not in flat.lower()
+    # The LGPL libraries' source is offered in writing (LGPL-2.1 section 6c), not shipped.
+    assert "written offer" in flat.lower()
+    assert "three years" in flat
+    assert "LGPL-2.1 section 6" in flat
+    contact = pinned_constants(SCRIPT.read_text(encoding="utf-8"))["SOURCE_OFFER_CONTACT_URL"]
+    assert contact in note
+    assert "snapshot jammy-20260509" in flat
+    assert "open owner decision" not in flat
+    assert "makes no offer" not in flat
+    assert "NEEDS-OWNER-DECISION" not in note
 
 
-def test_final_notice_keeps_the_verdict_open(fixtures: Fixtures, tmp_path: Path) -> None:
+def test_final_notice_reminds_the_operator_that_the_offer_must_stay_reachable(
+    fixtures: Fixtures, tmp_path: Path
+) -> None:
     script = script_pinned_to_fixtures(fixtures, tmp_path)
 
     result = run(script, fixtures)
 
     assert result.returncode == 0, result.stderr
-    assert "NEEDS-OWNER-DECISION" in result.stderr
+    assert "NEEDS-OWNER-DECISION" not in result.stderr
+    assert "written offer" in result.stderr
+    assert "three years" in result.stderr
+    contact = pinned_constants(SCRIPT.read_text(encoding="utf-8"))["SOURCE_OFFER_CONTACT_URL"]
+    assert contact in result.stderr
 
 
 def test_a_stray_output_override_over_an_unrelated_folder_is_refused(

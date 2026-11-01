@@ -6,15 +6,16 @@
 # Output (consumed by scripts/assemble-deploy.sh):
 #   build/slirp4netns/bin/slirp4netns
 #   build/slirp4netns/licenses/slirp4netns/{COPYING,SOURCE.txt,slirp4netns-<version>.tar.gz,
-#       LICENSE-parson,libslirp-<version>.tar.gz,LICENSE-libslirp,COPYRIGHT-libslirp}
+#       LICENSE-parson,libslirp-<version>.tar.gz,LICENSE-libslirp,COPYRIGHT-libslirp,
+#       LICENSE-LGPL-2.1}
 #
 # Every download is checked against the SHA-256 pinned below; a mismatch deletes the download
 # and fails, and nothing reaches build/slirp4netns/ unless all downloads pass (a failed run
 # keeps the previous output). To move to a new release, change the constants together and
 # re-read the licences of the libraries inside the binary first (docs: ADR 0015).
 #
-# Licence analysis of the pinned v1.3.6 static x86_64 binary. Verdict: NEEDS-OWNER-DECISION.
-# This is a reading of licence texts and of the upstream build recipe, not legal advice.
+# Licence analysis of the pinned v1.3.6 static x86_64 binary. This is a reading of licence texts
+# and of the upstream build recipe, not legal advice.
 #   - slirp4netns (GPL-2.0-or-later) and the vendored parson (MIT): the source archive and the
 #     notices ship in the folder, so these are met.
 #   - libslirp v4.9.5 (BSD-3-Clause and MIT, per file): its source archive, LICENSE and
@@ -26,9 +27,10 @@
 #     libcap-dev; the binary holds no libcap symbol or string.)
 #   - glibc 2.35 (static libc.a), glib and libseccomp 2.5.3 are linked in statically, from the
 #     Ubuntu jammy packages named in Dockerfile.artifact. glibc and glib are
-#     LGPL-2.1-or-later, libseccomp is LGPL-2.1. Their source is NOT in the folder and this
-#     script fetches neither it nor the LGPL text. How to meet that is an open owner decision
-#     (ADR 0015, T029 stays open); until then the zip with the binary must not be published.
+#     LGPL-2.1-or-later, libseccomp is LGPL-2.1. The owner chose route 1 of ADR 0015 on
+#     2026-11-01: the folder carries the LGPL-2.1 text and SOURCE.txt carries a written offer
+#     (LGPL-2.1 section 6c), valid for three years, for the source of those three libraries
+#     and for what a recipient needs to relink. The libraries' source itself is not shipped.
 set -euo pipefail
 
 # --- Pinned upstream release (change only together) ------------------------------------
@@ -42,6 +44,13 @@ readonly SLIRP4NETNS_SOURCE_SHA256="1e58c3a22d1f8361c9dfd7e518f621bc5510df519d00
 readonly LIBSLIRP_RELEASE="v4.9.5"
 readonly LIBSLIRP_SOURCE_URL="https://github.com/qemu/libslirp/archive/refs/tags/v4.9.5.tar.gz"
 readonly LIBSLIRP_SOURCE_SHA256="3881a82ac476567c46146980fea439f6ecfa631bed533c584c1a6ed19c309ebc"
+# The LGPL-2.1 text covers glibc, glib and libseccomp. The hash is trust-on-first-use: taken
+# on 2026-11-01 from the file served at this URL after reading its heading and section 6.
+readonly LGPL21_TEXT_URL="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt"
+readonly LGPL21_TEXT_SHA256="20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+# Where a recipient of the zip asks for the source of those libraries (written offer, LGPL-2.1
+# section 6c). It has to stay reachable for three years after each release.
+readonly SOURCE_OFFER_CONTACT_URL="https://github.com/timezlab/databricks-appmux/issues"
 # ----------------------------------------------------------------------------------------
 
 # Test seams: local file:// URLs and another output folder. The pinned hashes above have no
@@ -50,6 +59,7 @@ readonly LIBSLIRP_SOURCE_SHA256="3881a82ac476567c46146980fea439f6ecfa631bed533c5
 binary_url="${APPMUX_SLIRP4NETNS_BINARY_URL:-$SLIRP4NETNS_BINARY_URL}"
 slirp_source_url="${APPMUX_SLIRP4NETNS_SOURCE_URL:-$SLIRP4NETNS_SOURCE_URL}"
 libslirp_source_url="${APPMUX_LIBSLIRP_SOURCE_URL:-$LIBSLIRP_SOURCE_URL}"
+lgpl_text_url="${APPMUX_LGPL21_TEXT_URL:-$LGPL21_TEXT_URL}"
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 output_dir="${APPMUX_SLIRP4NETNS_OUTPUT_DIR:-$repository_root/build/slirp4netns}"
@@ -125,6 +135,7 @@ extract_member() {
 fetch_verified "slirp4netns-x86_64" "$binary_url" "$SLIRP4NETNS_BINARY_SHA256"
 fetch_verified "$slirp_archive_name" "$slirp_source_url" "$SLIRP4NETNS_SOURCE_SHA256"
 fetch_verified "$libslirp_archive_name" "$libslirp_source_url" "$LIBSLIRP_SOURCE_SHA256"
+fetch_verified "lgpl-2.1.txt" "$lgpl_text_url" "$LGPL21_TEXT_SHA256"
 
 # The binary is stored byte for byte as published ("unmodified upstream build").
 install -m 0755 "$downloads/slirp4netns-x86_64" "$tree/bin/slirp4netns"
@@ -137,6 +148,7 @@ extract_member "$downloads/$libslirp_archive_name" "$libslirp_prefix/LICENSE" "$
 extract_member "$downloads/$libslirp_archive_name" "$libslirp_prefix/COPYRIGHT" "$licences/COPYRIGHT-libslirp"
 install -m 0644 "$downloads/$slirp_archive_name" "$licences/$slirp_archive_name"
 install -m 0644 "$downloads/$libslirp_archive_name" "$licences/$libslirp_archive_name"
+install -m 0644 "$downloads/lgpl-2.1.txt" "$licences/LICENSE-LGPL-2.1"
 
 cat >"$licences/SOURCE.txt" <<EOF
 slirp4netns ${SLIRP4NETNS_RELEASE} (static x86_64 binary, bin/slirp4netns)
@@ -148,7 +160,8 @@ process and does not link it; appmux's own files are Apache-2.0 (LICENSE).
 The source of this release is the archive beside this file, ${slirp_archive_name}.
 The upstream build recipe (Dockerfile.artifact) is inside that archive. Anyone who
 received this zip may take, study, modify and redistribute the source of slirp4netns and
-libslirp from the two archives in this folder (not the libraries named further down).
+libslirp from the two archives in this folder. The LGPL libraries named further down are
+covered by the written offer at the end of this file.
 
 What this folder holds
   COPYING             GNU GPL version 2, the licence of slirp4netns
@@ -160,6 +173,7 @@ What this folder holds
                       source archive of libslirp ${LIBSLIRP_RELEASE}
   LICENSE-libslirp    BSD-3-Clause text taken from the libslirp archive
   COPYRIGHT-libslirp  copyright holders taken from the libslirp archive
+  LICENSE-LGPL-2.1    GNU LGPL version 2.1, the licence of glibc, glib and libseccomp
 
 Binary
   URL     ${SLIRP4NETNS_BINARY_URL}
@@ -172,6 +186,10 @@ Source archive of the same release (${slirp_archive_name})
 libslirp ${LIBSLIRP_RELEASE} source archive (${libslirp_archive_name})
   URL     ${LIBSLIRP_SOURCE_URL}
   SHA-256 ${LIBSLIRP_SOURCE_SHA256}
+
+GNU LGPL version 2.1 text (LICENSE-LGPL-2.1)
+  URL     ${LGPL21_TEXT_URL}
+  SHA-256 ${LGPL21_TEXT_SHA256}
 EOF
 cat >>"$licences/SOURCE.txt" <<'EOF'
   The upstream recipe (Dockerfile.artifact) clones libslirp from
@@ -183,9 +201,9 @@ recipe and the binary; a reading of licence texts, not legal advice)
   slirp4netns v1.3.6   GPL-2.0-or-later   source: the archive in this folder
   parson (vendored)    MIT                source: inside the slirp4netns archive, vendor/parson
   libslirp v4.9.5      BSD-3-Clause, MIT in some files   source: the archive in this folder
-  glibc 2.35           LGPL-2.1-or-later  statically linked; source NOT in this folder
-  glib                 LGPL-2.1-or-later  Ubuntu jammy package; source NOT in this folder
-  libseccomp 2.5.3     LGPL-2.1           statically linked; source NOT in this folder
+  glibc 2.35           LGPL-2.1-or-later  statically linked; source: written offer below
+  glib                 LGPL-2.1-or-later  Ubuntu jammy package; source: written offer below
+  libseccomp 2.5.3     LGPL-2.1           statically linked; source: written offer below
 
 libcap is NOT linked. In the slirp4netns archive, Makefile.am links
   slirp4netns_LDADD = libparson.a @GLIB_LIBS@ @SLIRP_LIBS@ @LIBSECCOMP_LIBS@ -lpthread
@@ -202,8 +220,24 @@ https://github.com/seccomp/libseccomp/releases/tag/v2.5.3 and glibc
 https://github.com/bminor/glibc/tree/glibc-2.35. An upstream tag is not the
 Ubuntu-patched source the binary was built from.
 
-The redistribution terms for glibc, glib and libseccomp are an open owner decision
-(ADR 0015). This file makes no offer about them.
+Written offer for the source of glibc, glib and libseccomp (LGPL-2.1 section 6c)
+EOF
+cat >>"$licences/SOURCE.txt" <<EOF
+glibc, glib and libseccomp are free software under the GNU Lesser General Public License
+version 2.1 (LICENSE-LGPL-2.1 in this folder is a copy of it). You may modify those
+libraries for your own use and relink the program with your modified copy; reverse
+engineering to debug such modifications is permitted.
+
+appmux offers, in writing, to give you on request, for a charge no more than the cost of
+performing the distribution, and valid for three years from the date you received this
+zip:
+  1. the complete corresponding machine-readable source code of glibc, glib and libseccomp
+     as they were built into this binary (the Ubuntu source packages named above, of the
+     snapshot jammy-20260509), and
+  2. the program that uses them, as source: the slirp4netns and libslirp archives in this
+     folder and the build recipe inside the slirp4netns archive, so that you can relink.
+To ask, open an issue at ${SOURCE_OFFER_CONTACT_URL} and name the release tag of the zip
+you received.
 EOF
 
 # Replace the previous output only now that every check has passed.
@@ -213,8 +247,9 @@ chmod 0755 "$output_dir"
 
 echo "wrote $output_dir"
 echo "binary $(stat -c %s "$output_dir/bin/slirp4netns") bytes, archives $(stat -c %s "$output_dir/licenses/slirp4netns/$slirp_archive_name") + $(stat -c %s "$output_dir/licenses/slirp4netns/$libslirp_archive_name") bytes"
-cat >&2 <<'EOF'
-NEEDS-OWNER-DECISION: the binary also embeds glibc, glib and libseccomp (LGPL), whose licence
-text and corresponding source this script does not fetch. The zip with this binary is not ready
-for a release until the owner decides how to meet that (ADR 0015 "Must now be true", T029).
+cat >&2 <<EOF
+The folder carries a written offer for the source of glibc, glib and libseccomp (LGPL-2.1
+section 6c), valid for three years from each release. Keep ${SOURCE_OFFER_CONTACT_URL}
+reachable for that long: a private repository is not reachable for a recipient of the zip
+(ADR 0015 "Must now be true").
 EOF

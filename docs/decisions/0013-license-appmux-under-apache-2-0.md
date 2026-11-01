@@ -1,6 +1,6 @@
 # License appmux under Apache-2.0
 
-**Status:** accepted (the "never bundled" sentence of the Decision is read with [ADR 0015](0015-bundle-slirp4netns-in-the-release-zip-with-its-source.md), proposed: it would let the release zip, not the repository, carry the binary)
+**Status:** accepted (the "never bundled" sentence of the Decision is read with [ADR 0015](0015-bundle-slirp4netns-in-the-release-zip-with-its-source.md), accepted 2026-11-01: it lets the release zip, not the repository, carry the binary)
 **Date:** 2026-10-30
 **Deciders:** Liam Lee (chose "whatever fits"; Apache-2.0 proposed 2026-10-30)
 

@@ -168,7 +168,7 @@ elif [[ ! -x "$slirp_binary" ]]; then
 fi
 
 slirp_licence_dir="$deploy_dir/licenses/slirp4netns"
-for required_file in COPYING SOURCE.txt; do
+for required_file in COPYING SOURCE.txt LICENSE-LGPL-2.1; do
   if [[ ! -f "$slirp_licence_dir/$required_file" ]]; then
     problems+=("licenses/slirp4netns/$required_file is missing; $slirp_hint")
   fi

@@ -163,7 +163,7 @@ jobs:
 
           Unpack the zip and deploy the folder as it is. Check the download with \`sha256sum -c\` and the .sha256 file beside it.
 
-          This zip redistributes slirp4netns ${slirp_version} (static x86_64 binary, \`bin/slirp4netns\`) under GPL-2.0-or-later. Its source archive and licence text are in \`licenses/slirp4netns/\` inside the zip. The reasoning and the open licence questions about the libraries linked into that binary are in ADR 0015 (\`docs/decisions/\`).
+          This zip redistributes slirp4netns ${slirp_version} (static x86_64 binary, \`bin/slirp4netns\`) under GPL-2.0-or-later. Its source archive and licence text are in \`licenses/slirp4netns/\` inside the zip. The static binary also contains glibc, glib and libseccomp (LGPL-2.1); \`licenses/slirp4netns/SOURCE.txt\` holds a written offer, valid for three years, for their source. The reasoning is in ADR 0015 (\`docs/decisions/\`).
           EOF
 
       - name: Publish the release

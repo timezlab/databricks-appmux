@@ -37,9 +37,9 @@ This spec says **what must be true and how it is judged**. The full behaviour li
 | [0011](../../docs/decisions/0011-gate-credentials-and-platform-fields-behind-a-request-catalogue.md) | Three request kinds; three gates | accepted | 9 (rename) |
 | [0012](../../docs/decisions/0012-build-services-in-python-and-the-admin-ui-in-nextjs.md) | Python services; Next.js static-export admin UI | accepted | 7, 8, 19 |
 | [0013](../../docs/decisions/0013-license-appmux-under-apache-2-0.md) | Apache-2.0 | accepted | 9 (`slirp4netns` licence) |
-| [0015](../../docs/decisions/0015-bundle-slirp4netns-in-the-release-zip-with-its-source.md) | The release zip carries `slirp4netns` and its source | **proposed** | 9 (`slirp4netns` licence) |
+| [0015](../../docs/decisions/0015-bundle-slirp4netns-in-the-release-zip-with-its-source.md) | The release zip carries `slirp4netns` and its source | accepted 2026-11-01 | 9 (`slirp4netns` licence) |
 
-**Open** (not settled): ADR 0015 (`proposed`: the owner has not accepted the GPL source-offer duty of shipping `slirp4netns` in the release zip); the owner decisions still open in [Questions for the owner](#questions-for-the-owner) (questions 2 and 5 are answered; A1–A5 are confirmed); and what each spike entry lists as not covered. The [Spikes](#spikes-for-owner-approval) all ran on 2026-10-30 except spike 3, which was dropped.
+**Open** (not settled): the owner decisions still open in [Questions for the owner](#questions-for-the-owner) (questions 2 and 5 are answered; A1–A5 are confirmed); and what each spike entry lists as not covered. The [Spikes](#spikes-for-owner-approval) all ran on 2026-10-30 except spike 3, which was dropped.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -358,7 +358,7 @@ Each requirement is testable. The cited document gives the detail and the number
 
 **Licence**
 
-- **FR-054**: The repository root MUST hold the Apache-2.0 text, and no `slirp4netns` binary or source MUST be committed. What the release zip carries is a distribution, not the repository, and is governed by [ADR 0015](../../docs/decisions/0015-bundle-slirp4netns-in-the-release-zip-with-its-source.md) (`proposed`). ([ADR 0013](../../docs/decisions/0013-license-appmux-under-apache-2-0.md))
+- **FR-054**: The repository root MUST hold the Apache-2.0 text, and no `slirp4netns` binary or source MUST be committed. What the release zip carries is a distribution, not the repository, and is governed by [ADR 0015](../../docs/decisions/0015-bundle-slirp4netns-in-the-release-zip-with-its-source.md) (`accepted`). ([ADR 0013](../../docs/decisions/0013-license-appmux-under-apache-2-0.md))
 
 ### Key Entities
 

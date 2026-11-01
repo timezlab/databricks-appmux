@@ -57,6 +57,7 @@ EXPECTED_DEPLOY_FILES = frozenset(
         "bin/slirp4netns",
         f"{LICENCE_FOLDER}/COPYING",
         f"{LICENCE_FOLDER}/SOURCE.txt",
+        f"{LICENCE_FOLDER}/LICENSE-LGPL-2.1",
         f"{LICENCE_FOLDER}/slirp4netns-v1.3.6.tar.gz",
     }
 )
@@ -118,6 +119,7 @@ def tree(tmp_path: Path) -> FakeTree:
     write(slirp / SLIRP_RELATIVE, "binary\n", executable=True)
     write(slirp / LICENCE_FOLDER / "COPYING", "GPL text\n")
     write(slirp / LICENCE_FOLDER / "SOURCE.txt", "source offer\n")
+    write(slirp / LICENCE_FOLDER / "LICENSE-LGPL-2.1", "LGPL text\n")
     write(slirp / LICENCE_FOLDER / "slirp4netns-v1.3.6.tar.gz", "archive\n")
     return FakeTree(root=root, build=build)
 
@@ -320,6 +322,7 @@ def assert_slirp_refusal(tree: FakeTree, named_in_message: str) -> None:
         pytest.param(SLIRP_RELATIVE, SLIRP_RELATIVE, id="binary"),
         pytest.param(f"{LICENCE_FOLDER}/COPYING", "COPYING", id="copying"),
         pytest.param(f"{LICENCE_FOLDER}/SOURCE.txt", "SOURCE.txt", id="source-txt"),
+        pytest.param(f"{LICENCE_FOLDER}/LICENSE-LGPL-2.1", "LICENSE-LGPL-2.1", id="lgpl-text"),
         pytest.param(
             f"{LICENCE_FOLDER}/slirp4netns-v1.3.6.tar.gz", "source archive", id="source-archive"
         ),
@@ -344,7 +347,7 @@ def test_a_missing_slirp4netns_build_reports_every_missing_piece_at_once(tree: F
 
     result = refused_assembly(tree)
 
-    for piece in (SLIRP_RELATIVE, "COPYING", "SOURCE.txt", "source archive"):
+    for piece in (SLIRP_RELATIVE, "COPYING", "SOURCE.txt", "LICENSE-LGPL-2.1", "source archive"):
         assert piece in result.stderr
     assert "fetch-slirp4netns.sh" in result.stderr
 

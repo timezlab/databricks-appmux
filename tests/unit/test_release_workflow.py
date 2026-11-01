@@ -361,6 +361,8 @@ def test_the_release_notes_name_the_pinned_slirp4netns_and_its_licence(tree: Pat
     notes = (tree / "release-notes.md").read_text(encoding="utf-8")
     assert "slirp4netns v9.8.7" in notes, "the version comes from the fetch script, not a copy"
     assert "GPL-2.0-or-later" in notes
+    assert "LGPL" in notes, "the notes name the LGPL libraries inside the binary"
+    assert "written offer" in notes.lower()
     assert "source" in notes.lower()
     assert "0015" in notes
     assert "v1.2.3" in notes

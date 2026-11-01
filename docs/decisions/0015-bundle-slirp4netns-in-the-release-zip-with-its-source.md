@@ -1,8 +1,8 @@
 # Bundle slirp4netns in the release zip with its source
 
-**Status:** proposed
-**Date:** 2026-10-30
-**Deciders:** Liam Lee (asked on 2026-10-30 for a release zip that deploys as unpacked, with no manual `slirp4netns` step; acceptance of the duty below is pending)
+**Status:** accepted
+**Date:** 2026-10-30 (proposed); accepted 2026-11-01
+**Deciders:** Liam Lee (asked on 2026-10-30 for a release zip that deploys as unpacked, with no manual `slirp4netns` step; on 2026-11-01 accepted the duty below and chose route 1 for the `LGPL` libraries)
 
 ## Context
 
@@ -33,18 +33,28 @@ The release zip contains the **unmodified upstream static `slirp4netns`
 binary** at `bin/slirp4netns` and, beside it under `licenses/slirp4netns/`, its
 `COPYING`, a `SOURCE.txt`, the upstream source archive of the same release,
 `LICENSE-parson`, the `libslirp` v4.9.5 source archive and its
-`LICENSE-libslirp` and `COPYRIGHT-libslirp`. `SOURCE.txt` names the release, the
-three upstream URLs and the three SHA-256 values (binary, `slirp4netns` archive,
-`libslirp` archive), and states that anyone who received the zip may obtain the
-source from the archives in it.
+`LICENSE-libslirp` and `COPYRIGHT-libslirp`, plus `LICENSE-LGPL-2.1`. `SOURCE.txt`
+names the release, the four upstream URLs and the four SHA-256 values (binary,
+`slirp4netns` archive, `libslirp` archive, the `LGPL-2.1` text), states that
+anyone who received the zip may obtain the source of `slirp4netns` and `libslirp`
+from the archives in it, and carries a **written offer** (LGPL-2.1 section 6c)
+for the three `LGPL` libraries in the binary: glibc, glib and libseccomp. The
+offer is valid for three years from the date a recipient received the zip, is
+for a charge no more than the cost of the distribution, and covers (1) the
+corresponding source of those libraries as built into the binary (the Ubuntu
+jammy source packages `glibc`, `glib2.0` and `libseccomp`) and (2) the
+`slirp4netns` and `libslirp` sources and the build recipe in the zip, so that a
+recipient can relink with a modified library. A recipient asks at the contact
+URL pinned in `scripts/fetch-slirp4netns.sh` and names the release tag.
 
 - The **repository still never holds the binary or its source**
   ([FR-054](../../specs/001-appmux-v1/spec.md)): `scripts/fetch-slirp4netns.sh`
-  downloads all three files into the git-ignored `build/slirp4netns/` and checks
+  downloads all four files into the git-ignored `build/slirp4netns/` and checks
   each against a SHA-256 pinned in the script. The binary's hash equals the
-  digest the GitHub release API reports; the two source-archive hashes are
-  trust-on-first-use (GitHub-generated tarballs are not guaranteed byte-stable,
-  so a changed hash means "re-pin after checking the tag", not "ignore").
+  digest the GitHub release API reports; the two source-archive hashes and the
+  `LGPL-2.1` text hash are trust-on-first-use (GitHub-generated tarballs are not
+  guaranteed byte-stable, so a changed hash means "re-pin after checking the
+  tag", not "ignore").
 - appmux still starts the program as its own process and does not link it, so
   appmux's own files stay Apache-2.0 and `LICENSE` stays as ADR 0013 says. The
   zip carries `LICENSE` too.
@@ -59,7 +69,12 @@ source from the archives in it.
 - **Two release assets, one with the binary and one without** — the fallback if
   the owner or counsel will not accept the duty for the main asset. It costs an
   operator decision and a second file to explain; nothing else in this design
-  changes.
+  changes. Not needed now that the duty is accepted.
+- **The three `LGPL` source packages inside the zip (no later duty)** — not
+  chosen on 2026-11-01 (the owner took the recommended route 1): it adds several
+  tens of MB to every release for libraries few recipients will ask about, and the
+  exact jammy package versions of the build snapshot have not been determined, so
+  pinning their hashes would first need that research.
 - **Download the binary at first start** — impossible where the container has
   no network, and a start-time download is a supply-chain path of its own.
 - **Bind `libslirp` from appmux (no GPL program)** — rejected: the glue that
@@ -79,10 +94,11 @@ source from the archives in it.
 - The project, and anyone who re-hosts the zip, redistributes a
   `GPL-2.0-or-later` program and owes its source with it.
 - The static binary embeds libraries with their own conditions. The `LGPL`
-  ones (glibc, glib, libseccomp) may require more than the program's own
-  source, and their corresponding source is the patched Ubuntu jammy packages,
-  not a GitHub tag. The script does not fetch it yet (see the owner decision
-  below).
+  ones (glibc, glib, libseccomp) require more than the program's own source,
+  and their corresponding source is the patched Ubuntu jammy packages, not a
+  GitHub tag. The zip does not carry it; it carries the written offer, so the
+  project owes that source on request for three years after each release, and
+  someone has to answer the request.
 - The zip grows by the binary and the source archive (their sizes are recorded
   the first time `fetch-slirp4netns.sh` runs).
 
@@ -92,17 +108,21 @@ source from the archives in it.
   status is not `accepted`.
 - The pinned release, the three URLs and the three SHA-256 values are constants
   in `scripts/fetch-slirp4netns.sh`; a mismatch deletes the download and fails.
-- Before the first release the owner has decided how the zip meets the `LGPL`
-  duty for glibc, glib and libseccomp, and the zip carries the result. The
-  options: (1) a written offer in `SOURCE.txt` that names the Ubuntu jammy
-  source packages `glibc`, `glib2.0` and `libseccomp` and is valid for three
-  years, with the LGPL-2.1 text; (2) the three source packages inside the zip
-  with pinned hashes, which carries no later duty and adds several tens of MB;
-  (3) the two-asset alternative. Whether an unpatched upstream tag counts as
-  "complete corresponding source" is a question for counsel; this ADR does not
-  answer it.
-- `assemble-deploy.sh` fails when `bin/slirp4netns`, `COPYING`, `SOURCE.txt` or
-  the source archive is missing from the assembled folder.
+- The zip meets the `LGPL` duty for glibc, glib and libseccomp by route 1 (chosen
+  by the owner on 2026-11-01): `LICENSE-LGPL-2.1` and the written offer in
+  `SOURCE.txt` are in `licenses/slirp4netns/`, and `scripts/fetch-slirp4netns.sh`
+  writes them. Whether an unpatched upstream tag counts as "complete
+  corresponding source" is a question for counsel; this ADR does not answer it,
+  and the offer names the Ubuntu packages, not a tag.
+- **Before the first release tag**, the contact URL in the offer
+  (`SOURCE_OFFER_CONTACT_URL` in `scripts/fetch-slirp4netns.sh`, today the issue
+  tracker of `timezlab/databricks-appmux`) is reachable by a recipient of the
+  zip, and stays so for three years after the last release that carried the
+  binary. The repository is private at the time of writing, which a recipient
+  cannot reach; making it public or changing the constant is the owner's call.
+  Nothing in the workflow can check this.
+- `assemble-deploy.sh` fails when `bin/slirp4netns`, `COPYING`, `SOURCE.txt`,
+  `LICENSE-LGPL-2.1` or the source archive is missing from the assembled folder.
 - No `slirp4netns` binary or source is committed (FR-054).
 
 ## Revisit if
