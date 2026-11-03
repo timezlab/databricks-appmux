@@ -44,8 +44,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { InboxIcon, LayoutGridIcon } from "lucide-react";
 
+import type * as Navigation from "next/navigation";
+
 import { AppLink } from "@/components/app-link";
 import { AppSidebar } from "@/components/app-sidebar";
+import { AppSwitcher } from "@/components/app-switcher";
 import { Button } from "@/components/button";
 import { CapacityStrip } from "@/components/capacity-strip";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -77,6 +80,8 @@ import {
 } from "@/components/skeletons";
 import { AppStateBadge, StatusBadge } from "@/components/status-badge";
 import { SubNav } from "@/components/sub-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { TopBar } from "@/components/top-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button as UiButton } from "@/components/ui/button";
@@ -169,6 +174,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import RootLayout from "@/app/layout";
+
+// The app switcher navigates through the app router, which only Next mounts;
+// the rest of next/navigation answers as it does outside Next.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof Navigation>()),
+  useRouter: () => ({ push: () => undefined }),
+}));
 
 const COMPONENTS_DIR = path.resolve(
   import.meta.dirname,
@@ -799,6 +811,9 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
   "live-region.tsx": () => <LiveRegion message="Saved sales" />,
   "loading.tsx": () => <Loading label="Loading apps" />,
   "main-nav.tsx": () => <MainNav />,
+  "theme-toggle.tsx": () => <ThemeToggle />,
+  "top-bar.tsx": () => <TopBar />,
+  "app-switcher.tsx": () => <AppSwitcher slug="sales" />,
   "capacity-strip.tsx": () => (
     <>
       <CapacityStrip
@@ -1030,8 +1045,18 @@ describe("the shared kit (src/components)", () => {
       </RootLayout>,
     );
     assert.ok(html.includes('href="#main"') && html.includes("<noscript>"));
+    assert.ok(html.includes("<header"), "the top bar is in the shell");
+    // Its one script is the theme file (ADR 0019): same-origin, so the CSP
+    // allows it with no hash, and blocking (no async, defer or type), so it
+    // runs before the first paint. Every other <script> is still refused.
+    const themeScript = '<script src="/_appmux/theme.js"></script>';
+    assert.equal(html.split(themeScript).length - 1, 1, html);
+    assert.ok(
+      html.indexOf(themeScript) < html.indexOf("<body"),
+      "the theme script is in <head>",
+    );
     // `<noscript>` holds the markup of its Notice as text in a DOM, so the
     // scan above also covers it.
-    assert.deepEqual(cspViolations(html), []);
+    assert.deepEqual(cspViolations(html.replace(themeScript, "")), []);
   });
 });

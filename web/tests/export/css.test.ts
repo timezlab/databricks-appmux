@@ -112,12 +112,14 @@ describe("the shipped stylesheets", () => {
     });
   }
 
-  it("one of them carries the theme, with the dark override", () => {
+  it("one of them carries the theme, with both dark overrides (the Dark choice, and System on a dark OS)", () => {
     const themed = CSS_FILES.map((file) => readFileSync(file, "utf8")).filter(
       (css) => css.includes("--background:"),
     );
     assert.equal(themed.length, 1, "exactly one stylesheet defines the tokens");
     assert.match(themed[0] ?? "", /prefers-color-scheme:\s*dark/);
+    assert.match(themed[0] ?? "", /\[data-theme=["']?dark["']?\]/);
+    assert.match(themed[0] ?? "", /:not\(\[data-theme=["']?light["']?\]\)/);
   });
 
   it("ship IBM Plex Sans and IBM Plex Mono", () => {

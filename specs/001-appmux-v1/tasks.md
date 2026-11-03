@@ -469,10 +469,10 @@ when its tests pass; the lane that writes a route writes its tests first.
 ### Foundation (lanes F0a, F0b, then F0c, before the page lanes)
 
 - [x] T196 [F0a] [ADR 0019](../../docs/decisions/0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md): tokens, radius scale, IBM Plex Sans and Mono self-hosted and measured under the reference CSP, the route strip and the lamp, `chrome-*` removed, the contrast test updated; every page still builds.
-- [ ] T197 [F0c] The theme switch (Light, Dark, System): `data-theme` set by a same-origin script in the head, no inline script, no flash; the dark variant and the contrast test follow `data-theme` and the OS.
+- [X] T197 [F0c] The theme switch (Light, Dark, System): `data-theme` set by a same-origin script in the head, no inline script, no flash; the dark variant and the contrast test follow `data-theme` and the OS.
 - [x] T198 [F0b] CSP-safe shadcn primitives: Popover, Select (on Popover and Command), DropdownMenu (`modal={false}`), Command and a combobox, Tabs, Tooltip, Collapsible, ToggleGroup; a sample of each in `tests/csp/rendered-markup.test.tsx` and each opened in Chromium under the reference CSP in `e2e/csp.spec.ts` with no violation; the native select kept only where its comment says why.
 - [x] T199 [F0a] Motion: the spinner, the starting lamp, the skeleton, menus and the bar between tabs behave as the table in the design doc for both values of `prefers-reduced-motion`; the blanket 0.01 ms rule is removed; an e2e test with each `reducedMotion` value asserts the running animations.
-- [ ] T200 [F0a, F0c] The shells: top bar with breadcrumb and app switcher, the sidebar (collapse, phone menu, one geometry for every bar), the inset panel, page header, skeleton parts, the `RouteStrip`, `Lamp`, `SectionPanel` and `CopyButton` components. (F0a done)
+- [X] T200 [F0a, F0c] The shells: top bar with breadcrumb and app switcher, the sidebar (collapse, phone menu, one geometry for every bar), the inset panel, page header, skeleton parts, the `RouteStrip`, `Lamp`, `SectionPanel` and `CopyButton` components.
 
 ### Pages (lanes F1 to F4, after F0, B1 to B4 for their routes)
 

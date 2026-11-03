@@ -80,6 +80,16 @@ export default tseslint.config(
       ],
     },
   },
+  // public/theme.js is a classic browser script the page loads as it is (no
+  // bundler, ADR 0019); tests/unit/theme-script.test.ts checks its behaviour.
+  { files: ["public/**/*.js"], ...tseslint.configs.disableTypeChecked },
+  {
+    files: ["public/**/*.js"],
+    languageOptions: {
+      sourceType: "script",
+      globals: { window: "readonly", document: "readonly" },
+    },
+  },
   // Config files are plain JavaScript and outside the TypeScript project.
   { files: ["**/*.mjs"], ...tseslint.configs.disableTypeChecked },
   {
