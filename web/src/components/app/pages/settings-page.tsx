@@ -11,10 +11,11 @@ import {
   dropCarriedOutcome,
   settingsAccess,
 } from "@/lib/app/settings";
-import type { SettingsPartAccess } from "@/lib/app/settings";
+import type { CarriedRefusal, SettingsPartAccess } from "@/lib/app/settings";
 import { pollData } from "@/lib/app/view";
 import { formatMegabytes } from "@/lib/format";
 import { Button } from "@/components/button";
+import { ErrorNotice } from "@/components/error-notice";
 import { LiveRegion } from "@/components/live-region";
 import { Notice } from "@/components/notice";
 import { RouteStrip } from "@/components/route-strip";
@@ -40,6 +41,21 @@ export function AppSettingsPage() {
   useEffect(() => {
     dropCarriedOutcome(path);
   }, [path]);
+  // The owner change sent with the rename may answer after this page is on screen.
+  const [followUpRefusal, setFollowUpRefusal] = useState<CarriedRefusal | null>(
+    null,
+  );
+  const followUp = arrival?.followUp;
+  useEffect(() => {
+    if (followUp === undefined) return;
+    let isCurrent = true;
+    void followUp.then((refusal) => {
+      if (isCurrent) setFollowUpRefusal(refusal);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [followUp]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -48,6 +64,13 @@ export function AppSettingsPage() {
         <Notice tone="success" title={arrival.title}>
           {arrival.detail === null ? null : <p>{arrival.detail}</p>}
         </Notice>
+      )}
+      {followUpRefusal === null ? null : (
+        <ErrorNotice
+          error={followUpRefusal.error}
+          context={followUpRefusal.context}
+          onReload={reloadAll}
+        />
       )}
       <Section title="Settings">
         {access.fields.kind === "edit" ? (
