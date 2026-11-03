@@ -12,12 +12,11 @@ import {
 import { usePoll } from "@/hooks/use-poll";
 import { listApps } from "@/lib/api/launcher";
 import type { AppList } from "@/lib/api";
-import { APP_SECTIONS, appPagePath } from "@/lib/app/params";
+import { appPagePath, appSectionAt } from "@/lib/app/params";
 import { appStatePresentation } from "@/lib/status-presentation";
 import { EmptyState } from "./empty-state";
 import { ErrorNotice } from "./error-notice";
 import { Lamp, lampStateOfTone } from "./lamp";
-import { isCurrentSubNavItem } from "./nav-items";
 import { RouteStrip } from "./route-strip";
 import { SkeletonLines } from "./skeletons";
 import { Button as UiButton } from "./ui/button";
@@ -36,18 +35,14 @@ const OPEN_LIST_POLL_INTERVAL_MS = 30_000;
 
 /**
  * The page of `targetSlug` that matches the one on screen: from an app's
- * Releases, the other app's Releases. A page with no twin (none today, but a
- * route may be added before its section is) leads to the other app's overview.
+ * Deployments, the other app's Deployments. A page that is no section leads to
+ * the other app's overview.
  */
 function samePageOf(
   pathname: string | null,
-  currentSlug: string,
   targetSlug: string,
 ): string | null {
-  const section = APP_SECTIONS.find((candidate) =>
-    isCurrentSubNavItem(pathname, appPagePath(currentSlug, candidate) ?? ""),
-  );
-  return appPagePath(targetSlug, section);
+  return appPagePath(targetSlug, appSectionAt(pathname) ?? undefined);
 }
 
 function AppRows({
@@ -123,7 +118,7 @@ export function AppSwitcher({ slug }: { slug: string }) {
   function choose(targetSlug: string) {
     setIsOpen(false);
     if (targetSlug === slug) return;
-    const target = samePageOf(pathname, slug, targetSlug);
+    const target = samePageOf(pathname, targetSlug);
     if (target !== null) router.push(target);
   }
 
