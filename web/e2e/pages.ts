@@ -67,6 +67,30 @@ async function typeThreeSettingsAndSave(page: Page): Promise<void> {
     .waitFor({ timeout: READY_TIMEOUT_MS });
 }
 
+/** The titles the dashboard's first charts take over 7 days: 3-hour columns. */
+const WEEK_CHART_TITLES = [
+  "Requests per 3 hours",
+  "Requests by app, per 3 hours",
+] as const;
+
+/**
+ * Presses 7d once the hour is drawn. The mock's default metrics stop at a day,
+ * as the API did before `step`, and a world of fixtures-f4.ts answers one window
+ * whatever the query, so the week's world is asked for from here on, not from
+ * the first call (the hour before it would get a week).
+ */
+async function pressSevenDays(page: Page): Promise<void> {
+  await page.setExtraHTTPHeaders({
+    "X-E2E-Scenario": "metrics-week" satisfies Scenario,
+  });
+  await page.getByRole("radio", { name: /^7d,/ }).click();
+  for (const title of WEEK_CHART_TITLES) {
+    await page
+      .getByRole("group", { name: title, exact: true })
+      .waitFor({ timeout: READY_TIMEOUT_MS });
+  }
+}
+
 /**
  * Every page of the export. The sub-pages of the app and of the platform are
  * routes of their own with their own inline scripts, so each is loaded, checked
@@ -145,7 +169,8 @@ export const PAGES: readonly PageEntry[] = [
     path: `${BASE_PATH}/app/insights/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
     heading: "Sales dashboard",
-    dataText: PLACEHOLDER_TEXT,
+    // A chart title: it appears when the app's metrics have points to draw.
+    dataText: "Requests per minute",
     apiCall: APP_API_CALL,
   },
   {
@@ -277,9 +302,22 @@ export const PAGES: readonly PageEntry[] = [
     path: `${BASE_PATH}/dashboard/`,
     status: 200,
     heading: "Dashboard",
-    // A chart title: it appears when the metrics answer has points to draw.
-    dataText: "Requests per minute",
+    // The breakdown's first chart title: it appears when the breakdown has
+    // points to draw (the platform's charts above it read the default rows).
+    dataText: "Requests by app, per minute",
     apiCall: `${API_PREFIX}/metrics`,
+    scenario: "breakdown-live",
+  },
+  {
+    name: "dashboard-7-days",
+    path: `${BASE_PATH}/dashboard/`,
+    status: 200,
+    heading: "Dashboard",
+    // The platform's first chart title, over the hour ("per minute") and then
+    // over the week ("per 3 hours").
+    dataText: "Requests per",
+    apiCall: `${API_PREFIX}/metrics`,
+    act: pressSevenDays,
   },
 ];
 

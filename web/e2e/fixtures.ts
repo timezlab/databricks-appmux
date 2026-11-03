@@ -13,6 +13,7 @@
  * each body is built from the contract's example, so it still parses with the
  * UI's own schemas.
  */
+import { F4_SCENARIOS, f4ScenarioAnswer, isF4Scenario } from "./fixtures-f4.ts";
 
 export const SCENARIO_HEADER = "x-e2e-scenario";
 
@@ -23,6 +24,7 @@ export const SCENARIOS = [
   "memory-warning",
   "memory-danger",
   "settings-one-fails",
+  ...F4_SCENARIOS,
 ] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 
@@ -229,6 +231,8 @@ export function scenarioAnswer(
     );
   }
   const route = `${method} ${pattern}`;
+  if (isF4Scenario(scenario))
+    return f4ScenarioAnswer(scenario, route, readExample);
   switch (scenario) {
     case "visitor":
       if (route === "GET /me") {
