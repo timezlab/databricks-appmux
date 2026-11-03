@@ -25,18 +25,29 @@ function ready(data: AppList): PollResult<AppList> {
   return { status: "ready", data, updatedAtMs: 0 };
 }
 
+interface RenderAppsOptions {
+  isPlatformAdmin?: boolean | null;
+  onReload?: () => void;
+  onRequestApp?: () => void;
+}
+
 function renderApps(
   apps: PollResult<AppList>,
-  { isPlatformAdmin = false, onReload = vi.fn() } = {},
+  {
+    isPlatformAdmin = false,
+    onReload = vi.fn(),
+    onRequestApp = vi.fn(),
+  }: RenderAppsOptions = {},
 ) {
   render(
     <AppsSection
       apps={apps}
       isPlatformAdmin={isPlatformAdmin}
       onReload={onReload}
+      onRequestApp={onRequestApp}
     />,
   );
-  return { onReload, user: userEvent.setup() };
+  return { onReload, onRequestApp, user: userEvent.setup() };
 }
 
 function rowOf(displayName: string): HTMLElement {
@@ -94,7 +105,17 @@ function manyApps(count: number): AppList {
 }
 
 describe("AppsSection", () => {
-  it("draws one table row per app with its name, slug and state", () => {
+  it("holds the list's place with a spoken status and skeleton rows while it loads", () => {
+    renderApps({ status: "loading" });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading apps");
+    expect(
+      document.querySelector('[data-skeleton="table"]'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("draws one table row per app with its name, slug, state and the person's level", () => {
     renderApps(ready(EXAMPLE_APPS));
 
     const table = screen.getByRole("table", { name: "Apps you can open" });
@@ -102,7 +123,8 @@ describe("AppsSection", () => {
       within(table)
         .getAllByRole("columnheader")
         .map((header) => header.textContent),
-    ).toEqual(["Name", "State", "Actions"]);
+    ).toEqual(["Name", "State", "Your level", "Actions"]);
+    expect(rowOf("Sales dashboard")).toHaveTextContent("Can manage");
     // The header row and one row per app.
     expect(within(table).getAllByRole("row")).toHaveLength(4);
     const docs = within(rowOf("Team docs"));
@@ -114,15 +136,16 @@ describe("AppsSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists the apps by name, whatever order the server sent them in", () => {
+  it("lists what needs attention first, then by name, whatever order the server sent", () => {
     renderApps(ready(EXAMPLE_APPS));
 
     const names = screen
       .getAllByRole("rowheader")
       .map((header) => header.textContent);
     expect(names).toEqual([
-      expect.stringMatching(/^Sales dashboard/),
+      // Stopped, so before the running ones.
       expect.stringMatching(/^Team docs/),
+      expect.stringMatching(/^Sales dashboard/),
       expect.stringMatching(/^Weekly reports/),
     ]);
   });
@@ -262,6 +285,31 @@ describe("AppsSection", () => {
       expect(screen.queryByRole("table")).toBeNull();
     },
   );
+
+  it("sends a platform admin with no app to the Platform's Apps page to register one", () => {
+    renderApps(ready({ items: [] }), { isPlatformAdmin: true });
+
+    expect(
+      screen.getByRole("link", { name: "Register an app" }),
+    ).toHaveAttribute("href", expect.stringMatching(/^\/platform\/apps\/?$/));
+    expect(screen.queryByRole("button", { name: "Request an app" })).toBeNull();
+  });
+
+  it("opens the request form for a person with no app", async () => {
+    const { onRequestApp, user } = renderApps(ready({ items: [] }), {
+      isPlatformAdmin: false,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Request an app" }));
+    expect(onRequestApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no next step while it is not known who the person is", () => {
+    renderApps(ready({ items: [] }), { isPlatformAdmin: null });
+
+    expect(screen.queryByRole("link", { name: "Register an app" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Request an app" })).toBeNull();
+  });
 
   it("offers a search only from APP_FILTER_MIN_COUNT apps, narrows the rows, and clears back", async () => {
     const { user } = renderApps(ready(manyApps(APP_FILTER_MIN_COUNT)));

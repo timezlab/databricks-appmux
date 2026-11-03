@@ -8,10 +8,27 @@
  */
 import type { AppState, AppSummary, OpenMode } from "@/lib/api";
 import { appPagePath } from "@/lib/app/params";
+import { permissionLabel } from "@/lib/app/sharing";
 import { appLink } from "@/lib/slug-link";
 
-/** Below this many apps a filter box is clutter; the contract bounds a list at about 100 apps. */
-export const APP_FILTER_MIN_COUNT = 8;
+/**
+ * A search box appears once there are more than ten apps: ten rows still fit
+ * on one screen and are read at a glance. The contract bounds a list at about
+ * 100 apps.
+ */
+export const APP_FILTER_MIN_COUNT = 11;
+
+/**
+ * The order of the states, what needs attention first: a crashed app, then
+ * one that is starting (a start can hang, as a Node.js app does in a small
+ * memory budget), then a stopped one, then the running ones.
+ */
+const ATTENTION_RANK: Readonly<Record<AppState, number>> = {
+  crashed: 0,
+  starting: 1,
+  stopped: 2,
+  running: 3,
+};
 
 /** "without token" is the default of design 9.1, so it comes first. */
 const OPEN_MODE_ORDER: readonly OpenMode[] = ["without_token", "as_user"];
@@ -55,6 +72,8 @@ export interface LauncherAppRow {
   slug: string;
   displayName: string;
   state: AppState;
+  /** The person's level on the app, in words ("Can manage"). */
+  levelLabel: string;
   open: AppOpenAction;
   /** The app page (T173), for `CAN_MANAGE` only; `null` otherwise or for an invalid slug. */
   manageHref: string | null;
@@ -83,21 +102,26 @@ const NAME_COLLATOR = new Intl.Collator("en", {
   numeric: true,
 });
 
-function compareByNameThenSlug(a: AppSummary, b: AppSummary): number {
+function compareByAttentionThenName(a: AppSummary, b: AppSummary): number {
   return (
+    ATTENTION_RANK[a.state] - ATTENTION_RANK[b.state] ||
     NAME_COLLATOR.compare(a.display_name, b.display_name) ||
     NAME_COLLATOR.compare(a.slug, b.slug)
   );
 }
 
-/** One row per app, sorted by display name (then slug): a person looks an app up by its name. */
+/**
+ * One row per app: what needs attention first (`ATTENTION_RANK`), then by
+ * display name (then slug), since a person looks an app up by its name.
+ */
 export function launcherAppRows(
   items: readonly AppSummary[],
 ): LauncherAppRow[] {
-  return items.toSorted(compareByNameThenSlug).map((app) => ({
+  return items.toSorted(compareByAttentionThenName).map((app) => ({
     slug: app.slug,
     displayName: app.display_name,
     state: app.state,
+    levelLabel: permissionLabel(app.permission),
     open: openAction(app),
     // `appPagePath` is the one builder of the app page's address (T173); it
     // returns null for a slug that fails the contract pattern.
