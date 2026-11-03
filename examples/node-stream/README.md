@@ -117,6 +117,10 @@ Then **Platform** > **Register an app**: Slug `stream`, Display name `Stream (No
 - `api/whoami` shows `x_forwarded_prefix: "/<slug>"` and `appmux_base_path: "/<slug>"`.
 - The access-token header reads **absent**, unless the admin delegated OBO and opened the app **as a
   user** ([../README.md](../README.md#obo-optional)).
-- Open the raw `events` URL and leave it: whether the edge ends a long-lived response early (its
-  limits are 120 s per request, 100 MB and 64 at once) is **not observed**. The stream ends by itself
-  after 15 seconds, well inside the time limit.
+- Open the raw `events` URL and leave it: how the edge treats a long-lived response is **not
+  observed**. By the code, its 120 s default (`request_timeout_s`) bounds each wait for the child, not
+  the whole response, so a stream that keeps sending is not cut by it; the 100 MB default
+  (`max_request_body_mb`) applies to request bodies only; and each open stream holds one of the
+  app's 64 places (`max_concurrent_requests`). The platform proxy in front of appmux ends any
+  request or stream at 300 s ([spike 8](../../specs/001-appmux-v1/spikes/README.md)). This stream
+  ends by itself after 15 seconds, far inside all of these.

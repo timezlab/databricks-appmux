@@ -276,8 +276,8 @@ rewrite of `Set-Cookie`, the `Location` rewrite, the WebSocket relay carrying St
 `X-Forwarded-Access-Token` header in either open mode, the health-gated swap with these apps, and
 every UI label above as rendered (they are quoted from the web source and the admin API contract).
 For `node-stream` also: Node 22 itself (it ran on v24.12.0 and uses no API newer than 22, which is a
-reading, not a run), the Server-Sent Events stream through the edge (its 120 second, 100 MB and 64
-concurrent limits, and any buffering), what happens to a stream that is open during an Update or a
+reading, not a run), the Server-Sent Events stream through the edge (the 120 second idle wait, the
+64 places per app that an open stream holds, and any buffering), what happens to a stream that is open during an Update or a
 Restart, and the release failing to start under a 512 MB budget (shown here only as a local `ulimit`).
 `import-dir`, Register, Update and the config call have not been run against a workspace. If
 something here disagrees with what you see, trust what you see and correct this file.
