@@ -130,7 +130,7 @@ describe("AppSidebar", () => {
 
 // Below 768 px the column is hidden (CSS) and one button stands in for it;
 // jsdom applies no CSS, so both are in the document here and the Chromium test
-// (e2e/sidebar-menu.spec.ts) checks which one shows at which width.
+// (e2e/shell.spec.ts) checks which one shows at which width.
 describe("AppSidebar, the phone menu", () => {
   function sectionButton(): HTMLElement {
     return screen.getByRole("button", { name: "Section: Requests" });
