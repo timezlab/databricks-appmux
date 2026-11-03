@@ -12,11 +12,12 @@
 import type { MetricsResponse } from "@/lib/api/schemas";
 import { clockLabel } from "./chart";
 import { buildFigures, shareText } from "./figures";
-import type { Figure } from "./figures";
+import type { Figure, PreviousWindow } from "./figures";
 import { PLATFORM_APP_SLUG } from "./scope";
 import type { DashboardScope } from "./scope";
 import {
   LATENCY_BUCKET_BOUNDS_MS,
+  MINUTE_MS,
   bucketRows,
   describeLatency,
   dropsByRule,
@@ -351,7 +352,7 @@ export function buildDashboardModel(
     kind: "series",
     figures: buildFigures({
       summary,
-      previous: previousSummary(options.previous ?? null, slug, stepMinutes),
+      previous: previousWindow(options.previous ?? null, slug, stepMinutes),
       buckets,
       isPlatform,
       span: options.span ?? "window",
@@ -362,19 +363,22 @@ export function buildDashboardModel(
   };
 }
 
-/** The summary of the window before, or `null` when it was not read or holds nothing usable. */
-function previousSummary(
+/** The window before with its length, or `null` when it was not read or has no usable window. */
+function previousWindow(
   response: MetricsResponse | null,
   slug: string,
   stepMinutes: number,
-): SeriesSummary | null {
+): PreviousWindow | null {
   if (response === null) return null;
   const domain = windowDomain(response.from, response.to);
   if (domain === null) return null;
   const rows = rowsInDomain(response.items, domain, stepMinutes).filter(
     (row) => row.app_slug === slug,
   );
-  return summarizeRows(rows, stepMinutes);
+  return {
+    summary: summarizeRows(rows, stepMinutes),
+    windowMinutes: (domain.endMs - domain.startMs) / MINUTE_MS,
+  };
 }
 
 /** Memory figures of the platform rows are the edge's own; an app's are its resident memory. */

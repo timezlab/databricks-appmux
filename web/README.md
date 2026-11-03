@@ -133,7 +133,8 @@ The dashboard (`/dashboard/`, the platform) and an app's Insights (`/app/insight
 and are one `MetricsPanel` (`src/components/dashboard/`, logic in `src/lib/dashboard/`): a range
 from 15 minutes to 7 days (a `ToggleGroup`) asked at the finest step that keeps the window within
 1440 steps (1 minute up to a day, 5 minutes for 3 days, 15 minutes for 7); the figures strip, each
-figure with a sparkline and the change against the previous window; the same requests and
+figure with a sparkline and the change against the previous window (shown only when that window
+holds rows for at least 90% of its minutes, `PREVIOUS_WINDOW_MIN_COVERAGE`); the same requests and
 response-time charts on both. The dashboard adds the breakdown by app (`GET /metrics/breakdown`,
 the 8 busiest apps plus "Other apps"). Each chart frame has its own loading, empty and failed
 state; charts read the colour scheme through `useColorScheme`. The platform view asks

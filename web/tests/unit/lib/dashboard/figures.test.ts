@@ -3,12 +3,14 @@ import { describe, it } from "vitest";
 
 import { MetricsRow } from "@/lib/api/schemas";
 import {
+  PREVIOUS_WINDOW_MIN_COVERAGE,
   buildFigures,
   countChange,
   latencyChange,
   latencyValue,
   sparklinePath,
 } from "@/lib/dashboard/figures";
+import type { PreviousWindow } from "@/lib/dashboard/figures";
 import {
   MINUTE_MS,
   bucketRows,
@@ -131,13 +133,46 @@ describe("sparklinePath", () => {
 describe("buildFigures", () => {
   const hour = windowDomain(isoAt(0), isoAt(60));
   assert.ok(hour !== null);
+  const HOUR_MINUTES = 60;
+
+  /** A minute the app ran through without a request: a row is still written. */
+  function quiet(offsetMinutes: number): MetricsRow {
+    return row(offsetMinutes, {
+      requests: 0,
+      r2xx: 0,
+      r3xx: 0,
+      r4xx: 0,
+      r5xx: 0,
+      upstream_errors: 0,
+      egress_dropped: 0,
+      lat_hist: Array.from({ length: 11 }, () => 0),
+    });
+  }
+
+  /** The hour before, holding a row for each of its first `minutes` minutes. */
+  function previousHour(
+    minutes: number,
+    overrides: Record<string, unknown> = {},
+  ): PreviousWindow {
+    const rows = Array.from({ length: minutes }, (_, offset) =>
+      row(offset - HOUR_MINUTES, overrides),
+    );
+    return { summary: summarizeRows(rows), windowMinutes: HOUR_MINUTES };
+  }
 
   it("gives every figure a number, a label, a sparkline per bucket and the change on the previous window", () => {
     const rows = [
       row(0, { requests: 100, r5xx: 2, rss_mb_max: 300, egress_dropped: 1 }),
       row(1, { requests: 50, r5xx: 0, rss_mb_max: 340, egress_dropped: 0 }),
     ];
-    const previous = summarizeRows([row(0, { requests: 300, r5xx: 1 })]);
+    // The hour before ran all its minutes; only its first one had requests.
+    const previous: PreviousWindow = {
+      summary: summarizeRows([
+        row(-60, { requests: 300, r5xx: 1 }),
+        ...Array.from({ length: 59 }, (_, offset) => quiet(offset - 59)),
+      ]),
+      windowMinutes: HOUR_MINUTES,
+    };
     const { buckets } = bucketRows(rows, hour);
     const figures = buildFigures({
       summary: summarizeRows(rows),
@@ -167,7 +202,7 @@ describe("buildFigures", () => {
   it("shows no change when the previous window had no data or was not read", () => {
     const rows = [row(0, { requests: 100 })];
     const { buckets } = bucketRows(rows, hour);
-    for (const previous of [null, summarizeRows([])]) {
+    for (const previous of [null, previousHour(0)]) {
       const figures = buildFigures({
         summary: summarizeRows(rows),
         previous,
@@ -177,6 +212,44 @@ describe("buildFigures", () => {
       });
       assert.ok(figures.every((figure) => figure.change === null));
     }
+  });
+
+  describe("a previous window that holds only part of its minutes", () => {
+    // Flat traffic: 10 requests every minute of both hours.
+    const rows = Array.from({ length: HOUR_MINUTES }, (_, offset) =>
+      row(offset, { requests: 10 }),
+    );
+    const { buckets } = bucketRows(rows, hour);
+    const figuresAgainst = (previous: PreviousWindow) =>
+      buildFigures({
+        summary: summarizeRows(rows),
+        previous,
+        buckets,
+        isPlatform: false,
+        span: "hour",
+      });
+
+    it("shows no change when it holds 10 of its 60 minutes (installed 70 minutes ago)", () => {
+      const figures = figuresAgainst(previousHour(10, { requests: 10 }));
+      assert.ok(figures.every((figure) => figure.change === null));
+    });
+
+    it("compares a whole window", () => {
+      const figures = figuresAgainst(previousHour(60, { requests: 10 }));
+      assert.equal(figures[0]?.change?.text, "Same as the previous hour");
+    });
+
+    it("compares from the required share of its minutes, and not one minute below it", () => {
+      const enough = Math.ceil(HOUR_MINUTES * PREVIOUS_WINDOW_MIN_COVERAGE);
+      assert.ok(
+        figuresAgainst(previousHour(enough, { requests: 10 }))[0]?.change !==
+          null,
+      );
+      assert.ok(
+        figuresAgainst(previousHour(enough - 1, { requests: 10 }))[0]
+          ?.change === null,
+      );
+    });
   });
 
   it("reads the platform's memory against its limit and adds the apps running", () => {
