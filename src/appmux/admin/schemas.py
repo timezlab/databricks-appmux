@@ -697,6 +697,34 @@ class ReleaseSourceFile(_Body):
     content: str
 
 
+WorkspaceMarker = Literal[
+    "app.yaml", "databricks.yml", "requirements.txt", "package.json", "pyproject.toml"
+]
+
+
+class WorkspaceRoot(_Body):
+    label: str
+    path: str
+
+
+class WorkspaceEntry(_Body):
+    name: str
+    path: str
+    kind: Literal["folder", "file"]
+
+
+class WorkspaceListing(_Body):
+    path: str | None
+    parent: str | None
+    roots: list[WorkspaceRoot]
+    entries: list[WorkspaceEntry]
+    truncated: bool
+    markers: list[WorkspaceMarker]
+    looks_like_app: bool
+    runtime_hint: Runtime | None
+    suggested_memory_mb: int | None
+
+
 class ConfigChangeResult(_Body):
     config_version: int
     release_no: int | None
@@ -730,6 +758,34 @@ class ResourceView(_Body):
         if (self.access_as is None) != (self.type == SECRET_TYPE):
             raise ValueError("access_as is null exactly for a secret")
         return self
+
+
+class ResourceTypeEntry(_Body):
+    type: str
+    label: str
+    description: str
+    permissions: list[str]
+    access_as: list[AccessAs]
+    target_hint: str
+    can_suggest: bool
+
+
+class ResourceTypeList(_Body):
+    items: list[ResourceTypeEntry]
+
+
+class ResourceSuggestion(_Body):
+    target: str
+    label: str
+    detail: str | None
+    permissions: list[str]
+
+
+class ResourceSuggestionList(_Body):
+    items: list[ResourceSuggestion]
+    truncated: bool
+    source: Literal["caller_token", "unavailable", "not_supported"]
+    note: str | None
 
 
 class AppGrant(_Body):

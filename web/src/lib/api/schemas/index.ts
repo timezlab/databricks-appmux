@@ -81,4 +81,16 @@ export {
   RequestRow,
   RequestList,
 } from "./requests.ts";
+export {
+  ResourceTypeEntry,
+  ResourceTypeList,
+  ResourceSuggestion,
+  ResourceSuggestionList,
+} from "./resources.ts";
 export { Principal, EnvEntry, EnvEntryRequest, ErrorBody } from "./shared.ts";
+export {
+  WorkspaceMarker,
+  WorkspaceRoot,
+  WorkspaceEntry,
+  WorkspaceListing,
+} from "./workspace.ts";

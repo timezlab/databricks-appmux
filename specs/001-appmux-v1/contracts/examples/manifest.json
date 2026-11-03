@@ -418,6 +418,27 @@
       "PUT /apps/{app}/egress"
     ]
   },
+  "WorkspaceListing": {
+    "file": "WorkspaceListing.json",
+    "direction": "response",
+    "routes": [
+      "GET /workspace/browse"
+    ]
+  },
+  "ResourceTypeList": {
+    "file": "ResourceTypeList.json",
+    "direction": "response",
+    "routes": [
+      "GET /resources/types"
+    ]
+  },
+  "ResourceSuggestionList": {
+    "file": "ResourceSuggestionList.json",
+    "direction": "response",
+    "routes": [
+      "GET /resources/suggestions"
+    ]
+  },
   "ReleaseUnchanged": {
     "file": "ReleaseUnchanged.json",
     "direction": "response",
