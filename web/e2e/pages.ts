@@ -67,6 +67,15 @@ async function typeThreeSettingsAndSave(page: Page): Promise<void> {
     .waitFor({ timeout: READY_TIMEOUT_MS });
 }
 
+/** Opens Browse beside the register form's source folder; the mock answers every folder with the example listing, a Node.js app. */
+async function openFolderBrowser(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Browse", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Browse the workspace" })
+    .getByText(/looks like a Node\.js app/)
+    .waitFor({ timeout: READY_TIMEOUT_MS });
+}
+
 /**
  * Every page of the export. The sub-pages of the app and of the platform are
  * routes of their own with their own inline scripts, so each is loaded, checked
@@ -273,6 +282,15 @@ export const PAGES: readonly PageEntry[] = [
     scenario: "settings-one-fails",
     act: typeThreeSettingsAndSave,
     isFailureShown: true,
+  },
+  {
+    name: "platform-apps-browse",
+    path: `${BASE_PATH}/platform/apps/`,
+    status: 200,
+    heading: "Platform",
+    dataText: "Register an app",
+    apiCall: PLATFORM_API_CALL,
+    act: openFolderBrowser,
   },
   {
     name: "dashboard",
