@@ -657,6 +657,45 @@ def test_a_refused_scope_is_unavailable_and_says_the_app_lacks_it(type_name: str
     assert_leaks_nothing(response)
 
 
+def refuse_with(message: str) -> Suggester:
+    suggester = Suggester()
+    suggester.workspace.answer_everything_with(
+        lambda request: httpx.Response(403, json={"error_code": "X", "message": message})
+    )
+    return suggester
+
+
+def test_the_note_names_the_scope_the_app_lacks_so_a_platform_admin_knows_what_to_add() -> None:
+    suggester = refuse_with("Invalid scope, required scopes: sql")
+
+    body = suggester.suggest("sql_warehouse").json()
+
+    assert body["source"] == "unavailable"
+    assert '"sql"' in body["note"]
+    assert "ask a platform admin to add it" in body["note"]
+
+
+@pytest.mark.parametrize("scope", ["secrets", "mlflow", "jobs", "unity-catalog"])
+def test_a_scope_no_app_can_declare_is_not_offered_to_a_platform_admin_to_add(scope: str) -> None:
+    suggester = refuse_with(f"Invalid scope, required scopes: {scope}")
+
+    body = suggester.suggest("sql_warehouse").json()
+
+    assert body["source"] == "unavailable"
+    assert f'"{scope}"' in body["note"]
+    assert "cannot be added" in body["note"]
+    assert "ask a platform admin" not in body["note"]
+
+
+def test_text_that_is_not_a_scope_name_is_never_echoed_in_the_note() -> None:
+    suggester = refuse_with("Invalid scope, required scopes: <script>alert(1)</script>")
+
+    response = suggester.suggest("sql_warehouse")
+
+    assert "<script>" not in response.text
+    assert "does not include the scope this needs" in response.json()["note"]
+
+
 @pytest.mark.parametrize(
     ("status", "words"),
     [

@@ -23,7 +23,7 @@ from appmux.admin.resource_suggestions import (
     resource_type_list,
     select_suggestions,
 )
-from appmux.admin.resources import send_with_token
+from appmux.admin.resources import missing_scope_names, send_with_token
 from appmux.admin.schemas import ResourceSuggestion
 from appmux.registry.resources import (
     ACCESS_AS_VALUES,
@@ -234,3 +234,35 @@ async def test_a_transport_failure_is_none_not_an_exception() -> None:
     response = await send_with_token(client, TOKEN, "GET", "/api/2.0/things", timeout_s=5.0)
 
     assert response is None
+
+
+# --- the scope a refusal names ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("message", "names"),
+    [
+        ("Invalid scope, required scopes: sql", ["sql"]),
+        ("Provided OAuth token does not have required scopes: unity-catalog", ["unity-catalog"]),
+        (
+            "Invalid scope, required scopes: files.files:read, catalog.tables:read",
+            ["files.files:read", "catalog.tables:read"],
+        ),
+        ("Invalid scope", []),  # it says so and names nothing
+        ("required scopes: <script>alert(1)</script>", []),  # not a scope name: never echoed
+        ("required scopes: " + "a" * 200, []),  # longer than any scope name
+        ("User does not have permission to list the thing", []),
+    ],
+)
+def test_the_scope_names_of_a_refusal_are_read_only_when_they_look_like_scope_names(
+    message: str, names: list[str]
+) -> None:
+    response = httpx.Response(403, json={"error_code": "X", "message": message})
+
+    assert missing_scope_names(response) == names
+
+
+def test_at_most_three_scope_names_are_read() -> None:
+    response = httpx.Response(403, json={"message": "required scopes: a1, b2, c3, d4, e5"})
+
+    assert missing_scope_names(response) == ["a1", "b2", "c3"]

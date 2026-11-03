@@ -39,7 +39,11 @@ from starlette.routing import Route
 
 from appmux.admin.api import AdminContext
 from appmux.admin.errors import BadRequest
-from appmux.admin.resources import names_a_missing_scope, send_with_token
+from appmux.admin.resources import (
+    missing_scope_names,
+    names_a_missing_scope,
+    send_with_token,
+)
 from appmux.admin.schemas import (
     AccessAs,
     ResourceSuggestion,
@@ -60,6 +64,19 @@ _EXPERIMENTS_PAGE_SIZE: Final = 1000  # below the 3000 the search takes
 _HTTP_UNAUTHORIZED: Final = 401
 _HTTP_NOT_FOUND: Final = 404
 _SCOPE_STATUSES: Final = frozenset({400, 403, 404})  # the statuses that may name a missing scope
+# Names `user_api_scopes` refuses (spikes 15 and 16, Free Edition, 2026-10-30): a platform admin
+# cannot add them, so the note must not send anyone to ask.
+_UNDECLARABLE_SCOPES: Final = frozenset(
+    {
+        "secrets",
+        "mlflow",
+        "jobs",
+        "access-management",
+        "workspace",
+        "unity-catalog",
+        "catalog.volumes",
+    }
+)
 _CONTROL_CATEGORY: Final = "Cc"
 _SHARED_SP: Final = "shared_sp"
 
@@ -273,12 +290,7 @@ def _refusal(response: httpx.Response, noun: str, missing_note: str | None) -> _
             "or type the target",
         )
     if status in _SCOPE_STATUSES and names_a_missing_scope(response):
-        return _NoItems(
-            "unavailable",
-            f"your Databricks session cannot list {noun}: the user authorization of the appmux App "
-            "does not include the scope this needs; ask a platform admin to add it, or type the "
-            "target",
-        )
+        return _NoItems("unavailable", _missing_scope_note(response, noun))
     if status == _HTTP_NOT_FOUND and missing_note is not None:
         return _NoItems("caller_token", missing_note)
     if status == httpx.codes.FORBIDDEN:
@@ -288,6 +300,30 @@ def _refusal(response: httpx.Response, noun: str, missing_note: str | None) -> _
     return _NoItems(
         "unavailable",
         f"Databricks answered {status} to the list of {noun}; try again, or type the target",
+    )
+
+
+def _missing_scope_note(response: httpx.Response, noun: str) -> str:
+    """Says which scope the App lacks when Databricks named one, and who can fix it."""
+    names = missing_scope_names(response)
+    cannot_list = f"your Databricks session cannot list {noun}"
+    if not names:
+        return (
+            f"{cannot_list}: the user authorization of the appmux App does not include the scope "
+            "this needs; ask a platform admin to add it, or type the target"
+        )
+    quoted = ", ".join(f'"{name}"' for name in names)
+    refused = [name for name in names if name in _UNDECLARABLE_SCOPES]
+    if refused:
+        return (
+            f'{cannot_list}: it needs the "{refused[0]}" scope, which cannot be added to the '
+            "user authorization of an App; type the target"
+        )
+    scope_words = "scope" if len(names) == 1 else "scopes"
+    return (
+        f"{cannot_list}: the user authorization of the appmux App does not include the {quoted} "
+        f"{scope_words}; ask a platform admin to add {'it' if len(names) == 1 else 'them'} and to "
+        "stop and start the App, or type the target"
     )
 
 

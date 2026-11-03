@@ -26,6 +26,7 @@ message, not in a log, not in an exception.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Final
@@ -77,6 +78,11 @@ STATEMENT_WAIT: Final = "50s"
 _REST_TIMEOUT_S: Final = 15.0
 _STATEMENT_TIMEOUT_S: Final = 60.0  # the 50 s wait plus room for the answer
 _MAX_READ_CHARS: Final = 4096
+# Databricks names the scope a call needs as ``required scopes: sql`` (spike 16). Only a string of
+# this shape is ever read out of that text, so nothing else the platform wrote is repeated.
+_REQUIRED_SCOPES_TEXT: Final = re.compile(r"required scopes?:\s*([^\n\"]{1,300})", re.IGNORECASE)
+_SCOPE_NAME: Final = re.compile(r"[a-z][a-z0-9_.:-]{0,63}")
+_MAX_SCOPE_NAMES: Final = 3
 _BUNDLE_SOURCE: Final = "databricks.yml"
 
 CHECK_UNAVAILABLE_MESSAGE: Final = (
@@ -258,6 +264,22 @@ def names_a_missing_scope(response: httpx.Response) -> bool:
     """Whether a refusal says the App lacks the OAuth scope, rather than that access is denied."""
     text = response.text[:_MAX_READ_CHARS].lower()
     return "required scope" in text or "invalid scope" in text
+
+
+def missing_scope_names(response: httpx.Response) -> list[str]:
+    """The scope names a refusal says it needs, or none when it names none that look like one.
+
+    The names are repeated to a person, so the whole list is dropped unless every entry is shaped
+    like a scope (lower-case letters, digits and ``_ . : -``): a sentence that happens to follow
+    ``required scopes:`` is never echoed.
+    """
+    match = _REQUIRED_SCOPES_TEXT.search(response.text[:_MAX_READ_CHARS])
+    if match is None:
+        return []
+    names = re.split(r"\s*,\s*", match.group(1).strip().rstrip("."))
+    if not all(_SCOPE_NAME.fullmatch(name) for name in names):
+        return []
+    return names[:_MAX_SCOPE_NAMES]
 
 
 def _statement_state(response: httpx.Response) -> str | None:
