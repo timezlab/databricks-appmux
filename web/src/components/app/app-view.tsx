@@ -46,11 +46,12 @@ export interface AppViewProps {
  * only wires them together. A write refreshes the app, the list and the
  * requests at once, so the page shows what the server now holds.
  *
- * Not on this page yet (design 7.3 lists them for the app page): the egress
- * rules (read-only), the health check, env entries, wheel sources and own-SP
- * keys, a release's build-log tail and detected warnings, and the app's
- * metrics. The page shows the delegation choices inside the request form only.
- * The T173 task text does not list them.
+ * Not on this page yet (design 7.3 lists them for the app page): the health
+ * check, a way to change env entries, wheel sources and own-SP keys (the
+ * Environment section shows what the child starts with, read-only), and a
+ * release's detected warnings. The egress rules (Security), a failed
+ * release's build-log tail and the app's metrics (Insights) are here. The
+ * page shows the delegation choices inside the request form only.
  */
 export function AppView({ slug, children }: AppViewProps) {
   const app = usePoll((signal) => getApp(slug, { signal }), {
