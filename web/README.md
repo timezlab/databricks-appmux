@@ -59,6 +59,18 @@ A new sub-page is a route, an entry in `e2e/pages.ts` and a sidebar or tab item;
 the screenshots then cover it. The earlier `/app/releases/` and `/app/sharing/` are gone: a static
 export has no redirects, so an old link there gets the 404 page.
 
+The dashboard (`/dashboard/`, the platform) and an app's Insights (`/app/insights/`) are built,
+and are one `MetricsPanel` (`src/components/dashboard/`, logic in `src/lib/dashboard/`): a range
+from 15 minutes to 7 days (a `ToggleGroup`) asked at the finest step that keeps the window within
+1440 steps (1 minute up to a day, 5 minutes for 3 days, 15 minutes for 7); the figures strip, each
+figure with a sparkline and the change against the previous window; the same requests and
+response-time charts on both. The dashboard adds the breakdown by app (`GET /metrics/breakdown`,
+the 8 busiest apps plus "Other apps"). Each chart frame has its own loading, empty and failed
+state; charts read the colour scheme through `useColorScheme`. The platform view asks
+`GET /metrics?app=_platform`, not `GET /metrics` without an app, whose answer mixes every app's
+rows. The e2e worlds `breakdown-live` and `metrics-week` (a busy hour and a week of eleven apps)
+are in `e2e/fixtures-f4.ts`.
+
 ## Writing a page
 
 - Pages live in `src/app/**/page.tsx`; a static export cannot prerender a slug
