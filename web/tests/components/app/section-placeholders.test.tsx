@@ -45,10 +45,7 @@ const PAGES: Readonly<Record<AppSection, ComponentType>> = {
 };
 
 /** The sections not built yet. Remove a section from here when its page replaces the placeholder. */
-const STILL_PLACEHOLDERS: readonly AppSection[] = [
-  "security",
-  "settings",
-];
+const STILL_PLACEHOLDERS: readonly AppSection[] = ["security", "settings"];
 
 const PLACEHOLDER_TEXT = "This section is being built.";
 
