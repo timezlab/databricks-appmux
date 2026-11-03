@@ -1,9 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { MainNav } from "@/components/main-nav";
 import { Notice } from "@/components/notice";
+import { TopBar } from "@/components/top-bar";
 import "./fonts.css";
 import "./globals.css";
 
@@ -12,22 +11,38 @@ export const metadata: Metadata = {
   description: "Admin UI of appmux: launch, register and operate child apps.",
 };
 
+// "light dark" stays true: System, the default, renders either, and an
+// explicit choice narrows `color-scheme` in globals.css.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   colorScheme: "light dark",
 };
 
+// `next.config.mjs` injects the build-time base path; the fallback serves the
+// tests, which render this layout outside Next.
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "/_appmux";
+
 /**
- * The document shell every page shares: skip link, top navigation, one
- * `<main>`. Pages render their content only and never their own `<main>`
- * (a second landmark would split the page for screen readers). The header and
+ * The document shell every page shares: the theme script, skip link, top bar,
+ * one `<main>`. Pages render their content only and never their own `<main>`
+ * (a second landmark would split the page for screen readers). The top bar and
  * the main landmark are server-rendered, so the page has structure before any
  * script runs; the pages themselves fill in after load.
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // public/theme.js writes `data-theme` on <html> before React hydrates, so
+    // the server HTML and the live element differ on that one attribute by
+    // design (ADR 0019). suppressHydrationWarning covers this element's own
+    // attributes only, not its children.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* A blocking classic script (no async, defer or module), so the
+            theme is on <html> before the first paint. A same-origin file, so
+            the CSP's script-src 'self' allows it without a hash. */}
+        <script src={`${BASE_PATH}/theme.js`} />
+      </head>
       <body>
         {/* Parked above the viewport until it takes focus. */}
         <a
@@ -36,21 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         >
           Skip to main content
         </a>
-        {/* The top bar is the page colour with one hairline under it; the wordmark is plain text, there is no logo. */}
-        <header className="border-b bg-background">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-x-6 px-4">
-            <Link
-              className="flex items-baseline gap-2 py-3 text-xl font-semibold tracking-heading text-foreground no-underline hover:no-underline"
-              href="/"
-            >
-              <span>appmux</span>
-              <span className="hidden text-xs font-normal tracking-normal text-muted-foreground sm:inline">
-                for Databricks Apps
-              </span>
-            </Link>
-            <MainNav />
-          </div>
-        </header>
+        <TopBar />
         {/* The page's top-level blocks (PageHeader, Sections, notices) sit in one column with one gap between them. */}
         <main
           id="main"

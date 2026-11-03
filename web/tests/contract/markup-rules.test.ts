@@ -4,7 +4,9 @@
  * (`script-src 'self'` plus hashes; spike 19 ran with `style-src 'self'`,
  * `connect-src 'self'`, `img-src 'self'`), and the pages show strings from the
  * API. So:
- *  - no inline style attribute, no inline script, no inline event-handler string;
+ *  - no inline style attribute, no inline script, no inline event-handler string
+ *    (the one script element is the layout's bodiless `<script src>` of
+ *    public/theme.js, ADR 0019);
  *  - no raw HTML sink (`dangerouslySetInnerHTML`, `innerHTML`, `document.write`);
  *  - no dynamic code (`eval`, `new Function`, a string given to a timer);
  *  - no `window.confirm`/`alert`/`prompt` (the two-step ConfirmButton replaces them);
@@ -19,7 +21,7 @@
  * The scan reads the syntax tree, so a comment or a string that names a rule is not a violation.
  */
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "vitest";
 
@@ -42,8 +44,14 @@ const SRC_DIR = path.resolve(import.meta.dirname, "../../src");
  * a request or build a URL as well).
  */
 const SCANNED_DIRS = ["app", "components", "hooks", "lib"];
-/** The one file that may render `<main>`. */
+/** The one file that may render `<main>`, and the theme script below. */
 const LAYOUT_FILE = "app/layout.tsx";
+/**
+ * The `src` of the one `<script>` the UI renders: the layout's blocking theme
+ * script (ADR 0019), a same-origin file, so `script-src 'self'` allows it. The
+ * element is exempt only in the layout, with no body and no other attribute.
+ */
+const THEME_SCRIPT_SRC = "`${BASE_PATH}/theme.js`";
 /** The one file that may call `fetch`: every request of the admin UI goes through it. */
 const CLIENT_FILE = "lib/api/client.ts";
 
@@ -185,6 +193,11 @@ const TRUSTED_EXPRESSIONS: readonly {
     file: "components/app-sidebar.tsx",
     text: "backHref",
     why: "a prop: the scan checks the backHref each caller passes to <AppSidebar>",
+  },
+  {
+    file: LAYOUT_FILE,
+    text: THEME_SCRIPT_SRC,
+    why: "the build-time base path of next.config.mjs (a literal path) and a file of public/; no API data reaches it",
   },
 ];
 
@@ -403,6 +416,24 @@ function urlProblem(
   );
 }
 
+/** `<script src={THEME_SCRIPT_SRC} />` exactly: self-closing, so it has no body, and no other attribute. */
+function isThemeScript(
+  element: ts.JsxOpeningLikeElement,
+  file: ts.SourceFile,
+): boolean {
+  if (!ts.isJsxSelfClosingElement(element)) return false;
+  const [only, ...others] = element.attributes.properties;
+  return (
+    others.length === 0 &&
+    only !== undefined &&
+    ts.isJsxAttribute(only) &&
+    only.name.getText(file) === "src" &&
+    only.initializer !== undefined &&
+    ts.isJsxExpression(only.initializer) &&
+    only.initializer.expression?.getText(file) === THEME_SCRIPT_SRC
+  );
+}
+
 function elementOf(attribute: ts.Node): ts.JsxOpeningLikeElement | null {
   const element = attribute.parent.parent;
   return ts.isJsxOpeningElement(element) || ts.isJsxSelfClosingElement(element)
@@ -479,7 +510,13 @@ function findViolations(
       ts.isJsxSelfClosingElement(node)
     ) {
       const tag = node.tagName.getText(file);
-      if (BANNED_ELEMENTS.has(tag)) report(node, `<${tag}> element`);
+      const isExemptThemeScript =
+        tag === "script" &&
+        options.relativePath === LAYOUT_FILE &&
+        isThemeScript(node, file);
+      if (BANNED_ELEMENTS.has(tag) && !isExemptThemeScript) {
+        report(node, `<${tag}> element`);
+      }
       if (tag === "main" && !mayRenderMain) {
         report(node, "<main> element outside the layout");
       }
@@ -767,6 +804,35 @@ describe("the guard itself (each rule is caught, nothing else is)", () => {
     );
   });
 
+  it("lets the theme <script src> through only in the layout, with no body and no other attribute", () => {
+    const themeScript = `const a = <script src={${THEME_SCRIPT_SRC}} />;`;
+    assert.deepEqual(
+      findViolations(themeScript, { relativePath: LAYOUT_FILE }),
+      [],
+    );
+    const elsewhere = findViolations(themeScript, {
+      relativePath: "app/page.tsx",
+    }).map((violation) => violation.rule);
+    assert.ok(elsewhere.includes("<script> element"), String(elsewhere));
+    for (const variant of [
+      `const a = <script src={${THEME_SCRIPT_SRC}}>run()</script>;`,
+      `const a = <script src={${THEME_SCRIPT_SRC}} async />;`,
+      `const a = <script src={${THEME_SCRIPT_SRC}} type="module" />;`,
+      `const a = <script src={${THEME_SCRIPT_SRC}} {...props} />;`,
+      "const a = <script src={`${BASE_PATH}/other.js`} />;",
+      `const a = <script src={url} />;`,
+      `const a = <script>run()</script>;`,
+    ]) {
+      const rules = findViolations(variant, {
+        relativePath: LAYOUT_FILE,
+      }).map((violation) => violation.rule);
+      assert.ok(
+        rules.includes("<script> element"),
+        `${variant}: ${rules.join(", ")}`,
+      );
+    }
+  });
+
   it("lets fetch() through only in the client, and no other request API", () => {
     const code = `void fetch("/_appmux/api/v1/me");`;
     assert.deepEqual(findViolations(code, { relativePath: CLIENT_FILE }), []);
@@ -1001,6 +1067,17 @@ describe("the sources of the reviewed expressions are safe", () => {
         JSON.stringify(hostile),
       );
     }
+  });
+
+  it("the theme script is the base path and a file of public/ (layout.tsx: `${BASE_PATH}/theme.js`)", () => {
+    const layout = readFileSync(path.join(SRC_DIR, LAYOUT_FILE), "utf8");
+    // The build sets NEXT_PUBLIC_BASE_PATH from next.config.mjs; the fallback is the same default.
+    assert.match(
+      layout,
+      /const BASE_PATH = process\.env\.NEXT_PUBLIC_BASE_PATH \?\? "\/_appmux";/,
+    );
+    assert.ok(isSafePathLiteral("/_appmux/theme.js"));
+    assert.ok(existsSync(path.join(SRC_DIR, "../public/theme.js")));
   });
 
   it("appLink gives a safe path for a slug and null for anything else", () => {
