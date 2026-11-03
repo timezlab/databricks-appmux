@@ -229,13 +229,15 @@ async def send_with_token(
     """One request to the workspace made with a person's token, or ``None`` if it got no answer.
 
     The attach check and the resource suggestions send a person's token through it. It is not the
-    only sender in the admin API: the folder browser and the Update go through
-    ``packages.store.WorkspaceHttpApi`` (``list_folder`` and the other workspace calls), and the
-    principal search through ``identity/directory.py``, each with its own request. This one sends
-    only the token in the one header that needs it, whatever other credential the client carries,
-    no redirect followed, and ``None`` instead of an exception from inside ``except`` because the
-    transport error's text is not ours to vouch for and this request carried a bearer token, so it
-    must not stay behind as the new error's ``__context__``.
+    only sender in the admin API: among others, the folder browser and the Update go through
+    ``packages.store.WorkspaceHttpApi`` (``list_folder`` and the other workspace calls), the
+    principal search through ``identity/directory.py``, and the groups an authorization decision
+    needs through ``identity/groups.py`` (``admin/authorizer.py`` asks ``groups_for``, which reads
+    SCIM ``/Me``), each with its own request. This one sends only the token in the one header that
+    needs it, whatever other credential the client carries, no redirect followed, and ``None``
+    instead of an exception from inside ``except`` because the transport error's text is not ours
+    to vouch for and this request carried a bearer token, so it must not stay behind as the new
+    error's ``__context__``.
     """
     try:
         return await client.request(

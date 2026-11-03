@@ -17,8 +17,9 @@ text never leaves the server.
 every series (``platform.view``). ``to`` defaults to now and ``from`` to an hour before ``to``.
 ``step`` is ``1m`` (the default: the stored minute rows as they are), ``5m``, ``15m`` or ``1h``,
 the minutes added up by the rules of ``registry/metric_steps.py``. The window is at most 7 days
-and at most ``MAX_METRIC_STEPS`` steps (its length divided by the step, rounded up); a longer one
-is ``400 window_too_long``, and the message names the smallest step that fits. The answer holds at
+and at most ``MAX_METRIC_STEPS`` steps, counted as the steps that hold a whole minute of it (a
+step the window cuts at either end counts); a longer one is ``400 window_too_long``, and the
+message names the smallest step that fits. The answer holds at
 most ``MAX_METRIC_ROWS`` rows: when the window would hold more, whole steps are dropped oldest
 first (so every series keeps the same span), ``from`` moves to the start of the oldest step kept
 and ``truncated`` is ``true``. The registry is asked for one row more than the cap; the extra row
@@ -37,7 +38,6 @@ A query that is not valid is ``400`` and the message names the parameter, never 
 
 from __future__ import annotations
 
-import math
 import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -63,7 +63,7 @@ from appmux.admin.schemas import (
 )
 from appmux.authz.actions import Action
 from appmux.registry.audit import AUDIT_ACTIONS, AuditEntry, SafeActor, SafeSlug
-from appmux.registry.metric_steps import BREAKDOWN_COLUMNS, MetricBreakdownRow
+from appmux.registry.metric_steps import BREAKDOWN_COLUMNS, MetricBreakdownRow, step_start
 from appmux.registry.models import PLATFORM_METRICS_SLUG, SLUG_PATTERN, AuditLogRow, MetricRow
 from appmux.registry.snapshot import RegistrySnapshot
 
@@ -78,6 +78,7 @@ METRIC_STEPS: Final[Mapping[MetricStep, timedelta]] = MappingProxyType(
     }
 )
 DEFAULT_METRIC_STEP: Final[MetricStep] = "1m"
+_MINUTE: Final = METRIC_STEPS[DEFAULT_METRIC_STEP]
 MAX_METRIC_STEPS: Final = 1440
 MAX_METRIC_WINDOW: Final = timedelta(days=7)
 DEFAULT_METRIC_WINDOW: Final = timedelta(hours=1)
@@ -173,22 +174,40 @@ def _step(request: Request) -> MetricStep:
     raise BadRequest(f"step must be one of {', '.join(METRIC_STEPS)}")
 
 
-def _step_count(span: timedelta, step: MetricStep) -> int:
-    return math.ceil(span / METRIC_STEPS[step])
+def _step_count(start: datetime, end: datetime, step: MetricStep) -> int:
+    """How many steps the window's rows fall in: the steps that hold a whole minute of it.
+
+    A minute is stored whole and read when ``start <= minute < end``, so a window that starts
+    inside a step holds that step too (review T205 R6), and one that starts or ends inside a
+    minute holds only its whole minutes.
+    """
+    length = METRIC_STEPS[step]
+    first = _whole_minute_from(start)
+    last = _whole_minute_from(end) - _MINUTE
+    if last < first:
+        return 0
+    return (step_start(last, length) - step_start(first, length)) // length + 1
+
+
+def _whole_minute_from(moment: datetime) -> datetime:
+    """The first whole minute at or after ``moment``."""
+    minute = step_start(moment, _MINUTE)
+    return minute if minute == moment else minute + _MINUTE
 
 
 def _require_window_fits(start: datetime, end: datetime, step: MetricStep) -> None:
     """Refuse a window of more than 7 days, or of more than ``MAX_METRIC_STEPS`` steps."""
-    span = end - start
-    if span > MAX_METRIC_WINDOW:
+    if end - start > MAX_METRIC_WINDOW:
         raise BadRequest(
             "the window is longer than 7 days, at every step; ask for a shorter one",
             code="window_too_long",
         )
-    if _step_count(span, step) <= MAX_METRIC_STEPS:
+    if _step_count(start, end, step) <= MAX_METRIC_STEPS:
         return
     # Within 7 days the longest step always fits, so there is a step to name.
-    fitting = next(name for name in METRIC_STEPS if _step_count(span, name) <= MAX_METRIC_STEPS)
+    fitting = next(
+        name for name in METRIC_STEPS if _step_count(start, end, name) <= MAX_METRIC_STEPS
+    )
     raise BadRequest(
         f"the window holds more than {MAX_METRIC_STEPS} steps of {step}; "
         f"ask with step={fitting} or for a shorter window",

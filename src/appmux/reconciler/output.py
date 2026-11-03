@@ -9,8 +9,10 @@ after the last ``seq`` it has, and clears its view when the instance changes.
 
 A line is masked before it is kept, never when it is read: the credential shapes of the audit log
 (``registry.audit.mask_credentials``) and whatever the caller adds for that start (the reconciler
-hides the child's own environment values). It also loses NUL characters and a trailing carriage
-return, and a line longer than ``MAX_LINE_CHARS`` is cut. Lines with the ``appmux`` stream are what
+hides the child's own environment values). Before that it loses its control characters but tab,
+line feed and an embedded carriage return (a trailing one goes too). A line longer than
+``MAX_LINE_CHARS`` is cut; one too long to mask whole is masked from its start only, and shows what
+masking it whole would show of it (``_masked_start``). Lines with the ``appmux`` stream are what
 appmux says about the app: ``started``, ``exited with code 1 after 2.3 s``, ``stopped by signal
 SIGKILL after 0.4 s``.
 
@@ -20,6 +22,7 @@ the book of rings follows the app: a rename moves its ring, a delete forgets it.
 
 from __future__ import annotations
 
+import re
 import secrets
 from collections import deque
 from collections.abc import Callable
@@ -35,8 +38,20 @@ OUTPUT_MAX_LINES: Final = 2000
 OUTPUT_MAX_BYTES: Final = 256 * 1024
 # A line longer than this is cut: one minified bundle printed whole would otherwise fill the ring.
 MAX_LINE_CHARS: Final = 4096
+# The longest credential shape a line cut before the masks still masks whole: a JSON web token,
+# the longest of them, is rarely over 4 KB.
+LONGEST_CREDENTIAL_CHARS: Final = 4096
 _CUT_MARK: Final = " ... (line cut)"
+# The control characters a line drops: C0 but tab, line feed (only appmux's own notes hold one) and
+# carriage return (a progress bar redraws itself with one), then DEL and C1. A browser draws them
+# as nothing, and text selected from Logs must not drive the terminal it is pasted into (T205 R7).
+_DROPPED_CONTROL_CHARACTERS: Final = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 _INSTANCE_BYTES: Final = 8
+
+
+def without_control_characters(text: str) -> str:
+    """``text`` without the control characters a line of output drops before it is masked."""
+    return _DROPPED_CONTROL_CHARACTERS.sub("", text)
 
 
 def _utc_now() -> datetime:
@@ -96,11 +111,16 @@ class OutputRing:
         self._instance: str | None = None
         self._last_exit: LastExit | None = None
 
-    def begin(self, *, mask: Callable[[str], str] = _unmasked) -> OutputWriter:
-        """A new start of the app: a new instance, and the writer of its lines."""
+    def begin(
+        self, *, mask: Callable[[str], str] = _unmasked, longest_hidden_chars: int = 0
+    ) -> OutputWriter:
+        """A new start of the app: a new instance, and the writer of its lines.
+
+        ``longest_hidden_chars`` is the length of the longest text ``mask`` replaces.
+        """
         instance = secrets.token_hex(_INSTANCE_BYTES)
         self._instance = instance
-        return OutputWriter(self, instance, mask)
+        return OutputWriter(self, instance, mask, longest_hidden_chars=longest_hidden_chars)
 
     def read(self, *, after: int, limit: int) -> OutputPage:
         """The newest ``limit`` lines after ``after``; ``dropped`` counts those it leaves out.
@@ -148,17 +168,47 @@ class OutputRing:
 class OutputWriter:
     """Writes the lines of one start into its app's ring, masked."""
 
-    def __init__(self, ring: OutputRing, instance: str, mask: Callable[[str], str]) -> None:
+    def __init__(
+        self,
+        ring: OutputRing,
+        instance: str,
+        mask: Callable[[str], str],
+        *,
+        longest_hidden_chars: int = 0,
+    ) -> None:
         self._ring = ring
         self._mask = mask
+        # How far past a cut a masked text can reach: a hidden value, or a credential shape.
+        self._reach = longest_hidden_chars + LONGEST_CREDENTIAL_CHARS
         self.instance = instance
 
     def add(self, stream: OutputStream, text: str) -> None:
-        cleaned = text.replace("\x00", "").removesuffix("\r")
-        masked = mask_credentials(self._mask(cleaned))
-        if len(masked) > MAX_LINE_CHARS:
-            masked = masked[:MAX_LINE_CHARS] + _CUT_MARK
+        cleaned = without_control_characters(text).removesuffix("\r")
+        if len(cleaned) > MAX_LINE_CHARS + 2 * self._reach:
+            masked = self._masked_start(cleaned) + _CUT_MARK
+        else:
+            masked = self._masked(cleaned)
+            if len(masked) > MAX_LINE_CHARS:
+                masked = masked[:MAX_LINE_CHARS] + _CUT_MARK
         self._ring._append(self.instance, stream, masked)
+
+    def _masked(self, text: str) -> str:
+        return mask_credentials(self._mask(text))
+
+    def _masked_start(self, line: str) -> str:
+        """The first ``MAX_LINE_CHARS`` of ``line`` masked whole, from no more than its start.
+
+        The masks run in the event loop every app shares, so a long line is not masked whole:
+        their time is bounded by this cut, not by what the child printed (review T205 R1). A
+        value or a credential shape the cut splits is not masked, and the masks may have removed
+        enough before it to bring it within what is kept. So the line is masked cut at two places
+        ``reach`` apart: what one cut splits is whole in the other, the two texts differ from
+        where it starts, and what they agree on is what masking the whole line gives. Fewer
+        characters are kept only when the masks removed more than ``reach`` of them.
+        """
+        shorter = self._masked(line[: MAX_LINE_CHARS + self._reach])[:MAX_LINE_CHARS]
+        longer = self._masked(line[: MAX_LINE_CHARS + 2 * self._reach])[:MAX_LINE_CHARS]
+        return _common_start(shorter, longer)
 
     def note(self, text: str) -> None:
         """A line appmux writes about the app."""
@@ -202,3 +252,11 @@ class OutputBook:
 
 def _size(text: str) -> int:
     return len(text.encode("utf-8"))
+
+
+def _common_start(first: str, second: str) -> str:
+    """The longest text both ``first`` and ``second`` start with."""
+    for index, (one, other) in enumerate(zip(first, second, strict=False)):
+        if one != other:
+            return first[:index]
+    return first[: len(second)]

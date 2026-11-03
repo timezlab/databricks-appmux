@@ -195,9 +195,10 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
   breadcrumb, starting at My folder and Shared; it marks a folder that looks like an app (it holds `app.yaml`,
   `requirements.txt` or `package.json`) and says what that means for memory (Node needs about 768 MB).
 - **Logs (point 4).** The Logs section: the last lines of the child's output, polled, with a stream mark,
-  pause, wrap and copy, and, for an app that stopped, the exit code and signal. Every copy button leaves out the
-  control characters other than tab, line feed and carriage return, so an ESC the child printed never reaches a
-  terminal it is pasted into.
+  pause, wrap and copy, and, for an app that stopped, the exit code and signal. The output ring stores no control
+  character other than tab and a carriage return inside a line (and the line feeds of a multi-line note of appmux's
+  own), so an ESC the child printed never reaches the page, nor a terminal a selection is pasted into. Every copy
+  button still leaves out the control characters other than tab, line feed and carriage return.
 - **Resources (point 6), the Databricks flow.** **Add resource** opens an inline panel (no modal: a modal dialog needs
   the scroll lock that the CSP refuses). Step by step, as in the console: choose the type from a menu with an icon and
   a one-line description each; choose the object from a searchable list of what the person can see (warehouses,

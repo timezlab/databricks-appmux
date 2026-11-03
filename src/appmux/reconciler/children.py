@@ -100,8 +100,9 @@ class RunningChild(Protocol):
 
         ``final`` (the child has ended) also returns a last line that has no newline. A line may
         hold anything the child printed, credentials included; the caller masks it, one line at a
-        time in the event loop, so a call returns no more lines than the app's output ring keeps:
-        what came faster is skipped and counted in an ``appmux`` line.
+        time in the event loop, so a call returns no more lines than the app's output ring keeps,
+        both streams and their notes together: what came faster is skipped and counted in an
+        ``appmux`` line before the lines of its stream.
         """
         ...
 

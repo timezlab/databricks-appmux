@@ -42,6 +42,7 @@ httpx[http2] \\
 --index-url https://user:hunter2@pypi.example.com/simple
 -r more.txt
 private @ https://token-in-url@example.com/private.whl
+arbitrary===https://deploy:secret@pypi.example.com/x
 """
 URL_CREDENTIAL: Final = "deploy:pass-in-the-url"
 # What npm or pnpm fetches from somewhere rather than resolves from a version: left out, name and
@@ -60,6 +61,10 @@ NOT_A_VERSION: Final = {
     "lib-by-dot": "./vendor/lib",
     "lib-by-home": "~/vendor/lib",
     "lib-by-root": "/srv/vendor/lib",
+    # npm reads a name ending in .tgz, .tar.gz or .tar, in any case, as a file next to package.json.
+    "lib-by-tarball": "lib-1.0.0.tgz",
+    "lib-by-tar-gz": "vendor.TAR.GZ",
+    "lib-by-tar": "lib.tar",
 }
 PACKAGE_JSON: Final = {
     "name": "front",
@@ -263,7 +268,7 @@ def test_the_packages_are_the_releases_the_wheels_and_the_platforms(env: Environ
     ]
     platform_rows = {p.name: p.version for p in packages if p.source == "platform"}
     assert platform_rows["pydantic"] == metadata.version("pydantic")
-    for leaked in ("hunter2", "token-in-url", "private", "more.txt"):
+    for leaked in ("hunter2", "token-in-url", "private", "more.txt", "arbitrary", "deploy:"):
         assert leaked not in reply.text
     for leaked in ("lib-by-", "pass-in-the-url", "git.example.com", "downloads.", "../"):
         assert leaked not in reply.text

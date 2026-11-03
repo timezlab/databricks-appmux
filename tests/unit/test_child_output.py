@@ -7,18 +7,28 @@ line is masked before it is kept: credential shapes and the child's own environm
 
 from __future__ import annotations
 
+import random
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
+from appmux.reconciler import output as output_module
 from appmux.reconciler.output import (
+    LONGEST_CREDENTIAL_CHARS,
+    MAX_LINE_CHARS,
     OUTPUT_MAX_BYTES,
     OUTPUT_MAX_LINES,
     OutputBook,
     OutputRing,
 )
+from appmux.registry.audit import mask_credentials
 
 START = datetime(2026, 11, 3, 9, 0, tzinfo=UTC)
 # Built at run time, so no credential-shaped literal sits in the source.
 TOKEN = "dapi" + "0a1b2c3d" * 4
+HIDDEN = "hidden-" + "v" * 33  # 40 characters, a value of the child's environment
+CUT_MARK = " ... (line cut)"
 
 
 class Ticks:
@@ -184,6 +194,128 @@ def test_a_nul_and_a_carriage_return_are_dropped_and_a_long_line_is_cut() -> Non
     assert first.text == "beforeafter"
     assert len(second.text) < 4200
     assert second.text.endswith("(line cut)")
+
+
+@pytest.mark.parametrize(
+    ("printed", "kept"),
+    [
+        pytest.param(
+            "\x1b[31mred\x1b[0m, a bell\x07 and a backspace\x08",
+            "[31mred[0m, a bell and a backspace",
+            id="C0",
+        ),
+        pytest.param("del\x7fete", "delete", id="DEL"),
+        pytest.param("next\x85line, \x9b31m", "nextline, 31m", id="C1"),
+    ],
+)
+def test_a_control_character_a_terminal_acts_on_is_dropped(printed: str, kept: str) -> None:
+    # A browser draws these as nothing, so the line reads the same; text selected and copied from
+    # Logs then cannot drive the terminal it is pasted into (review T205 R7).
+    output = ring()
+    output.begin().add("stdout", printed)
+
+    assert shown_line(output) == kept
+
+
+def test_a_tab_and_a_carriage_return_inside_a_line_are_kept() -> None:
+    # A progress bar redraws itself with a carriage return; only a trailing one goes.
+    output = ring()
+    writer = output.begin()
+    writer.add("stdout", "name\tvalue")
+    writer.add("stdout", "10%\r50%\r100%\r")
+
+    assert texts(output.read(after=0, limit=10).lines) == ["name\tvalue", "10%\r50%\r100%"]
+
+
+def test_a_token_broken_by_a_control_character_is_still_masked() -> None:
+    # The masks see the line as it is kept: a control character dropped after them would join a
+    # token they did not recognise.
+    output = ring()
+    output.begin().add("stdout", f"key {TOKEN[:12]}\x1b{TOKEN[12:]}")
+
+    assert TOKEN[8:] not in shown_line(output)
+    assert shown_line(output).startswith("key ")
+
+
+def hiding(value: str) -> Callable[[str], str]:
+    return lambda text: text.replace(value, "***")
+
+
+def shown_line(output: OutputRing) -> str:
+    (line,) = output.read(after=0, limit=10).lines
+    return line.text
+
+
+def test_the_masks_see_a_long_line_no_further_than_its_cut(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every line is masked in the event loop all apps share: what masking a line costs must be
+    # bounded by the cut, not by the length of what a child printed (review T205 R1).
+    seen: list[int] = []
+
+    def recorded(text: str) -> str:
+        seen.append(len(text))
+        return text
+
+    monkeypatch.setattr(output_module, "mask_credentials", recorded)
+    output = ring()
+    output.begin(mask=recorded, longest_hidden_chars=40).add("stdout", "x" * 200_000)
+
+    assert seen
+    assert max(seen) <= MAX_LINE_CHARS + 2 * (40 + LONGEST_CREDENTIAL_CHARS)
+    assert shown_line(output) == "x" * MAX_LINE_CHARS + CUT_MARK
+
+
+def test_a_hidden_value_across_the_cut_of_a_long_line_is_still_masked() -> None:
+    output = ring()
+    writer = output.begin(mask=hiding(HIDDEN), longest_hidden_chars=len(HIDDEN))
+
+    writer.add("stdout", "x" * (MAX_LINE_CHARS - 10) + HIDDEN + "y" * 100_000)
+
+    assert shown_line(output) == "x" * (MAX_LINE_CHARS - 10) + "***" + "y" * 7 + CUT_MARK
+
+
+def test_a_value_split_where_the_masks_stop_is_not_shown_when_they_shortened_the_line() -> None:
+    # A dump of the environment: the masks remove most of the line, which brings the place where
+    # they stopped reading, and the part of a value cut there, within what the ring keeps.
+    line = (HIDDEN + " ") * 1000
+    output = ring()
+    writer = output.begin(mask=hiding(HIDDEN), longest_hidden_chars=len(HIDDEN))
+
+    writer.add("stdout", line)
+
+    shown = shown_line(output)
+    assert "hidden" not in shown
+    assert "vvvvvvvv" not in shown
+    head = shown.removesuffix(CUT_MARK)
+    assert hiding(HIDDEN)(line).startswith(head)
+    assert "***" in head  # what the masks left is still shown
+
+
+def test_a_token_split_where_the_masks_stop_is_not_shown() -> None:
+    line = (TOKEN + " ") * 1000
+    output = ring()
+
+    output.begin().add("stdout", line)
+
+    shown = shown_line(output)
+    assert "dapi" not in shown
+    assert mask_credentials(line).startswith(shown.removesuffix(CUT_MARK))
+
+
+def test_a_long_line_shows_only_what_masking_it_whole_would_show() -> None:
+    # Lines too long to mask whole, made of hidden values, tokens, named secrets and filler in a
+    # fixed random order: what the ring shows is always the start of the whole line masked.
+    pieces = [HIDDEN, TOKEN, "token=" + "hunter2" * 3, "x" * 37, " ", "ab", "\t", "="]
+    hide = hiding(HIDDEN)
+    pick = random.Random(20261103)  # noqa: S311 - a fixed seed picks test lines, not a secret
+    for _ in range(40):
+        line = "".join(pick.choice(pieces) for _ in range(pick.randint(1_200, 3_000)))
+        output = ring()
+        output.begin(mask=hide, longest_hidden_chars=len(HIDDEN)).add("stdout", line)
+
+        shown = shown_line(output)
+        whole = mask_credentials(hide(line))
+        assert shown.endswith(CUT_MARK)
+        assert whole[:MAX_LINE_CHARS].startswith(shown.removesuffix(CUT_MARK))
 
 
 def test_the_tail_of_one_start_holds_its_own_output_and_no_appmux_lines() -> None:
