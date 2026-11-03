@@ -5,6 +5,7 @@ import { useId, useRef, useState } from "react";
 
 import { getMe, listApps, listRequests } from "@/lib/api";
 import type { RequestRow } from "@/lib/api";
+import { mayBrowseWorkspace } from "@/lib/folder-browser";
 import {
   ME_POLL_INTERVAL_MS,
   accessBlockingError,
@@ -138,6 +139,10 @@ export function Launcher() {
           <Section title="Request a new app">
             <RegisterForm
               context={registerFormContext(apps, ownSection)}
+              canBrowseWorkspace={mayBrowseWorkspace(
+                meData,
+                pollData(apps)?.items ?? null,
+              )}
               onSent={handleSent}
               onCancel={closeForm}
               onReload={refreshAll}
