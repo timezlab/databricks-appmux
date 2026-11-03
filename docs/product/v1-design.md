@@ -675,6 +675,8 @@ All checks go through `authorize(actor, action, app)`, driven by a table and uni
 | `app.view_as_user` | platform admin, with no grant on an OBO-delegated app | switches the admin's way of opening that app to "as a user"; writes an audit row; the token reaches the app until the admin switches back |
 | view an app's page: status, releases, Requirements, build-log tail, metrics | `CAN_MANAGE` on the app | a platform admin included |
 | `release.view_source` | `CAN_MANAGE` on the app | the read-only viewer of a release's snapshot files (text files only); each view writes an audit row; this is how a platform admin reads any app's source |
+| `app.view_logs` | `CAN_MANAGE` on the app | the app's recent output from an in-memory ring, masked as the build-log tail; the first read by an actor in 10 minutes writes an audit row |
+| `app.view_environment` | `CAN_MANAGE` on the app | the runtime versions, variables and packages the app is started with; a secret's value is never shown; no audit row |
 | `app.update`, `release.activate`, `app.restart`, `app.stop`, `app.start` | `CAN_MANAGE` on the app | `app.update` and the wheel fetch use the presser's own token |
 | `release.label`, `release.tag`, `release.untag` | `CAN_MANAGE` on the app | labels only; they protect nothing |
 | `release.lock`, `release.unlock` | `CAN_MANAGE` on the app | `release.lock` is refused once the app already holds `max_locked_releases` locks |

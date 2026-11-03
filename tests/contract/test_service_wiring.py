@@ -201,7 +201,14 @@ async def test_the_edge_is_given_the_parts_of_the_release_flow_the_resources_and
     task = await start_like_serve(monkeypatch, managed_registry(doubles.log), Gate())
 
     # `test_edge_wiring.py` pins that each of these mounts its routes; here: that they are passed.
-    for part in ("release_updater", "attach_checker", "source_store", "open_mode_cookies"):
+    for part in (
+        "release_updater",
+        "attach_checker",
+        "source_store",
+        "open_mode_cookies",
+        "app_output",
+        "child_setup",
+    ):
         assert given_to_edge[part] is not None, part
     await entry.stop_background(task)
 

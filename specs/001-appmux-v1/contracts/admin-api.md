@@ -797,7 +797,7 @@ rest of the contract. A lane that finds a detail below wrong changes this sectio
 |---|---|---|---|
 | `GET /principals?q=&types=&limit=` | `principal.search`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `PrincipalList` | suggestions for the Sharing form. `q` is at most 64 characters of `A-Z a-z 0-9 space . _ @ + -` (anything else is `400`, because the text goes into a SCIM filter); `types` is a comma list of `user`, `group`, `service_principal`, `everyone` (default all); `limit` 1 to 50 (default 10). An empty `q` returns only the `everyone` row. Each directory is read with the person's token first and the platform's service-principal token when that is refused; a directory that neither can read is named `unavailable` in `sources` and the UI keeps free typing. `403` `user_token_missing` is not raised: the fallback exists for that |
 | `GET /workspace/browse?path=` | `workspace.browse`: any visitor with a token | `WorkspaceListing` | the sub-folders and files of one workspace folder, read with the person's token (scope `workspace.workspace:read`). No `path` returns the roots (`My folder`, `Shared`). `400` for a path that does not start with `/Workspace/`, holds `..`, a control character or more than 512 characters; `404` `not_found`; `403` `no_access`; `503` `workspace_unavailable`. At most 200 entries, folders first, then by name (`truncated`). Writes nothing and records nothing |
-| `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500). Lines pass the same credential masking as `build_log_tail`. Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content) |
+| `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500); the newest `limit` lines after `after` are returned, and an `after` beyond the newest `seq` (a cursor from before appmux restarted) reads from the start. A value that is not a whole number in range is `400`. Lines pass the same credential masking as `build_log_tail`, when they are written. Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content); that memory is per process, and a read whose row cannot be written answers `503` |
 | `GET /apps/{app}/environment` | `app.view_environment`: `CAN_MANAGE` on the app | `AppEnvironment` | what the app is started with: runtime versions, variables and packages (see schema). A value that belongs to a `secret` resource is never returned (`is_secret` is `true`, `value` is `null`) |
 | `GET /resources/types` | `resource.attach` on at least one app, or a platform admin | `ResourceTypeList` | the resource catalogue of [data model 4.7](../../../docs/product/v1-data-model.md#47-app_resources) with a label, the permission levels and the access modes of each type, so the UI holds no copy of it |
 | `GET /resources/suggestions?type=&q=&limit=` | the same | `ResourceSuggestionList` | objects of one type the person can see, read with their token: SQL warehouses, serving endpoints, secret scopes (and, for `q` of the form `scope/`, the keys of a scope; never values), MLflow experiments, jobs. A type with no safe list call answers `items: []` and `source: "not_supported"`. `limit` 1 to 50 (default 20); `400` `unknown_type` |
@@ -858,21 +858,21 @@ the e-mail of a user whose display name is shown, the application id of a servic
 
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
-| `state` | string | always | The app's state as in `AppStateResponse`, or `never_started` |
+| `state` | string | always | The app's state as in `AppStateResponse`, or `never_started` when appmux has not started the app since appmux itself started (then `instance` is `null`, `lines` is `[]` and `last_exit` is `null`) |
 | `instance` | string or null | always | Changes at every start; the client clears its view when it changes |
 | `lines` | array<{seq, at, stream, text}> | always | Oldest first; `seq` rises by one; `stream` is `stdout`, `stderr` or `appmux` (a line appmux wrote about the app: started, exited with code) |
 | `next_after` | integer | always | The `seq` to send as `after` next time |
-| `dropped` | integer | always | Lines after `after` that the ring no longer holds |
+| `dropped` | integer | always | Lines after `after` that are not in `lines`: the ring no longer holds them, or `limit` left them out |
 | `last_exit` | object or null | always | `code`, `signal`, `at`, `ran_for_s` of the last end of a process, or `null` |
 
 #### AppEnvironment
 
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
-| `release` | integer or null | always | The active release the figures describe |
+| `release` | integer or null | always | The active release the figures describe; with `null` (no active release), `variables` and `packages` are `[]` |
 | `runtime` | object | always | `kind` (`python`, `node`, `unknown`), `python_version`, `node_version` (strings or null) |
-| `variables` | array<{name, value, source, resource_key, is_secret}> | always | `source` is `config` (the release's env entries), `resource` (a `valueFrom`, shown by its key) or `platform` (set for every child: port, host, root path); `value` is `null` for a secret |
-| `packages` | array<{name, version, source}> | always | `source` is `release` (declared by `requirements.txt` or `package.json`), `wheel` (resolved for this release) or `platform` (provided by the platform's own environment) |
+| `variables` | array<{name, value, source, resource_key, is_secret}> | always | `source` is `config` (the release's env entries), `resource` (a `valueFrom`, shown by its key) or `platform` (set for every child: port, host, root path); a later layer replaces an earlier entry of the same name, as at start. `value` is `null` for a secret and for a resource key the app does not have; any other resource shows its target. The credential variables of a delegated app (design 8.5) are not listed |
+| `packages` | array<{name, version, source}> | always | `source` is `release` (declared by `requirements.txt` or by the `dependencies` and `devDependencies` of `package.json`; `version` is the specifier or range as written; a URL, path, option or `-r` line is left out, never echoed; a release this appmux process has not built lists none), `wheel` (resolved for this release, exact version) or `platform` (the distributions of the platform's Python environment, listed for a Python app only) |
 
 #### ResourceTypeList and ResourceSuggestionList
 

@@ -9,6 +9,8 @@ unknown path) when it is not given:
   page;
 * ``attach_checker`` -> the requirements and the attach and detach routes;
 * ``source_store`` -> the read-only source viewer;
+* ``app_output`` -> ``GET /apps/{app}/logs``;
+* ``child_setup`` -> ``GET /apps/{app}/environment``;
 * ``open_mode_cookies`` -> ``POST /apps/{app}/open-mode`` writes the cookie *and* the pipeline reads
   that same cookie to decide whether a child receives an admin's token (one key, one instance);
 * ``bootstrap_admins`` is read once and shared: a one-shot iterable still reaches the authorizer
@@ -43,9 +45,13 @@ from edge_harness import (
 from pydantic import SecretStr
 from stub_registry import StubRegistry
 
+from appmux.admin.environment import ChildSetup
 from appmux.edge.app import create_edge_app
 from appmux.edge.open_mode import OpenModeCookies
 from appmux.identity.actor import Actor
+from appmux.reconciler.app_control import RunState
+from appmux.reconciler.child_env import PlatformIdentity
+from appmux.reconciler.output import OutputRing
 from appmux.reconciler.ports import ChangeWriter, UpdateResult
 from appmux.reconciler.route_table import Route, RouteTable
 from appmux.registry.protocol import Change
@@ -220,6 +226,55 @@ async def test_without_a_snapshot_store_the_edge_has_no_source_viewer() -> None:
     reply = await get(app, "/apps/sales/releases/7/source", DANA)
 
     assert reply.status == 404
+
+
+# --- the logs and the environment of an app -------------------------------------------------------
+
+
+class OneRing:
+    def __init__(self) -> None:
+        self.ring = OutputRing()
+        self.ring.begin().add("stdout", "listening")
+
+    def run_state(self, slug: str, desired_state: str) -> RunState:
+        return "running"
+
+    def output(self, slug: str) -> OutputRing | None:
+        return self.ring
+
+
+async def test_the_logs_and_the_environment_are_served_when_their_parts_are_given(
+    tmp_path: Path,
+) -> None:
+    setup = ChildSetup(
+        platform=PlatformIdentity(
+            workspace_host="https://workspace.example.com",
+            workspace_id="1",
+            parent_url="https://appmux.example.com",
+        ),
+        releases_dir=tmp_path,
+    )
+    app = create_edge_app(
+        registry=registry_with_release_seven(),
+        group_source=FakeGroups(),
+        app_output=OneRing(),
+        child_setup=setup,
+    )
+
+    logs = await get(app, "/apps/sales/logs", DANA)
+    environment = await get(app, "/apps/sales/environment", DANA)
+
+    assert logs.status == 200
+    assert [line["text"] for line in logs.json()["lines"]] == ["listening"]
+    assert environment.status == 200
+    assert environment.json()["release"] == 7
+
+
+async def test_without_their_parts_the_edge_has_no_logs_and_no_environment() -> None:
+    app = create_edge_app(registry=registry_with_release_seven(), group_source=FakeGroups())
+
+    for path in ("/apps/sales/logs", "/apps/sales/environment"):
+        assert (await get(app, path, DANA)).status == 404, path
 
 
 # --- Open as a user: one cookie key for the route and the pipeline ----------------------------

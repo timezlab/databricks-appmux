@@ -383,6 +383,11 @@ CLOSED_LIST_FIELDS: Final[tuple[tuple[str, tuple[str | int, ...]], ...]] = (
     ("PlatformView", ("admins", 0, "type")),
     ("AdminList", ("items", 0, "type")),
     ("EgressRules", ("items", 0, "action")),
+    ("AppLogs", ("state",)),
+    ("AppLogs", ("lines", 0, "stream")),
+    ("AppEnvironment", ("runtime", "kind")),
+    ("AppEnvironment", ("variables", 0, "source")),
+    ("AppEnvironment", ("packages", 0, "source")),
 )
 
 

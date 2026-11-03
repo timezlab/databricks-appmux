@@ -39,6 +39,7 @@ from pydantic import SecretStr
 from service_harness import (
     CONTAINER_IP,
     RECORDED_LEDGER,
+    RECORDED_RING,
     Closer,
     RecordingReconciler,
     Workspace,
@@ -206,6 +207,26 @@ async def test_the_memory_books_are_the_reconcilers_and_unknown_before_it_runs(
     await service.start_children(seeded_registry())
 
     assert service.memory_ledger() == RECORDED_LEDGER
+
+
+async def test_the_output_rings_are_the_reconcilers_and_none_before_it_runs(
+    tmp_path: Path,
+) -> None:
+    service = make_service(tmp_path)
+    assert service.output("sales") is None
+
+    await service.start_children(seeded_registry())
+
+    assert service.output("sales") is RECORDED_RING
+    (reconciler,) = RecordingReconciler.instances
+    assert ("output", "sales") in reconciler.calls
+
+
+def test_the_environment_route_reads_the_releases_the_builder_writes(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+
+    assert service.child_setup.releases_dir == tmp_path / assembly.RELEASES_DIR_NAME
+    assert service.child_setup.platform == assembly.platform_identity(environment())
 
 
 # --- packages: the overlay builder and the Update's resolution ------------------------------

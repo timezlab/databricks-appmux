@@ -1,0 +1,32 @@
+{
+  "state": "crashed",
+  "instance": "9f2c4e1a7b3d5f60",
+  "lines": [
+    {
+      "seq": 41,
+      "at": "2026-11-03T09:14:00Z",
+      "stream": "appmux",
+      "text": "started"
+    },
+    {
+      "seq": 42,
+      "at": "2026-11-03T09:14:01Z",
+      "stream": "stderr",
+      "text": "Traceback (most recent call last):"
+    },
+    {
+      "seq": 43,
+      "at": "2026-11-03T09:14:01Z",
+      "stream": "appmux",
+      "text": "exited with code 1 after 2.3 s"
+    }
+  ],
+  "next_after": 43,
+  "dropped": 0,
+  "last_exit": {
+    "code": 1,
+    "signal": null,
+    "at": "2026-11-03T09:14:01Z",
+    "ran_for_s": 2.3
+  }
+}

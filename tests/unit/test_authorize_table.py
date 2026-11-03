@@ -120,6 +120,8 @@ ROWS: dict[Action, frozenset[Kind]] = {
     Action.APP_OPEN: CAN_OPEN,
     Action.APP_VIEW: CAN_MANAGE,
     Action.APP_VIEW_AS_USER: PLATFORM_ONLY,  # `sales` is OBO and Dana has no grant on it
+    Action.APP_VIEW_LOGS: CAN_MANAGE,
+    Action.APP_VIEW_ENVIRONMENT: CAN_MANAGE,
     Action.APP_UPDATE: CAN_MANAGE,
     Action.APP_RESTART: CAN_MANAGE,
     Action.APP_STOP: CAN_MANAGE,

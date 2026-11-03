@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING, Final, Protocol
 
 from pydantic import SecretStr
 
+from appmux.admin.environment import ChildSetup
 from appmux.admin.identity import state_from_desired
 from appmux.admin.platform import EGRESS_GLOBAL_KEY
 from appmux.admin.resources import DatabricksAttachChecker
@@ -68,6 +69,7 @@ from appmux.reconciler.child_env import EnvironmentRefused, PlatformIdentity, Re
 from appmux.reconciler.children import ChildStartError
 from appmux.reconciler.clock import SystemClock
 from appmux.reconciler.health import UnixSocketHealthProbe
+from appmux.reconciler.output import OutputRing
 from appmux.reconciler.reconciler import Reconciler
 from appmux.reconciler.route_table import RouteTable
 from appmux.reconciler.sandbox_adapter import RunDirKeeper, SandboxChildLauncher
@@ -285,6 +287,11 @@ class Service:
             packages=UpdatePackages(store=WheelStore(self.content_store), workspace=workspace_api),
         )
         self.attach_checker = DatabricksAttachChecker(workspace)
+        # What ``GET /apps/{app}/environment`` reads: the releases the builder writes and the
+        # platform values every child is started with.
+        self.child_setup = ChildSetup(
+            platform=platform_identity(settings), releases_dir=self._releases_dir
+        )
         # The edge counts requests into ``metrics``; the metrics service writes the finished
         # minutes. Only the request counters are fed so far: the container and per-child figures
         # have no source yet (TD-016), so those sources answer nothing and nothing is invented.
@@ -387,6 +394,10 @@ class Service:
     def memory_ledger(self) -> MemoryLedger | None:
         """The slot's memory books, or ``None`` before the reconciler (and its limit) exist."""
         return None if self._reconciler is None else self._reconciler.memory_ledger()
+
+    def output(self, slug: str) -> OutputRing | None:
+        """What ``slug``'s child wrote; ``None`` before the reconciler (or that child) ran."""
+        return None if self._reconciler is None else self._reconciler.output(slug)
 
     async def stop(self) -> None:
         """``SIGTERM``: stop the children within the budget, then close the clients."""

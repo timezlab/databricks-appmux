@@ -31,8 +31,10 @@ from appmux.admin.api import RouteProvider, create_admin_app
 from appmux.admin.apps import AppRoutes
 from appmux.admin.authorizer import GroupSource, make_authorizer
 from appmux.admin.delegation import DelegationRoutes
+from appmux.admin.environment import ChildSetup, EnvironmentRoutes
 from appmux.admin.grants import GrantRoutes
 from appmux.admin.identity import AppStateReader, IdentityRoutes, state_from_desired
+from appmux.admin.logs import AppOutput, LogRoutes
 from appmux.admin.metrics import MetricsRoutes
 from appmux.admin.operations import OperationRoutes
 from appmux.admin.platform import (
@@ -187,6 +189,8 @@ def create_edge_app(
     app_control: AppControl | None = None,
     rename_cascade: RenameCascade | None = None,
     memory: MemorySource | None = None,
+    app_output: AppOutput | None = None,
+    child_setup: ChildSetup | None = None,
 ) -> ASGIApplication:
     """The application behind an open gate.
 
@@ -221,6 +225,9 @@ def create_edge_app(
       route answers ``503``, never a made-up figure;
     * ``attach_checker`` mounts the requirements, attach and detach routes;
     * ``source_store`` (the content store) mounts the read-only source viewer;
+    * ``app_output`` (the reconciler's output rings and run states) mounts
+      ``GET /apps/{app}/logs``, and ``child_setup`` (the releases folder and the platform values)
+      mounts ``GET /apps/{app}/environment``;
     * ``open_mode_cookies`` is the one writer and reader of the Open as a user cookie: the
       ``POST /apps/{app}/open-mode`` route sets it, and, unless ``forward_token_policy`` is given,
       the pipeline reads the same instance to decide whether a child receives an admin's token.
@@ -277,6 +284,10 @@ def create_edge_app(
         providers.append(ResourceRoutes(checker=attach_checker))
     if source_store is not None:
         providers.append(SourceViewerRoutes(source_store))
+    if app_output is not None:
+        providers.append(LogRoutes(app_output))
+    if child_setup is not None:
+        providers.append(EnvironmentRoutes(child_setup))
     admin_app = create_admin_app(
         registry=registry, authorizer=authorizer, route_providers=providers
     )
