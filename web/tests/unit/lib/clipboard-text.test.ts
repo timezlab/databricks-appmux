@@ -27,6 +27,50 @@ describe("clipboardText", () => {
     );
   });
 
+  it("drops DEL (U+007F), which a shell without bracketed paste reads as a backspace", () => {
+    assert.equal(
+      clipboardText("rm -rf ./build/\u007f\u007f\u007f\n"),
+      "rm -rf ./build/\n",
+    );
+  });
+
+  it.each([
+    ["U+202A, left-to-right embedding", "\u202a"],
+    ["U+202B, right-to-left embedding", "\u202b"],
+    ["U+202C, pop directional formatting", "\u202c"],
+    ["U+202D, left-to-right override", "\u202d"],
+    ["U+202E, right-to-left override", "\u202e"],
+    ["U+2066, left-to-right isolate", "\u2066"],
+    ["U+2067, right-to-left isolate", "\u2067"],
+    ["U+2068, first strong isolate", "\u2068"],
+    ["U+2069, pop directional isolate", "\u2069"],
+  ])(
+    "drops %s, so the pasted text reads in the order it runs",
+    (_name, control) => {
+      assert.equal(
+        clipboardText(`rm ${control}fdp.txt${control} -i`),
+        "rm fdp.txt -i",
+      );
+    },
+  );
+
+  it("keeps the implicit direction marks (U+200E, U+200F) and right-to-left words, which real text uses", () => {
+    const arabic = "\u0645\u0631\u062d\u0628\u0627";
+    const hebrew = "\u05e9\u05dc\u05d5\u05dd";
+    const text = `${arabic}\u200e (ok) ${hebrew}\u200f.`;
+    assert.equal(clipboardText(text), text);
+  });
+
+  it("keeps the line and paragraph separators (U+2028, U+2029)", () => {
+    assert.equal(clipboardText("a\u2028b\u2029c"), "a\u2028b\u2029c");
+  });
+
+  it("keeps emoji built from several code points: a flag and a joined family", () => {
+    const flag = "\u{1f1fb}\u{1f1f3}";
+    const family = "\u{1f469}\u200d\u{1f469}\u200d\u{1f467}";
+    assert.equal(clipboardText(`${flag} ${family}`), `${flag} ${family}`);
+  });
+
   it("keeps U+00A0 and the first printable Latin-1 characters", () => {
     assert.equal(clipboardText("a\u00a0b\u00a1\u00e9"), "a\u00a0b\u00a1\u00e9");
   });

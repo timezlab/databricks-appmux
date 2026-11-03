@@ -11,7 +11,7 @@ import { Button as UiButton } from "./ui/button";
 const COPIED_MARK_MS = 2000;
 
 export interface CopyButtonProps {
-  /** The text that goes to the clipboard, less its control characters (`clipboardText`). */
+  /** The text that goes to the clipboard, less its control and bidirectional formatting characters (`clipboardText` says which). */
   value: string;
   /** What is copied, for the button's name: "the route" reads "Copy the route". */
   label: string;
