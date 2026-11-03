@@ -129,6 +129,17 @@ fails when they differ. The script is the only copy of the rule and exposes it a
 `window.appmuxTheme`; `useThemeChoice` reads it through `useSyncExternalStore`, and the switch is
 disabled, and says so, when the script did not load. See
 [ADR 0019](../docs/decisions/0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md).
+The dashboard (`/dashboard/`, the platform) and an app's Insights (`/app/insights/`) are built,
+and are one `MetricsPanel` (`src/components/dashboard/`, logic in `src/lib/dashboard/`): a range
+from 15 minutes to 7 days (a `ToggleGroup`) asked at the finest step that keeps the window within
+1440 steps (1 minute up to a day, 5 minutes for 3 days, 15 minutes for 7); the figures strip, each
+figure with a sparkline and the change against the previous window; the same requests and
+response-time charts on both. The dashboard adds the breakdown by app (`GET /metrics/breakdown`,
+the 8 busiest apps plus "Other apps"). Each chart frame has its own loading, empty and failed
+state; charts read the colour scheme through `useColorScheme`. The platform view asks
+`GET /metrics?app=_platform`, not `GET /metrics` without an app, whose answer mixes every app's
+rows. The e2e worlds `breakdown-live` and `metrics-week` (a busy hour and a week of eleven apps)
+are in `e2e/fixtures-f4.ts`.
 
 ## Writing a page
 

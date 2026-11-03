@@ -479,7 +479,7 @@ when its tests pass; the lane that writes a route writes its tests first.
 - [x] T201 [F1] Launcher, the app shell and its Overview, Deployments (releases, row menu, failure reason and output), Logs and Environment sections; the node-at-64-MB case shows the reason and the hint. (F1b: tested against the fixtures in `web/e2e/fixtures-f1b.ts`; needs the dev App: a real child's output in Logs, a real release's environment, and the Node start measured at 64, 256 and 768 MB. The launcher shows no active release, as `GET /apps` has none.)
 - [X] T202 [F2] Authorization (the principal combobox, level select, service principals, identity delegation), Resources (the Databricks add flow with suggestions) and Requests sections. Proved against the contract examples and the e2e mock; a real directory (the SCIM scopes) and real object lists (`GET /resources/suggestions` per type) need the dev App.
 - [ ] T203 [F3] The Platform sidebar areas, the register and edit forms with the folder browser, the app's Security and Settings sections.
-- [ ] T204 [F4] Dashboard and Insights: the figures strip, the platform view with the same charts as an app, the breakdown by app, the ranges up to 7 days, skeletons.
+- [x] T204 [F4] Dashboard and Insights: the figures strip, the platform view with the same charts as an app, the breakdown by app, the ranges up to 7 days, skeletons. (Proved against the fixtures of `web/e2e/fixtures-f4.ts`; still to see on the dev App: a `_platform` row with `mem_used_mb`, children with `rss_mb_max > 0`, a week of real data and the `step` the server honours.)
 
 ### Integration
 

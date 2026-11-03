@@ -1,43 +1,133 @@
 /**
- * What the dashboard asks the metrics API for: the time ranges a person can
- * choose, the "scope" (the platform, every app, or one app), the window sent as
- * `from`/`to`, and how often to ask. No React and no fetch here, so the rules
- * test without a browser.
+ * What the dashboard and an app's Insights ask the metrics API for: the time
+ * ranges a person can choose, the step each range is read at, the window sent
+ * as `from`/`to` (and the one before it, for the change figures), and how often
+ * to ask. No React and no fetch here, so the rules test without a browser.
  *
- * The contract (admin-api.md, `GET /metrics` and `MetricsResponse`): `app` is a
- * slug or `_platform`; without it a platform admin gets every app and the
- * platform row; a window over 1440 minutes is a `400`.
+ * The contract (admin-api.md, `GET /metrics` with `step` and
+ * `GET /metrics/breakdown`): a window is at most 7 days and at most 1440 steps
+ * (its length divided by the step, rounded up), else `400 window_too_long`;
+ * the data is kept for 7 days (data model 8).
  */
-import type { AppSummary } from "@/lib/api/schemas";
+import { ApiError } from "@/lib/api";
+import type { AppSummary, MetricStep } from "@/lib/api/schemas";
 import { isValidSlug } from "@/lib/slug-link";
 import { MIN_POLL_INTERVAL_MS } from "@/lib/poll/schedule";
+import { parseTime } from "@/lib/format";
 
 /** `app_slug` of the platform-wide row (data model 4.8). Not a valid app slug: the pattern has no underscore. */
 export const PLATFORM_APP_SLUG = "_platform";
 
-/** Longest window the API accepts; a longer one is a `400` (admin-api.md, MetricsResponse). */
-export const MAX_WINDOW_MINUTES = 1440;
-
 const MINUTE_MS = 60_000;
+const DAY_MINUTES = 1440;
+
+/** Most steps one answer may cover; more is a `400 window_too_long`. */
+export const MAX_WINDOW_STEPS = 1440;
+/** Longest window the API accepts, and how long the data is kept. */
+export const MAX_WINDOW_MINUTES = 7 * DAY_MINUTES;
+const RETENTION_MINUTES = MAX_WINDOW_MINUTES;
+
+/** How many apps the breakdown names; the rest add up to its "other" series. */
+export const BREAKDOWN_LIMIT = 8;
+
+// ----------------------------------------------------------------- steps
+
+export interface StepChoice {
+  id: MetricStep;
+  minutes: number;
+}
+
+/** The steps of the contract, finest first. */
+const STEPS = [
+  { id: "1m", minutes: 1 },
+  { id: "5m", minutes: 5 },
+  { id: "15m", minutes: 15 },
+  { id: "1h", minutes: 60 },
+] as const satisfies readonly StepChoice[];
+
+/**
+ * The finest step that keeps a window of `minutes` within the 1440 steps one
+ * answer may hold: 1 minute up to a day, 5 minutes up to 5 days, 15 minutes up
+ * to the 7 days the data is kept. A finer step would be refused; a coarser one
+ * would blur what the charts can still draw.
+ */
+export function stepForRange(minutes: number): StepChoice {
+  if (
+    !Number.isInteger(minutes) ||
+    minutes < 1 ||
+    minutes > MAX_WINDOW_MINUTES
+  ) {
+    throw new RangeError(
+      `stepForRange: ${minutes} minutes is outside 1 to ${MAX_WINDOW_MINUTES}`,
+    );
+  }
+  const step = STEPS.find(
+    (choice) => Math.ceil(minutes / choice.minutes) <= MAX_WINDOW_STEPS,
+  );
+  // Unreachable: 7 days at the coarsest step is 168 steps.
+  if (step === undefined) throw new RangeError("stepForRange: no step fits");
+  return step;
+}
+
+/** The length of a step of the contract, in minutes: "15m" is 15. */
+export function stepMinutes(id: MetricStep): number {
+  const step = STEPS.find((choice) => choice.id === id);
+  // Unreachable: STEPS lists every step of the contract.
+  if (step === undefined) throw new RangeError(`stepMinutes: no step ${id}`);
+  return step.minutes;
+}
 
 // ---------------------------------------------------------------- ranges
 
 export interface TimeRange {
   id: string;
+  /** "Last 6 hours": the name in a menu and in the empty state. */
   label: string;
+  /** "6h": the text of the toggle. */
+  shortLabel: string;
+  /** "6 hours" as in "the previous 6 hours". */
+  span: string;
   minutes: number;
 }
 
-/**
- * The choices, shortest first. They stop at one day because that is the longest
- * window one request may cover; the data is kept for 7 days (data model 8), but
- * reading older days would need a window picker, which v1 does not have.
- */
+/** The choices, shortest first, up to the 7 days the data is kept. */
 export const TIME_RANGES = [
-  { id: "15m", label: "Last 15 minutes", minutes: 15 },
-  { id: "1h", label: "Last hour", minutes: 60 },
-  { id: "6h", label: "Last 6 hours", minutes: 360 },
-  { id: "24h", label: "Last 24 hours", minutes: MAX_WINDOW_MINUTES },
+  {
+    id: "15m",
+    label: "Last 15 minutes",
+    shortLabel: "15m",
+    span: "15 minutes",
+    minutes: 15,
+  },
+  { id: "1h", label: "Last hour", shortLabel: "1h", span: "hour", minutes: 60 },
+  {
+    id: "6h",
+    label: "Last 6 hours",
+    shortLabel: "6h",
+    span: "6 hours",
+    minutes: 360,
+  },
+  {
+    id: "24h",
+    label: "Last 24 hours",
+    shortLabel: "24h",
+    span: "24 hours",
+    minutes: DAY_MINUTES,
+  },
+  {
+    id: "3d",
+    label: "Last 3 days",
+    shortLabel: "3d",
+    span: "3 days",
+    minutes: 3 * DAY_MINUTES,
+  },
+  {
+    id: "7d",
+    label: "Last 7 days",
+    shortLabel: "7d",
+    span: "7 days",
+    minutes: 7 * DAY_MINUTES,
+  },
 ] as const satisfies readonly TimeRange[];
 
 export type TimeRangeId = (typeof TIME_RANGES)[number]["id"];
@@ -48,9 +138,16 @@ export function isTimeRangeId(value: unknown): value is TimeRangeId {
   return TIME_RANGES.some((range) => range.id === value);
 }
 
-/** The range with this id, or `null` (a select's value is a string, not yet a known id). */
+/** The range with this id, or `null` (a control's value is a string, not yet a known id). */
 export function timeRangeById(id: string): TimeRange | null {
   return TIME_RANGES.find((range) => range.id === id) ?? null;
+}
+
+/** The next longer range, offered when a window holds no traffic; `null` after the longest. */
+export function longerRange(id: string): (typeof TIME_RANGES)[number] | null {
+  const index = TIME_RANGES.findIndex((range) => range.id === id);
+  if (index < 0) return null;
+  return TIME_RANGES[index + 1] ?? null;
 }
 
 // ---------------------------------------------------------------- window
@@ -68,10 +165,10 @@ function toQueryTime(ms: number): string {
 /**
  * The `minutes` before the start of the current minute. The current minute is
  * left out because its row is written only after it ends (one flush per minute,
- * design 10.2), and a window that starts and ends on a minute boundary keeps
- * the chart still for a whole minute instead of sliding on every poll. Both
- * ends come from the browser clock, so the length is exactly `minutes` even
- * when that clock is off; only the position shifts.
+ * design 10.2). Both ends come from the browser clock, so the length is exactly
+ * `minutes` even when that clock is off; only the position shifts. With a step
+ * longer than a minute the first and the last step are cut by the window (the
+ * contract keeps a cut step's start).
  */
 export function metricsWindow(nowMs: number, minutes: number): MetricsWindow {
   if (!Number.isFinite(nowMs)) {
@@ -93,124 +190,91 @@ export function metricsWindow(nowMs: number, minutes: number): MetricsWindow {
   };
 }
 
-// ----------------------------------------------------------------- scope
-
-export type DashboardScope =
-  { kind: "platform" } | { kind: "apps" } | { kind: "app"; slug: string };
-
-const APP_KEY_PREFIX = "app:";
-
-/** A string for a `<select>` value and for `usePoll`'s `resetKey`. */
-export function scopeKey(scope: DashboardScope): string {
-  switch (scope.kind) {
-    case "platform":
-      return "platform";
-    case "apps":
-      return "apps";
-    case "app":
-      return `${APP_KEY_PREFIX}${scope.slug}`;
-  }
-}
-
-/** The scope a key names, or `null`; a slug is checked, so only a real one reaches a query. */
-export function parseScopeKey(key: string): DashboardScope | null {
-  if (key === "platform") return { kind: "platform" };
-  if (key === "apps") return { kind: "apps" };
-  if (key.startsWith(APP_KEY_PREFIX)) {
-    const slug = key.slice(APP_KEY_PREFIX.length);
-    return isValidSlug(slug) ? { kind: "app", slug } : null;
-  }
-  return null;
-}
-
-/** The query of `getMetrics` for a scope and a window. */
-export function metricsQueryFor(
-  scope: DashboardScope,
-  window: MetricsWindow,
-): { app?: string; from: string; to: string } {
-  switch (scope.kind) {
-    case "platform":
-      return { app: PLATFORM_APP_SLUG, ...window };
-    case "apps":
-      return { ...window };
-    case "app":
-      return { app: scope.slug, ...window };
-  }
-}
-
-export interface ScopeOption {
-  key: string;
-  label: string;
+/**
+ * The window of the same length just before `window`, for "12% more than the
+ * previous hour". `null` when it would reach further back than the data is
+ * kept: those minutes are gone, and a figure against them would read as a
+ * rise from nothing.
+ */
+export function previousWindow(window: MetricsWindow): MetricsWindow | null {
+  const fromMs = parseTime(window.from);
+  const toMs = parseTime(window.to);
+  if (fromMs === null || toMs === null || toMs <= fromMs) return null;
+  const startMs = fromMs - (toMs - fromMs);
+  if (toMs - startMs > RETENTION_MINUTES * MINUTE_MS) return null;
+  return { from: toQueryTime(startMs), to: toQueryTime(fromMs) };
 }
 
 /**
- * What the scope select offers. A platform admin may read the platform row, the
- * whole table and any app (`CAN_MANAGE` on the platform); anyone else may read
- * only the apps where they hold `CAN_MANAGE`, because the API refuses the rest.
- * `display_name` is text from the API: it is a label, never markup.
+ * The server's answer to a window longer than 7 days or than 1440 steps. The
+ * ranges here never ask for one, so it means the server's limits and this page's
+ * differ (a newer or an older appmux): the page says so, not "not accepted".
  */
-export function scopeOptions(input: {
-  isPlatformAdmin: boolean;
-  apps: readonly AppSummary[];
-}): ScopeOption[] {
-  const apps = input.apps
+export function isWindowTooLong(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    error.code === "window_too_long"
+  );
+}
+
+// ----------------------------------------------------------------- scope
+
+/** The platform view (the `_platform` row and the per-app breakdown) or one app's Insights. */
+export type DashboardScope =
+  { kind: "platform" } | { kind: "app"; slug: string };
+
+/** The query of `getMetrics` for a scope, a window and a step. */
+export function metricsQueryFor(
+  scope: DashboardScope,
+  window: MetricsWindow,
+  step: MetricStep,
+): { app: string; from: string; to: string; step: MetricStep } {
+  const app = scope.kind === "platform" ? PLATFORM_APP_SLUG : scope.slug;
+  return { app, ...window, step };
+}
+
+/** The query of `getMetricsBreakdown`: the same window and step, the top apps. */
+export function breakdownQueryFor(
+  window: MetricsWindow,
+  step: MetricStep,
+): { from: string; to: string; step: MetricStep; limit: number } {
+  return { ...window, step, limit: BREAKDOWN_LIMIT };
+}
+
+/**
+ * The apps whose Insights someone may read (`CAN_MANAGE`), by slug: what the
+ * dashboard lists for a person who is not a platform admin. `display_name` is
+ * text from the API: a label, never markup.
+ */
+export function managedApps(apps: readonly AppSummary[]): AppSummary[] {
+  return apps
     .filter(
-      (app) =>
-        isValidSlug(app.slug) &&
-        (input.isPlatformAdmin || app.permission === "CAN_MANAGE"),
+      (item) => isValidSlug(item.slug) && item.permission === "CAN_MANAGE",
     )
-    .toSorted((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))
-    .map((app) => ({
-      key: scopeKey({ kind: "app", slug: app.slug }),
-      label: `${app.display_name} (${app.slug})`,
-    }));
-  if (!input.isPlatformAdmin) return apps;
-  return [
-    { key: "platform", label: "Platform: all traffic and memory" },
-    { key: "apps", label: "All apps: comparison table" },
-    ...apps,
-  ];
-}
-
-/** A platform admin starts on the platform; an app admin on their first app; nobody, on nothing. */
-export function defaultScopeKey(
-  options: readonly ScopeOption[],
-): string | null {
-  return options[0]?.key ?? null;
-}
-
-/** The chosen key while it is still offered (an app can be deleted or a role lost between two polls), else the default. */
-export function resolveScopeKey(
-  selected: string | null,
-  options: readonly ScopeOption[],
-): string | null {
-  if (selected !== null && options.some((option) => option.key === selected)) {
-    return selected;
-  }
-  return defaultScopeKey(options);
+    .toSorted((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 
 // ------------------------------------------------------------------ poll
 
 const FAST_POLL_INTERVAL_MS = 5000;
-const SLOW_POLL_INTERVAL_MS = 15_000;
+const MEDIUM_POLL_INTERVAL_MS = 15_000;
+const SLOW_POLL_INTERVAL_MS = 60_000;
 const FAST_POLL_MAX_RANGE_MINUTES = 60;
+const MEDIUM_POLL_MAX_RANGE_MINUTES = DAY_MINUTES;
 
 /**
- * "Every few seconds" (design 10.1) for an answer of an hour or less for one
- * series (at most 60 rows). A day (up to 1440 rows) or every app's rows (up to
- * the 10000-row cap) is large and the data changes only once a minute, so those
- * are asked for every 15 s. That is slower than the "every few seconds" of
- * FR-051 and design 10.1 for those two cases, and neither text says so yet.
+ * "Every few seconds" (design 10.1) for an hour or less. Up to a day the answer
+ * holds up to 1440 rows and changes once a minute, so it is asked for every
+ * 15 s; longer ranges are read in steps of 5 or 15 minutes whose newest step
+ * grows once a minute, so once a minute is enough.
  */
-export function metricsPollIntervalMs(
-  scope: DashboardScope,
-  rangeMinutes: number,
-): number {
-  const isSmall =
-    scope.kind !== "apps" && rangeMinutes <= FAST_POLL_MAX_RANGE_MINUTES;
-  return Math.max(
-    isSmall ? FAST_POLL_INTERVAL_MS : SLOW_POLL_INTERVAL_MS,
-    MIN_POLL_INTERVAL_MS,
-  );
+export function metricsPollIntervalMs(rangeMinutes: number): number {
+  let intervalMs = SLOW_POLL_INTERVAL_MS;
+  if (rangeMinutes <= FAST_POLL_MAX_RANGE_MINUTES) {
+    intervalMs = FAST_POLL_INTERVAL_MS;
+  } else if (rangeMinutes <= MEDIUM_POLL_MAX_RANGE_MINUTES) {
+    intervalMs = MEDIUM_POLL_INTERVAL_MS;
+  }
+  return Math.max(intervalMs, MIN_POLL_INTERVAL_MS);
 }

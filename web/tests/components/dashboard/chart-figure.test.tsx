@@ -26,6 +26,8 @@ import {
 giveChartsASize();
 
 const MAX_BAR_WIDTH_PX = 32;
+/** The card's surface left between two segments of a stack, taken from the upper one. */
+const STACK_GAP_PX = 2;
 
 const model = seriesModel(platformHalfHour());
 
@@ -148,7 +150,7 @@ describe("a chart as a figure", () => {
 });
 
 describe("a chart of stacked columns", () => {
-  it("stacks each segment on the one below it, drawn to scale", () => {
+  it("stacks each segment on the one below it, drawn to scale, with a gap between them", () => {
     const { chart } = renderChart("requests");
     const [firstSucceeded] = segments(chart, SUCCEEDED);
     const clientErrors = segments(chart, CLIENT_ERRORS);
@@ -156,13 +158,15 @@ describe("a chart of stacked columns", () => {
     if (firstSucceeded === undefined || firstClientErrors === undefined) {
       throw new Error("the first minute has both segments");
     }
-    // 90 succeeded and 10 failed with a 4xx: the same column, nine to one.
+    // 90 succeeded and 10 failed with a 4xx: the same column, nine to one,
+    // the upper segment giving up the gap at its bottom.
     expect(firstClientErrors.x).toBe(firstSucceeded.x);
-    expect(firstSucceeded.height / firstClientErrors.height).toBeCloseTo(9, 1);
-    expect(firstClientErrors.y + firstClientErrors.height).toBeCloseTo(
-      firstSucceeded.y,
-      2,
-    );
+    expect(
+      firstSucceeded.height / (firstClientErrors.height + STACK_GAP_PX),
+    ).toBeCloseTo(9, 1);
+    expect(
+      firstSucceeded.y - (firstClientErrors.y + firstClientErrors.height),
+    ).toBeCloseTo(STACK_GAP_PX, 2);
   });
 
   it("draws a segment only for a value: not for a zero, and not for a minute with no data", () => {

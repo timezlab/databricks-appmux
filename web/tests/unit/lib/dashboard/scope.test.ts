@@ -1,24 +1,31 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
+import { ApiError } from "@/lib/api";
 import type { AppSummary } from "@/lib/api/schemas";
 import {
+  BREAKDOWN_LIMIT,
   DEFAULT_RANGE_ID,
   MAX_WINDOW_MINUTES,
+  MAX_WINDOW_STEPS,
   PLATFORM_APP_SLUG,
   TIME_RANGES,
-  defaultScopeKey,
+  breakdownQueryFor,
   isTimeRangeId,
+  isWindowTooLong,
+  longerRange,
+  managedApps,
   metricsPollIntervalMs,
   metricsQueryFor,
   metricsWindow,
-  parseScopeKey,
-  resolveScopeKey,
-  scopeKey,
-  scopeOptions,
+  previousWindow,
+  stepForRange,
+  stepMinutes,
   timeRangeById,
 } from "@/lib/dashboard/scope";
 import { MIN_POLL_INTERVAL_MS } from "@/lib/poll/schedule";
+
+const DAY_MINUTES = 1440;
 
 function app(slug: string, permission: AppSummary["permission"]): AppSummary {
   return {
@@ -31,213 +38,196 @@ function app(slug: string, permission: AppSummary["permission"]): AppSummary {
 }
 
 describe("time ranges", () => {
-  it("are ordered, unique, within the 1440-minute window the API allows, and include the default", () => {
-    const minutes = TIME_RANGES.map((range) => range.minutes);
+  it("run from 15 minutes to the 7 days the data is kept, shortest first, with unique ids and the default among them", () => {
     assert.deepEqual(
-      minutes,
-      minutes.toSorted((a, b) => a - b),
+      TIME_RANGES.map((range) => range.minutes),
+      [15, 60, 360, DAY_MINUTES, 3 * DAY_MINUTES, 7 * DAY_MINUTES],
     );
-    assert.equal(
-      new Set(TIME_RANGES.map((range) => range.id)).size,
-      minutes.length,
-    );
-    assert.ok(
-      minutes.every((value) => value >= 1 && value <= MAX_WINDOW_MINUTES),
-    );
-    assert.equal(MAX_WINDOW_MINUTES, 1440);
+    assert.equal(new Set(TIME_RANGES.map((range) => range.id)).size, 6);
+    assert.equal(MAX_WINDOW_MINUTES, 7 * DAY_MINUTES);
     assert.ok(isTimeRangeId(DEFAULT_RANGE_ID));
   });
 
   it("are found by id, and anything else is not an id", () => {
-    assert.equal(timeRangeById("6h")?.minutes, 360);
-    assert.equal(timeRangeById("7d"), null);
-    assert.equal(timeRangeById(""), null);
-    assert.equal(isTimeRangeId("24h"), true);
-    assert.equal(isTimeRangeId("__proto__"), false);
-    assert.equal(isTimeRangeId(60), false);
+    assert.equal(timeRangeById("7d")?.minutes, 7 * DAY_MINUTES);
+    assert.equal(timeRangeById("2w"), null);
+    assert.equal(isTimeRangeId("3d"), true);
+    assert.equal(isTimeRangeId("3 days"), false);
+    assert.equal(isTimeRangeId(undefined), false);
+  });
+
+  it("offer the next longer range, and none after the longest", () => {
+    assert.equal(longerRange("1h")?.id, "6h");
+    assert.equal(longerRange("3d")?.id, "7d");
+    assert.equal(longerRange("7d"), null);
+  });
+});
+
+describe("stepForRange", () => {
+  it("picks the smallest step that keeps the window within 1440 steps", () => {
+    assert.equal(MAX_WINDOW_STEPS, 1440);
+    const steps = TIME_RANGES.map((range) => stepForRange(range.minutes).id);
+    assert.deepEqual(steps, ["1m", "1m", "1m", "1m", "5m", "15m"]);
+  });
+
+  it("keeps 1-minute steps up to exactly 1440 minutes and moves to 5 minutes one minute later", () => {
+    assert.equal(stepForRange(1440).id, "1m");
+    assert.equal(stepForRange(1441).id, "5m");
+  });
+
+  it("keeps 5-minute steps up to 1440 of them (5 days) and moves to 15 minutes after", () => {
+    assert.equal(stepForRange(5 * 1440).id, "5m");
+    assert.equal(stepForRange(5 * 1440 + 1).id, "15m");
+  });
+
+  it("gives the step's length in minutes", () => {
+    assert.equal(stepForRange(3 * DAY_MINUTES).minutes, 5);
+    assert.equal(stepForRange(7 * DAY_MINUTES).minutes, 15);
+  });
+
+  it("refuses a window longer than 7 days or not a whole number of minutes", () => {
+    assert.throws(() => stepForRange(7 * DAY_MINUTES + 1), RangeError);
+    assert.throws(() => stepForRange(0), RangeError);
+    assert.throws(() => stepForRange(1.5), RangeError);
   });
 });
 
 describe("metricsWindow", () => {
   it("ends at the start of the current minute, so the minute still being collected is not asked for", () => {
-    const now = Date.parse("2026-10-30T09:16:41.250Z");
+    const now = Date.parse("2026-10-30T09:15:42.123Z");
     assert.deepEqual(metricsWindow(now, 60), {
-      from: "2026-10-30T08:16:00Z",
-      to: "2026-10-30T09:16:00Z",
+      from: "2026-10-30T08:15:00Z",
+      to: "2026-10-30T09:15:00Z",
     });
   });
 
-  it("sends whole seconds with a Z, the form of the contract's examples", () => {
-    const { from, to } = metricsWindow(
-      Date.parse("2026-10-30T00:00:00Z"),
-      1440,
-    );
-    assert.equal(from, "2026-10-29T00:00:00Z");
-    assert.equal(to, "2026-10-30T00:00:00Z");
+  it("covers 7 days, the longest the API accepts", () => {
+    const now = Date.parse("2026-10-30T09:15:00Z");
+    assert.deepEqual(metricsWindow(now, 7 * DAY_MINUTES), {
+      from: "2026-10-23T09:15:00Z",
+      to: "2026-10-30T09:15:00Z",
+    });
   });
 
-  it("refuses a window the API would answer 400 for", () => {
-    for (const minutes of [
-      0,
-      -5,
-      1441,
-      1.5,
-      Number.NaN,
-      Number.POSITIVE_INFINITY,
-    ]) {
-      assert.throws(
-        () => metricsWindow(0, minutes),
-        RangeError,
-        String(minutes),
-      );
-    }
-  });
-
-  it("refuses a time that is not a number", () => {
+  it("refuses a window the API would answer 400 for, or a time that is not a number", () => {
+    assert.throws(() => metricsWindow(0, 7 * DAY_MINUTES + 1), RangeError);
+    assert.throws(() => metricsWindow(0, 0), RangeError);
     assert.throws(() => metricsWindow(Number.NaN, 60), RangeError);
   });
 });
 
-describe("scope keys", () => {
-  it("round-trip", () => {
-    for (const scope of [
-      { kind: "platform" },
-      { kind: "apps" },
-      { kind: "app", slug: "sales" },
-    ] as const) {
-      assert.deepEqual(parseScopeKey(scopeKey(scope)), scope);
-    }
-    assert.equal(scopeKey({ kind: "app", slug: "sales" }), "app:sales");
+describe("previousWindow", () => {
+  it("is the same length, ending where the window starts", () => {
+    assert.deepEqual(
+      previousWindow({
+        from: "2026-10-30T08:15:00Z",
+        to: "2026-10-30T09:15:00Z",
+      }),
+      { from: "2026-10-30T07:15:00Z", to: "2026-10-30T08:15:00Z" },
+    );
   });
 
-  it("refuse a slug that does not match the contract pattern, so it never reaches a query", () => {
-    for (const key of [
-      "app:",
-      "app:Sales",
-      "app:../x",
-      "app:a/b",
-      "app:_platform",
-      "app:sales ",
-      "apps:",
-      "platform ",
-      "other",
-      "",
-    ]) {
-      assert.equal(parseScopeKey(key), null, JSON.stringify(key));
-    }
+  it("is none when it would start before the 7 days the data is kept", () => {
+    assert.equal(
+      previousWindow({
+        from: "2026-10-26T09:15:00Z",
+        to: "2026-10-30T09:15:00Z",
+      }),
+      null,
+    );
+    assert.notEqual(
+      previousWindow({
+        from: "2026-10-27T09:15:00Z",
+        to: "2026-10-30T09:15:00Z",
+      }),
+      null,
+    );
   });
 });
 
-describe("metricsQueryFor", () => {
-  const window = { from: "2026-10-30T08:00:00Z", to: "2026-10-30T09:00:00Z" };
+describe("queries", () => {
+  const window = { from: "2026-10-30T08:15:00Z", to: "2026-10-30T09:15:00Z" };
 
-  it("asks for the platform row alone, for every app, or for one app", () => {
-    assert.deepEqual(metricsQueryFor({ kind: "platform" }, window), {
+  it("ask for the platform row or one app, with the step", () => {
+    assert.deepEqual(metricsQueryFor({ kind: "platform" }, window, "1m"), {
       app: PLATFORM_APP_SLUG,
       ...window,
+      step: "1m",
     });
-    assert.deepEqual(metricsQueryFor({ kind: "apps" }, window), window);
-    assert.deepEqual(metricsQueryFor({ kind: "app", slug: "sales" }, window), {
-      app: "sales",
+    assert.deepEqual(
+      metricsQueryFor({ kind: "app", slug: "sales" }, window, "5m"),
+      { app: "sales", ...window, step: "5m" },
+    );
+  });
+
+  it("ask for the top apps of the breakdown with the same window and step", () => {
+    assert.deepEqual(breakdownQueryFor(window, "15m"), {
       ...window,
+      step: "15m",
+      limit: BREAKDOWN_LIMIT,
     });
+    assert.equal(BREAKDOWN_LIMIT, 8);
   });
 });
 
-describe("scopeOptions", () => {
-  it("gives a platform admin the platform, the comparison and every app by slug, whatever the app permission says", () => {
-    const options = scopeOptions({
-      isPlatformAdmin: true,
-      apps: [app("sales", "CAN_USE"), app("ads", "CAN_MANAGE")],
-    });
+describe("managedApps", () => {
+  it("lists the apps someone can manage, by slug, skipping a slug that is not one", () => {
+    const apps = [
+      app("zeta", "CAN_MANAGE"),
+      app("alpha", "CAN_MANAGE"),
+      app("view-only", "CAN_USE"),
+      app("Bad_Slug", "CAN_MANAGE"),
+    ];
     assert.deepEqual(
-      options.map((option) => option.key),
-      ["platform", "apps", "app:ads", "app:sales"],
+      managedApps(apps).map((item) => item.slug),
+      ["alpha", "zeta"],
     );
-  });
-
-  it("gives anyone else only the apps they can manage", () => {
-    const options = scopeOptions({
-      isPlatformAdmin: false,
-      apps: [app("sales", "CAN_USE"), app("ads", "CAN_MANAGE")],
-    });
-    assert.deepEqual(
-      options.map((option) => option.key),
-      ["app:ads"],
-    );
-  });
-
-  it("gives someone who manages nothing no option", () => {
-    assert.deepEqual(
-      scopeOptions({ isPlatformAdmin: false, apps: [app("sales", "CAN_USE")] }),
-      [],
-    );
-  });
-
-  it("skips an app whose slug is not a slug, and shows the name as text with the slug", () => {
-    const options = scopeOptions({
-      isPlatformAdmin: false,
-      apps: [app("../x", "CAN_MANAGE"), app("sales", "CAN_MANAGE")],
-    });
-    assert.equal(options.length, 1);
-    assert.equal(options[0]?.label, "App sales (sales)");
-  });
-});
-
-describe("defaultScopeKey and resolveScopeKey", () => {
-  const admin = scopeOptions({
-    isPlatformAdmin: true,
-    apps: [app("sales", "CAN_MANAGE")],
-  });
-  const owner = scopeOptions({
-    isPlatformAdmin: false,
-    apps: [app("sales", "CAN_MANAGE"), app("ads", "CAN_MANAGE")],
-  });
-
-  it("start a platform admin on the platform and an app admin on their first app", () => {
-    assert.equal(defaultScopeKey(admin), "platform");
-    assert.equal(defaultScopeKey(owner), "app:ads");
-    assert.equal(defaultScopeKey([]), null);
-  });
-
-  it("keep the choice while it is offered and fall back when it is gone (the app was deleted or the role lost)", () => {
-    assert.equal(resolveScopeKey("app:sales", owner), "app:sales");
-    assert.equal(resolveScopeKey("app:gone", owner), "app:ads");
-    assert.equal(resolveScopeKey("platform", owner), "app:ads");
-    assert.equal(resolveScopeKey(null, admin), "platform");
-    assert.equal(resolveScopeKey("platform", []), null);
   });
 });
 
 describe("metricsPollIntervalMs", () => {
-  it("polls a small answer every few seconds", () => {
-    assert.equal(metricsPollIntervalMs({ kind: "platform" }, 15), 5000);
-    assert.equal(
-      metricsPollIntervalMs({ kind: "app", slug: "sales" }, 60),
-      5000,
-    );
+  it("polls an hour or less every few seconds", () => {
+    assert.equal(metricsPollIntervalMs(15), 5000);
+    assert.equal(metricsPollIntervalMs(60), 5000);
   });
 
-  it("polls a big answer less often: the data changes once a minute and 1440 rows or every app's rows are large", () => {
-    assert.equal(
-      metricsPollIntervalMs({ kind: "app", slug: "sales" }, 360),
-      15_000,
-    );
-    assert.equal(metricsPollIntervalMs({ kind: "platform" }, 1440), 15_000);
-    assert.equal(metricsPollIntervalMs({ kind: "apps" }, 15), 15_000);
+  it("polls up to a day every 15 s and longer ranges once a minute: their newest step changes slowly and the answers are large", () => {
+    assert.equal(metricsPollIntervalMs(360), 15_000);
+    assert.equal(metricsPollIntervalMs(DAY_MINUTES), 15_000);
+    assert.equal(metricsPollIntervalMs(3 * DAY_MINUTES), 60_000);
+    assert.equal(metricsPollIntervalMs(7 * DAY_MINUTES), 60_000);
   });
 
   it("never asks for faster than the poll hook allows", () => {
     for (const range of TIME_RANGES) {
-      for (const scope of [
-        { kind: "platform" },
-        { kind: "apps" },
-        { kind: "app", slug: "sales" },
-      ] as const) {
-        assert.ok(
-          metricsPollIntervalMs(scope, range.minutes) >= MIN_POLL_INTERVAL_MS,
-        );
-      }
+      assert.ok(metricsPollIntervalMs(range.minutes) >= MIN_POLL_INTERVAL_MS);
     }
+  });
+});
+
+describe("stepMinutes", () => {
+  it("reads a step of the contract as minutes, so an answer's step lines up with the buckets", () => {
+    assert.deepEqual(
+      (["1m", "5m", "15m", "1h"] as const).map(stepMinutes),
+      [1, 5, 15, 60],
+    );
+  });
+});
+
+describe("isWindowTooLong", () => {
+  it("knows the server's answer to a window it will not cover, and nothing else", () => {
+    assert.equal(
+      isWindowTooLong(new ApiError(400, "window_too_long", "use step=15m")),
+      true,
+    );
+    assert.equal(
+      isWindowTooLong(new ApiError(400, "invalid_request", "bad step")),
+      false,
+    );
+    assert.equal(
+      isWindowTooLong(new ApiError(500, "window_too_long", "odd")),
+      false,
+    );
+    assert.equal(isWindowTooLong(new Error("window_too_long")), false);
   });
 });

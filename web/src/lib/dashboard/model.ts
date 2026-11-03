@@ -1,6 +1,7 @@
 /**
- * Everything the dashboard shows, as plain text and numbers: the answer of
- * `GET /metrics` and the chosen scope go in; stat tiles, chart specs (with the
+ * Everything the dashboard and an app's Insights show of one series (the
+ * platform row or one app), as plain text and numbers: the answer of
+ * `GET /metrics` and the scope go in; the figures, chart specs (with the
  * tooltip texts and the table twin of each), notices and fact lists come out.
  * The components copy these into elements and add no rule of their own, so the
  * wording and the arithmetic are tested here without a browser.
@@ -9,29 +10,27 @@
  * nothing here builds markup or a link.
  */
 import type { MetricsResponse } from "@/lib/api/schemas";
-import {
-  CAPACITY_DANGER_RATIO,
-  CAPACITY_WARNING_RATIO,
-  capacityLevel,
-} from "@/lib/capacity";
-import type { CapacityLevel } from "@/lib/capacity";
 import { clockLabel } from "./chart";
+import { buildFigures, shareText } from "./figures";
+import type { Figure } from "./figures";
 import { PLATFORM_APP_SLUG } from "./scope";
 import type { DashboardScope } from "./scope";
 import {
   LATENCY_BUCKET_BOUNDS_MS,
-  appComparison,
   bucketRows,
   describeLatency,
   dropsByRule,
   latencyBucketLabel,
+  lengthText,
+  perText,
   percentileBucket,
   rowsInDomain,
+  stepText,
   summarizeRows,
   windowDomain,
 } from "./series";
 import type {
-  AppComparisonRow,
+  BucketSlot,
   MetricBucket,
   RuleDrops,
   SeriesSummary,
@@ -42,19 +41,41 @@ import {
   formatCount,
   formatDurationMs,
   formatMegabytes,
-  formatPercent,
   pluralize,
 } from "@/lib/format";
 
 // ------------------------------------------------------------------ types
 
-/** Which series colour a mark takes; `series-style.ts` maps each tone to a `--chart-N` token. */
-export type ChartTone = "primary" | "warning" | "danger";
+/**
+ * Which series colour a mark takes; `series-style.ts` maps each tone to a
+ * `--chart-N` token. `primary`, `warning` and `danger` are the parts of one
+ * series (requests that succeeded, client errors, server errors);
+ * `series-1` to `series-8` are the apps of the breakdown, in a fixed order, and
+ * `other` is every app below the cut.
+ */
+export type ChartTone =
+  | "primary"
+  | "warning"
+  | "danger"
+  | "series-1"
+  | "series-2"
+  | "series-3"
+  | "series-4"
+  | "series-5"
+  | "series-6"
+  | "series-7"
+  | "series-8"
+  | "other";
 
 /**
  * The pattern laid over a mark (and its legend swatch) besides its colour. The
- * three tones differ little in lightness, so a person who cannot tell the hues
- * apart still tells a plain segment from a striped one from a dotted one.
+ * tones differ little in lightness, so a person who cannot tell the hues apart
+ * still tells a plain segment from a striped one from a dotted one. The app
+ * tones alternate plain and striped, so two neighbours in a stack always differ
+ * in pattern; the six tokens fail the colour-blind check between some
+ * neighbours (`--chart-2` and `--chart-3` in dark mode), and the pattern is
+ * what tells those apart. Apps 7 and 8 reuse the first two hues (7 dotted, 8
+ * plain), and the grey of `other`, close in lightness to some hues, is dotted.
  */
 export type ToneTexture = "none" | "stripes" | "dots";
 
@@ -62,11 +83,22 @@ export const TONE_TEXTURE: Record<ChartTone, ToneTexture> = {
   primary: "none",
   warning: "stripes",
   danger: "dots",
+  "series-1": "none",
+  "series-2": "stripes",
+  "series-3": "none",
+  "series-4": "stripes",
+  "series-5": "none",
+  "series-6": "stripes",
+  "series-7": "dots",
+  "series-8": "none",
+  other: "dots",
 };
 
 export interface LegendItem {
   label: string;
   tone: ChartTone;
+  /** An app's slug: the legend shows its route strip and links to its Insights. */
+  slug?: string;
 }
 
 /** The accessible twin of a chart: the first cell of each row names the row. */
@@ -76,7 +108,8 @@ export interface ChartTable {
 }
 
 interface ChartBase {
-  id: "requests" | "latency" | "memory" | "egress";
+  /** Unique on the page: it names the chart's texture patterns. */
+  id: string;
   /** "Requests per minute" or "Requests per 5 minutes". */
   title: string;
   /** What a screen reader hears for the picture. */
@@ -89,7 +122,7 @@ interface ChartBase {
   tips: string[];
   /** The most labels under the axis. */
   maxTicks: number;
-  /** Text under the axis. */
+  /** Text under the axis: what one column holds ("5-minute totals") and the time zone. */
   xCaption: string;
   table: ChartTable;
   /** When set, the chart has nothing to draw and the message replaces it. */
@@ -119,16 +152,6 @@ export interface LineChartSpec extends ChartBase {
 
 export type ChartSpec = ColumnChartSpec | LineChartSpec;
 
-export type MeterTone = "success" | "warning" | "danger";
-
-export interface StatTile {
-  key: "requests" | "errors" | "p50" | "p95" | "memory" | "egress";
-  label: string;
-  value: string;
-  detail: string | null;
-  meter: { label: string; value: number; max: number; tone: MeterTone } | null;
-}
-
 export interface FactRow {
   key: string;
   label: string;
@@ -156,74 +179,60 @@ export interface EmptyModel extends ModelBase {
 
 export interface SeriesModel extends ModelBase {
   kind: "series";
-  tiles: StatTile[];
+  figures: Figure[];
   charts: ChartSpec[];
   drops: RuleDrops[];
   facts: FactRow[];
 }
 
-export interface AppsModel extends ModelBase {
-  kind: "apps";
-  rows: AppComparisonRow[];
+export type DashboardModel = EmptyModel | SeriesModel;
+
+export interface ModelOptions {
+  /** The step the rows were read at, in minutes (1, 5 or 15). */
+  stepMinutes?: number;
+  /** The answer for the window before, for the change figures; `null` when it was not read. */
+  previous?: MetricsResponse | null;
+  /** The range as in "the previous hour". */
+  span?: string;
 }
 
-export type DashboardModel = EmptyModel | SeriesModel | AppsModel;
+/** A chart before its answer: what its frame is called while it loads, or when the answer could not be read. */
+export interface ChartOutline {
+  id: string;
+  name: string;
+}
+
+/**
+ * The charts `buildDashboardModel` draws for a scope, in order, by a name that
+ * holds whatever the step (the titles add it: "Requests per 5 minutes"). The
+ * frames take their place before the answer, so the page does not jump.
+ */
+export function chartOutline(scope: DashboardScope): ChartOutline[] {
+  const outline: ChartOutline[] = [
+    { id: "requests", name: "Requests" },
+    { id: "latency", name: "Response time of requests" },
+    { id: "memory", name: "Memory peak" },
+    { id: "egress", name: "Egress drops" },
+  ];
+  if (scope.kind === "platform") {
+    outline.push({ id: "apps-running", name: "Apps running" });
+  }
+  return outline;
+}
 
 // ----------------------------------------------------------------- tuning
 
-const REQUEST_LABELS_MAX_TICKS = 6;
+/** The most time labels under a chart of the window. */
+export const REQUEST_LABELS_MAX_TICKS = 6;
 /** The latency chart has 11 columns of about 50 px; every one gets its label. */
 const LATENCY_MAX_TICKS = 11;
-const RATE_DECIMALS_BELOW = 10;
-const SHARE_DECIMALS_BELOW_PERCENT = 10;
-const SHARE_FLOOR_PERCENT = 0.1;
-const PERCENT = 100;
 const MEDIAN_PERCENT = 50;
 const TAIL_PERCENT = 95;
-
-/**
- * The memory thresholds are the capacity strip's (`lib/capacity.ts`): one pair
- * of ratios for every place that shows memory against its limit.
- */
-export const MEMORY_WARNING_RATIO = CAPACITY_WARNING_RATIO;
-export const MEMORY_DANGER_RATIO = CAPACITY_DANGER_RATIO;
-
-const TONE_BY_LEVEL = {
-  normal: "success",
-  warning: "warning",
-  danger: "danger",
-} as const satisfies Record<CapacityLevel, MeterTone>;
-
-export function memoryTone(usedMb: number, limitMb: number): MeterTone {
-  return TONE_BY_LEVEL[capacityLevel(usedMb, limitMb)];
-}
+const P99_PERCENT = 99;
 
 // --------------------------------------------------------------- wording
 
-const NO_DATA_TEXT = "no data";
-const NO_REQUESTS_TEXT = "no requests";
-
-/** "0.7%", "25%", "less than 0.1%": a small share keeps its decimal, a big one is whole. */
-function shareText(part: number, whole: number): string {
-  if (!(whole > 0)) return "0%";
-  const percent = (part / whole) * PERCENT;
-  if (percent <= 0) return "0%";
-  if (percent >= SHARE_DECIMALS_BELOW_PERCENT) {
-    return `${Math.round(percent)}%`;
-  }
-  if (percent < SHARE_FLOOR_PERCENT) return `less than ${SHARE_FLOOR_PERCENT}%`;
-  return `${Number(percent.toFixed(1))}%`;
-}
-
-function rateText(perMinute: number): string {
-  return perMinute < RATE_DECIMALS_BELOW
-    ? String(Number(perMinute.toFixed(1)))
-    : formatCount(perMinute);
-}
-
-function perText(bucketMinutes: number): string {
-  return bucketMinutes === 1 ? "minute" : `${bucketMinutes} minutes`;
-}
+export const NO_DATA_TEXT = "no data";
 
 /** The range of a latency bucket: "Up to 5 ms", "Over 500 ms up to 1 s", "Over 5 s". */
 function latencyRangeText(index: number): string {
@@ -239,15 +248,8 @@ function latencyRangeText(index: number): string {
 
 // ----------------------------------------------------------------- build
 
-function scopeSlug(scope: DashboardScope): string | null {
-  switch (scope.kind) {
-    case "platform":
-      return PLATFORM_APP_SLUG;
-    case "app":
-      return scope.slug;
-    case "apps":
-      return null;
-  }
+function scopeSlug(scope: DashboardScope): string {
+  return scope.kind === "platform" ? PLATFORM_APP_SLUG : scope.slug;
 }
 
 function emptyModel(
@@ -260,8 +262,6 @@ function emptyModel(
     message = "The answer carries no usable time window.";
   } else if (scope.kind === "platform") {
     message = "The platform wrote no metrics in this window.";
-  } else if (scope.kind === "apps") {
-    message = "No app wrote metrics in this window.";
   } else {
     message =
       "The app wrote no metrics in this window. It may have been stopped for all of it.";
@@ -301,7 +301,9 @@ function gapNotice(minutes: number, scope: DashboardScope): ModelNotice {
 export function buildDashboardModel(
   response: MetricsResponse,
   scope: DashboardScope,
+  options: ModelOptions = {},
 ): DashboardModel {
+  const stepMinutes = options.stepMinutes ?? 1;
   const base: ModelBase = {
     windowText: `${formatAbsoluteTime(response.from)} to ${formatAbsoluteTime(response.to)}`,
     notices: response.truncated ? [truncatedNotice(response)] : [],
@@ -310,146 +312,74 @@ export function buildDashboardModel(
   if (domain === null) return emptyModel(base, scope, false);
 
   const slug = scopeSlug(scope);
-  const inWindow = rowsInDomain(response.items, domain);
-
-  if (slug === null) {
-    const table = appComparison(inWindow);
-    return table.length === 0
-      ? emptyModel(base, scope, true)
-      : { ...base, kind: "apps", rows: table };
-  }
-
-  const rows = inWindow.filter((row) => row.app_slug === slug);
+  const rows = rowsInDomain(response.items, domain, stepMinutes).filter(
+    (row) => row.app_slug === slug,
+  );
   if (rows.length === 0) return emptyModel(base, scope, true);
 
-  const summary = summarizeRows(rows);
+  const summary = summarizeRows(rows, stepMinutes);
   const notices =
     summary.gapMinutes > 0
       ? [...base.notices, gapNotice(summary.gapMinutes, scope)]
       : base.notices;
-  const { bucketMinutes, buckets } = bucketRows(rows, domain);
+  const { bucketMinutes, buckets } = bucketRows(
+    rows,
+    domain,
+    undefined,
+    stepMinutes,
+  );
+  const isPlatform = scope.kind === "platform";
   const context: ChartContext = {
     domainStartMs: domain.startMs,
     bucketMinutes,
     buckets,
     summary,
     windowText: base.windowText,
-    isPlatform: scope.kind === "platform",
+    isPlatform,
   };
+  const charts: ChartSpec[] = [
+    requestsChart(context),
+    latencyChart(context),
+    memoryChart(context),
+    egressChart(context),
+  ];
+  if (isPlatform) charts.push(appsRunningChart(context));
 
   return {
     ...base,
     notices,
     kind: "series",
-    tiles: buildTiles(summary, scope),
-    charts: [
-      requestsChart(context),
-      latencyChart(context),
-      memoryChart(context),
-      egressChart(context),
-    ],
+    figures: buildFigures({
+      summary,
+      previous: previousSummary(options.previous ?? null, slug, stepMinutes),
+      buckets,
+      isPlatform,
+      span: options.span ?? "window",
+    }),
+    charts,
     drops: dropsByRule(rows),
     facts: buildFacts(summary, scope),
   };
 }
 
-// ----------------------------------------------------------------- tiles
+/** The summary of the window before, or `null` when it was not read or holds nothing usable. */
+function previousSummary(
+  response: MetricsResponse | null,
+  slug: string,
+  stepMinutes: number,
+): SeriesSummary | null {
+  if (response === null) return null;
+  const domain = windowDomain(response.from, response.to);
+  if (domain === null) return null;
+  const rows = rowsInDomain(response.items, domain, stepMinutes).filter(
+    (row) => row.app_slug === slug,
+  );
+  return summarizeRows(rows, stepMinutes);
+}
 
 /** Memory figures of the platform rows are the edge's own; an app's are its resident memory. */
 function usesPlatformMemory(summary: SeriesSummary, isPlatform: boolean) {
   return isPlatform && summary.memUsedMbMax !== null;
-}
-
-function buildTiles(summary: SeriesSummary, scope: DashboardScope): StatTile[] {
-  const p50 = percentileBucket(summary.latHist, MEDIAN_PERCENT);
-  const p95 = percentileBucket(summary.latHist, TAIL_PERCENT);
-  const hasRequests = summary.requests > 0;
-
-  const requestsDetail =
-    summary.reportedMinutes > 0
-      ? `${rateText(summary.requests / summary.reportedMinutes)} per minute over ${pluralize(summary.reportedMinutes, "minute")} with data`
-      : null;
-
-  return [
-    {
-      key: "requests",
-      label: "Requests",
-      value: formatCount(summary.requests),
-      detail: requestsDetail,
-      meter: null,
-    },
-    {
-      key: "errors",
-      label: "Server errors",
-      value: formatCount(summary.r5xx),
-      detail: hasRequests
-        ? `${shareText(summary.r5xx, summary.requests)} of requests`
-        : NO_REQUESTS_TEXT,
-      meter: null,
-    },
-    {
-      key: "p50",
-      label: "Latency p50",
-      value: describeLatency(p50),
-      detail: p50 === null ? null : "half of the requests were this fast",
-      meter: null,
-    },
-    {
-      key: "p95",
-      label: "Latency p95",
-      value: describeLatency(p95),
-      detail: p95 === null ? null : "95 of 100 requests were this fast",
-      meter: null,
-    },
-    memoryTile(summary, scope.kind === "platform"),
-    {
-      key: "egress",
-      label: "Egress drops",
-      value: formatCount(summary.egressDropped),
-      detail:
-        summary.egressDropped > 0
-          ? "packets dropped by egress rules"
-          : "nothing was blocked",
-      meter: null,
-    },
-  ];
-}
-
-function memoryTile(summary: SeriesSummary, isPlatform: boolean): StatTile {
-  const used = summary.memUsedMbMax;
-  if (!isPlatform || used === null) {
-    return {
-      key: "memory",
-      label: "Memory peak",
-      value: formatMegabytes(summary.rssMbMax),
-      detail: isPlatform
-        ? "highest resident memory in the window"
-        : "highest resident memory of the app",
-      meter: null,
-    };
-  }
-  const limit = summary.memLimitMb;
-  if (limit === null || limit <= 0) {
-    return {
-      key: "memory",
-      label: "Memory peak",
-      value: formatMegabytes(used),
-      detail: "highest memory used by the platform",
-      meter: null,
-    };
-  }
-  return {
-    key: "memory",
-    label: "Memory peak",
-    value: formatMegabytes(used),
-    detail: `${formatPercent(used, limit)} of the ${formatMegabytes(limit)} limit`,
-    meter: {
-      label: "Platform memory peak",
-      value: used,
-      max: limit,
-      tone: memoryTone(used, limit),
-    },
-  };
 }
 
 // ----------------------------------------------------------------- facts
@@ -553,7 +483,7 @@ interface ChartContext {
   isPlatform: boolean;
 }
 
-function spansTwoDays(buckets: readonly MetricBucket[]): boolean {
+function spansTwoDays(buckets: readonly BucketSlot[]): boolean {
   const first = buckets[0];
   const last = buckets[buckets.length - 1];
   if (first === undefined || last === undefined) return false;
@@ -562,28 +492,41 @@ function spansTwoDays(buckets: readonly MetricBucket[]): boolean {
   );
 }
 
-function timeLabels(context: ChartContext): string[] {
-  const withDate = spansTwoDays(context.buckets);
-  return context.buckets.map((bucket) => clockLabel(bucket.startMs, withDate));
+/** What the time wording of a chart needs: where the window starts and how wide a bucket is. */
+export interface BucketFrame {
+  domainStartMs: number;
+  bucketMinutes: number;
+  buckets: readonly BucketSlot[];
 }
 
-/** The start of a bucket as written in a tooltip or a table; the first bucket may start before the window, and says so. */
-function bucketTime(bucket: MetricBucket, context: ChartContext): string {
+/** The label under each column: the clock time, with the date once the chart spans two days. */
+export function timeLabels(frame: BucketFrame): string[] {
+  const withDate = spansTwoDays(frame.buckets);
+  return frame.buckets.map((bucket) => clockLabel(bucket.startMs, withDate));
+}
+
+/** The start of a bucket as written in a tooltip; a bucket the window cuts says so. */
+export function bucketTime(bucket: BucketSlot, frame: BucketFrame): string {
   const start = formatAbsoluteTime(
-    Math.max(bucket.startMs, context.domainStartMs),
+    Math.max(bucket.startMs, frame.domainStartMs),
   );
   if (bucket.isPartial) return `${start} (partial)`;
-  return context.bucketMinutes === 1
+  return frame.bucketMinutes === 1
     ? start
-    : `${start}, ${context.bucketMinutes} minutes`;
+    : `${start}, ${lengthText(frame.bucketMinutes)}`;
 }
 
 /** The first table cell does not repeat the length of the bucket: the title says it. */
-function rowTime(bucket: MetricBucket, context: ChartContext): string {
+export function rowTime(bucket: BucketSlot, frame: BucketFrame): string {
   const start = formatAbsoluteTime(
-    Math.max(bucket.startMs, context.domainStartMs),
+    Math.max(bucket.startMs, frame.domainStartMs),
   );
   return bucket.isPartial ? `${start} (partial)` : start;
+}
+
+/** "5-minute totals, time in UTC": what one column holds, and the time zone of the axis. */
+export function totalsCaption(frame: BucketFrame): string {
+  return `${stepText(frame.bucketMinutes)} totals, time in UTC`;
 }
 
 function noDataCells(count: number): string[] {
@@ -627,7 +570,7 @@ function requestsChart(context: ChartContext): ColumnChartSpec {
       return `${time}: ${pluralize(total, "request")}, ${pluralize(bucket.r4xx, "client error")}, ${pluralize(bucket.r5xx, "server error")}`;
     }),
     maxTicks: REQUEST_LABELS_MAX_TICKS,
-    xCaption: "Time (UTC)",
+    xCaption: totalsCaption(context),
     columns,
     highlights: [],
     table: {
@@ -655,21 +598,29 @@ function latencyChart(context: ChartContext): ColumnChartSpec {
   const total = histogram.reduce((sum, count) => sum + count, 0);
   const p50 = percentileBucket(histogram, MEDIAN_PERCENT);
   const p95 = percentileBucket(histogram, TAIL_PERCENT);
+  const p99 = percentileBucket(histogram, P99_PERCENT);
 
-  const highlights: { index: number; label: string }[] = [];
-  if (p50 !== null && p50 === p95) {
-    highlights.push({ index: p50, label: "p50, p95" });
-  } else {
-    if (p50 !== null) highlights.push({ index: p50, label: "p50" });
-    if (p95 !== null) highlights.push({ index: p95, label: "p95" });
+  // Percentiles in one bucket share one label: "p50, p95".
+  const labelsByIndex = new Map<number, string[]>();
+  for (const [name, index] of [
+    ["p50", p50],
+    ["p95", p95],
+    ["p99", p99],
+  ] as const) {
+    if (index === null) continue;
+    labelsByIndex.set(index, [...(labelsByIndex.get(index) ?? []), name]);
   }
+  const highlights = [...labelsByIndex.entries()].map(([index, names]) => ({
+    index,
+    label: names.join(", "),
+  }));
 
   return {
     kind: "columns",
     id: "latency",
     title: "Response time of requests",
     description:
-      `Requests by response time over the window. Half were ${describeLatency(p50)}, 95 of 100 were ${describeLatency(p95)}. ` +
+      `Requests by response time over the window. Half were ${describeLatency(p50)}, 95 of 100 were ${describeLatency(p95)}, 99 of 100 were ${describeLatency(p99)}. ` +
       "The table below the chart has every value.",
     legend: [],
     tones: ["primary"],
@@ -749,7 +700,7 @@ function memoryChart(context: ChartContext): LineChartSpec {
         : `${time}: ${formatMegabytes(value)}`;
     }),
     maxTicks: REQUEST_LABELS_MAX_TICKS,
-    xCaption: "Time (UTC)",
+    xCaption: `${stepText(context.bucketMinutes)} peaks, time in UTC`,
     tone,
     values,
     reference: limit,
@@ -795,7 +746,7 @@ function egressChart(context: ChartContext): ColumnChartSpec {
         : `${time}: ${NO_DATA_TEXT}`;
     }),
     maxTicks: REQUEST_LABELS_MAX_TICKS,
-    xCaption: "Time (UTC)",
+    xCaption: totalsCaption(context),
     columns: buckets.map((bucket) =>
       bucket.hasData ? [bucket.egressDropped] : null,
     ),
@@ -817,27 +768,75 @@ function egressChart(context: ChartContext): ColumnChartSpec {
   };
 }
 
-// ------------------------------------------------------------ comparison
+/**
+ * The platform's apps running against the apps registered: the newest count of
+ * each bucket (a count is a gauge, as the server keeps the latest minute of a
+ * step), with the newest registered count as the level line.
+ */
+function appsRunningChart(context: ChartContext): LineChartSpec {
+  const { buckets, summary } = context;
+  const values = buckets.map((bucket) =>
+    bucket.hasData ? bucket.childrenRunning : null,
+  );
+  const registered = summary.childrenRegistered;
+  const hasValues = values.some((value) => value !== null);
+  const tone: ChartTone = "primary";
+  const referenceTone: ChartTone = "warning";
+  const legend: LegendItem[] =
+    registered === null
+      ? []
+      : [
+          { label: "Apps running", tone },
+          { label: "Apps registered", tone: referenceTone },
+        ];
+  const registeredCell = (bucket: MetricBucket) =>
+    bucket.childrenRegistered === null
+      ? NO_DATA_TEXT
+      : formatCount(bucket.childrenRegistered);
 
-export interface ComparisonCells {
-  requests: string;
-  serverErrors: string;
-  p50: string;
-  p95: string;
-  memory: string;
-  egressDrops: string;
-  restarts: string;
-}
-
-/** One row of the comparison table as text. */
-export function comparisonCells(row: AppComparisonRow): ComparisonCells {
   return {
-    requests: formatCount(row.requests),
-    serverErrors: formatCount(row.r5xx),
-    p50: describeLatency(row.p50Bucket),
-    p95: describeLatency(row.p95Bucket),
-    memory: formatMegabytes(row.rssMbMax),
-    egressDrops: formatCount(row.egressDropped),
-    restarts: formatCount(row.restarts),
+    kind: "line",
+    id: "apps-running",
+    title: "Apps running",
+    description:
+      (summary.childrenRunning === null || registered === null
+        ? "No count of apps in the window."
+        : `${formatCount(summary.childrenRunning)} of ${pluralize(registered, "registered app")} running at the end of the window.`) +
+      " The table below the chart has every value.",
+    legend,
+    labels: timeLabels(context),
+    tips: buckets.map((bucket, index) => {
+      const value = values[index];
+      const time = bucketTime(bucket, context);
+      return value === null || value === undefined
+        ? `${time}: ${NO_DATA_TEXT}`
+        : `${time}: ${formatCount(value)} running of ${registeredCell(bucket)}`;
+    }),
+    maxTicks: REQUEST_LABELS_MAX_TICKS,
+    xCaption: `Count at the end of each ${stepText(context.bucketMinutes)} bucket, time in UTC`,
+    tone,
+    values,
+    reference: registered,
+    referenceLabel: registered === null ? null : "Registered",
+    referenceTone,
+    table: {
+      headers: ["Time", "Running", "Registered"],
+      rows: buckets.map((bucket, index) => {
+        const value = values[index];
+        return {
+          key: String(bucket.startMs),
+          cells: [
+            rowTime(bucket, context),
+            value === null || value === undefined
+              ? NO_DATA_TEXT
+              : formatCount(value),
+            value === null || value === undefined
+              ? NO_DATA_TEXT
+              : registeredCell(bucket),
+          ],
+        };
+      }),
+    },
+    emptyMessage: hasValues ? null : "No count of apps in this window.",
   };
 }

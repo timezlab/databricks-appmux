@@ -6,9 +6,11 @@ import type * as ApiModule from "@/lib/api";
 import { MetricsPanel } from "@/components/dashboard/metrics-panel";
 import type { MetricsPanelProps } from "@/components/dashboard/metrics-panel";
 import { ApiError, getMetrics } from "@/lib/api";
+import type { MetricsQuery, MetricsResponse } from "@/lib/api";
 import { TIME_RANGES } from "@/lib/dashboard/scope";
 import { giveChartsASize } from "./chart-sizes";
 import { contractMetrics, metricsResponse, platformRow } from "./fixtures";
+import { fakeMatchMedia } from "./match-media";
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
@@ -16,8 +18,10 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 }));
 
 giveChartsASize();
+fakeMatchMedia();
 
-const [, LAST_HOUR, , LAST_DAY] = TIME_RANGES;
+const [, LAST_HOUR, LAST_6_HOURS, LAST_DAY, , LAST_WEEK] = TIME_RANGES;
+const MINUTE_MS = 60_000;
 
 beforeEach(() => {
   vi.mocked(getMetrics).mockReset();
@@ -28,8 +32,7 @@ type PanelOverrides = Partial<MetricsPanelProps>;
 const defaultProps: MetricsPanelProps = {
   scope: { kind: "platform" },
   range: LAST_HOUR,
-  isSelectable: () => true,
-  onSelectApp: () => undefined,
+  onRangeChange: () => undefined,
 };
 
 function renderPanel(overrides: PanelOverrides = {}) {
@@ -43,46 +46,117 @@ function renderPanel(overrides: PanelOverrides = {}) {
   };
 }
 
-/** The tile with this label, as a scope to read its value and detail from. */
-function tile(label: string) {
+/**
+ * The window of the range ends at the start of the current minute; the window
+ * before ends a whole range earlier. So a query that ends within the last
+ * minute is the one of the range.
+ */
+function isCurrentWindow(query: MetricsQuery | undefined): boolean {
+  return Date.now() - Date.parse(query?.to ?? "") < MINUTE_MS;
+}
+
+/** Answers the window of the range with `current` and the window before with `previous`. */
+function answer(
+  current: () => Promise<MetricsResponse>,
+  previous: () => Promise<MetricsResponse> = current,
+): void {
+  vi.mocked(getMetrics).mockImplementation((query) =>
+    isCurrentWindow(query) ? current() : previous(),
+  );
+}
+
+function resolved(response: MetricsResponse) {
+  return () => Promise.resolve(response);
+}
+
+function rejected(error: Error) {
+  return () => Promise.reject(error);
+}
+
+/** The contract example with the platform's requests halved: the window before, against which 412 is twice as many. */
+function halfAsBusy(): MetricsResponse {
+  const example = contractMetrics();
+  return {
+    ...example,
+    items: example.items.map((row) =>
+      row.app_slug === "_platform" ? { ...row, requests: 206 } : row,
+    ),
+  };
+}
+
+/** The figure with this label, as a scope to read its value and detail from. */
+function figure(label: string) {
   const term = screen.getByText(label, { selector: "dt" });
   const box = term.closest("div");
-  if (box === null) throw new Error(`no tile for ${label}`);
+  if (box === null) throw new Error(`no figure for ${label}`);
   return within(box);
 }
 
-function queryOf(call: number) {
-  const [query, options] = vi.mocked(getMetrics).mock.calls[call] ?? [];
-  return { query, options };
+function queries(): (MetricsQuery | undefined)[] {
+  return vi.mocked(getMetrics).mock.calls.map(([query]) => query);
 }
 
-describe("MetricsPanel numbers", () => {
-  it("shows the platform's headline figures from the answer, as text", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(contractMetrics());
+function windowMinutes(query: MetricsQuery | undefined): number {
+  return (
+    (Date.parse(query?.to ?? "") - Date.parse(query?.from ?? "")) / MINUTE_MS
+  );
+}
+
+describe("MetricsPanel figures", () => {
+  it("shows the platform's figures from the answer, as text in tabular digits", async () => {
+    answer(resolved(contractMetrics()));
     renderPanel();
 
     expect(await screen.findByText(/Updated/)).toBeInTheDocument();
     expect(screen.getByText(/Updated/).closest("p")).toHaveTextContent(
       "2026-10-30 09:15 UTC to 2026-10-30 09:16 UTC. Updated",
     );
-    expect(tile("Requests").getByText("412")).toBeInTheDocument();
-    expect(tile("Server errors").getByText("3")).toBeInTheDocument();
+    expect(figure("Requests").getByText("412")).toHaveClass("tabular-nums");
+    expect(figure("Server errors").getByText("3")).toBeInTheDocument();
     expect(
-      tile("Server errors").getByText("0.7% of requests"),
+      figure("Server errors").getByText("0.7% of requests"),
     ).toBeInTheDocument();
-    expect(tile("Latency p50").getByText("at most 25 ms")).toBeInTheDocument();
-    expect(tile("Latency p95").getByText("at most 500 ms")).toBeInTheDocument();
-    expect(tile("Memory peak").getByText("1,500 MB")).toBeInTheDocument();
+    expect(figure("Response time, p50").getByText("≤ 25")).toBeInTheDocument();
+    expect(figure("Response time, p95").getByText("≤ 500")).toBeInTheDocument();
+    expect(figure("Memory peak").getByText("1,500")).toBeInTheDocument();
     expect(
-      tile("Memory peak").getByText("24% of the 6,144 MB limit"),
+      figure("Memory peak").getByText("24% of the 6,144 MB limit"),
     ).toBeInTheDocument();
     expect(
-      tile("Egress drops").getByText("nothing was blocked"),
+      figure("Egress drops").getByText("nothing was blocked"),
     ).toBeInTheDocument();
   });
 
-  it("draws the four charts, each in a section of its own, and says so when one has nothing to show", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(contractMetrics());
+  it("compares each figure with the window before it, in words", async () => {
+    answer(resolved(contractMetrics()), resolved(halfAsBusy()));
+    renderPanel();
+    await screen.findByText(/Updated/);
+
+    expect(
+      figure("Requests").getByText("100% more than the previous hour"),
+    ).toBeInTheDocument();
+    expect(
+      figure("Server errors").getByText("Same as the previous hour"),
+    ).toBeInTheDocument();
+  });
+
+  it("still shows the window when the window before cannot be read, without the comparison", async () => {
+    answer(
+      resolved(contractMetrics()),
+      rejected(new ApiError(503, "unavailable", "starting up")),
+    );
+    renderPanel();
+    await screen.findByText(/Updated/);
+
+    expect(figure("Requests").getByText("412")).toBeInTheDocument();
+    expect(screen.queryByText(/previous hour/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("MetricsPanel charts", () => {
+  it("draws each chart in a frame of its own, and says so when one has nothing to show", async () => {
+    answer(resolved(contractMetrics()));
     renderPanel();
     await screen.findByText(/Updated/);
 
@@ -90,66 +164,39 @@ describe("MetricsPanel numbers", () => {
       "Requests per minute",
       "Response time of requests",
       "Memory peak per minute",
+      "Apps running",
     ]) {
-      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
-      expect(screen.getByRole("img", { name: title })).toBeInTheDocument();
+      const frame = screen.getByRole("group", { name: title });
+      expect(
+        within(frame).getByRole("heading", { level: 3, name: title }),
+      ).toBeInTheDocument();
+      expect(
+        within(frame).getByRole("img", { name: title }),
+      ).toBeInTheDocument();
     }
-    expect(
-      screen.getByRole("heading", { name: "Egress drops per minute" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("No packet was dropped in this window."),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("img", { name: "Egress drops per minute" }),
-    ).toBeNull();
-  });
-
-  it("compares the apps in a table of text and offers a button that opens one app's charts", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(contractMetrics());
-    const onSelectApp = vi.fn();
-    const user = userEvent.setup();
-    renderPanel({ scope: { kind: "apps" }, onSelectApp });
-
-    const table = await screen.findByRole("table", {
-      name: "Apps compared over the window",
+    const egress = screen.getByRole("group", {
+      name: "Egress drops per minute",
     });
-    const row = within(table).getByRole("row", { name: /sales/ });
     expect(
-      within(row)
-        .getAllByRole("cell")
-        .slice(0, 5)
-        .map((cell) => cell.textContent),
-    ).toEqual(["412", "3", "at most 25 ms", "at most 500 ms", "341 MB"]);
-    expect(within(table).getAllByRole("row")).toHaveLength(2);
-
-    await user.click(
-      within(row).getByRole("button", { name: /^View charts\s*for sales$/ }),
-    );
-    expect(onSelectApp).toHaveBeenCalledExactlyOnceWith("sales");
-  });
-
-  it("offers no button for an app the person cannot open (deleted since the rows were written)", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(contractMetrics());
-    renderPanel({ scope: { kind: "apps" }, isSelectable: () => false });
-    await screen.findByRole("table", { name: "Apps compared over the window" });
-    expect(screen.queryByRole("button", { name: /View charts/ })).toBeNull();
-  });
-
-  it("says there is nothing to chart when the window has no rows", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(metricsResponse([]));
-    renderPanel();
-    expect(
-      await screen.findByText("No metrics in this window"),
+      within(egress).getByText("No packet was dropped in this window."),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("img")).toBeNull();
+    expect(within(egress).queryByRole("img")).toBeNull();
+  });
+
+  it("draws no apps-running chart for one app", async () => {
+    answer(resolved(contractMetrics()));
+    renderPanel({ scope: { kind: "app", slug: "sales" } });
+    await screen.findByText(/Updated/);
+
+    expect(
+      screen.getByRole("group", { name: "Requests per minute" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Apps running" })).toBeNull();
+    expect(screen.queryByText("Apps running", { selector: "dt" })).toBeNull();
   });
 
   it("warns, as text, that a long answer was cut", async () => {
-    vi.mocked(getMetrics).mockResolvedValue({
-      ...metricsResponse([platformRow(0)]),
-      truncated: true,
-    });
+    answer(resolved({ ...metricsResponse([platformRow(0)]), truncated: true }));
     renderPanel();
     expect(
       await screen.findByText("The answer was cut to its newest rows"),
@@ -157,71 +204,99 @@ describe("MetricsPanel numbers", () => {
   });
 });
 
+describe("MetricsPanel with no traffic", () => {
+  it("names the range and offers the next longer one", async () => {
+    answer(resolved(metricsResponse([])));
+    const onRangeChange = vi.fn();
+    const user = userEvent.setup();
+    renderPanel({ onRangeChange });
+
+    expect(
+      await screen.findByText("No traffic in the last hour"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("img")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Show the last 6 hours" }),
+    );
+    expect(onRangeChange).toHaveBeenCalledExactlyOnceWith(LAST_6_HOURS.id);
+  });
+
+  it("offers no longer range after the longest", async () => {
+    answer(resolved(metricsResponse([])));
+    renderPanel({ range: LAST_WEEK });
+
+    expect(
+      await screen.findByText("No traffic in the last 7 days"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Show the/ })).toBeNull();
+  });
+});
+
 describe("MetricsPanel polling", () => {
-  it("asks for the scope's rows over the range, with the abort signal so leaving the page cancels it", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(contractMetrics());
+  it("asks for the scope's rows over the range at a step of a minute, then for the hour before, with the abort signal", async () => {
+    answer(resolved(contractMetrics()));
     renderPanel({ scope: { kind: "app", slug: "sales" }, range: LAST_HOUR });
     await screen.findByText(/Updated/);
 
-    const { query, options } = queryOf(0);
-    expect(query?.app).toBe("sales");
-    const minutes =
-      (Date.parse(query?.to ?? "") - Date.parse(query?.from ?? "")) / 60_000;
-    expect(minutes).toBe(LAST_HOUR.minutes);
-    expect(options?.signal).toBeInstanceOf(AbortSignal);
+    const [current, previous] = queries();
+    expect(current).toMatchObject({ app: "sales", step: "1m" });
+    expect(windowMinutes(current)).toBe(LAST_HOUR.minutes);
+    expect(previous).toMatchObject({ app: "sales", step: "1m" });
+    expect(previous?.to).toBe(current?.from);
+    expect(windowMinutes(previous)).toBe(LAST_HOUR.minutes);
+    for (const [, options] of vi.mocked(getMetrics).mock.calls) {
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+    }
   });
 
-  it("asks for the platform row by its reserved name, and for no app at all to compare them", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(contractMetrics());
-    const first = renderPanel({ scope: { kind: "platform" } });
+  it("reads 7 days at 15 minutes, and no week before it: those minutes are no longer kept", async () => {
+    answer(resolved(contractMetrics()));
+    renderPanel({ range: LAST_WEEK });
     await screen.findByText(/Updated/);
-    expect(queryOf(0).query?.app).toBe("_platform");
-    first.unmount();
 
-    renderPanel({ scope: { kind: "apps" } });
-    await screen.findByRole("table", { name: "Apps compared over the window" });
-    expect(queryOf(1).query).not.toHaveProperty("app");
+    expect(queries()).toHaveLength(1);
+    expect(queries()[0]).toMatchObject({ app: "_platform", step: "15m" });
+    expect(windowMinutes(queries()[0])).toBe(LAST_WEEK.minutes);
   });
 
-  it("drops the old charts at once when the app changes, and asks for the new app", async () => {
-    vi.mocked(getMetrics)
-      .mockResolvedValueOnce(contractMetrics())
-      .mockReturnValueOnce(new Promise(() => undefined));
+  it("drops the old charts at once when the scope changes, keeping each frame's place, and asks for the new one", async () => {
+    answer(resolved(contractMetrics()));
     const panel = renderPanel({ scope: { kind: "platform" } });
     await screen.findByText(/Updated/);
+    answer(() => new Promise(() => undefined));
 
     panel.update({ scope: { kind: "app", slug: "sales" } });
 
-    expect(screen.getByText("Loading metrics…")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading the metrics of the last hour…",
+    );
     expect(screen.queryByRole("img")).toBeNull();
+    const loading = screen.getByRole("group", { name: "Requests" });
+    expect(loading).toHaveAttribute("aria-busy", "true");
     await waitFor(() => {
-      expect(getMetrics).toHaveBeenCalledTimes(2);
+      expect(queries().at(-1)?.app).toBe("sales");
     });
-    expect(queryOf(1).query?.app).toBe("sales");
   });
 
   it("asks again over the new window when the range changes", async () => {
-    vi.mocked(getMetrics).mockResolvedValue(contractMetrics());
+    answer(resolved(contractMetrics()));
     const panel = renderPanel({ range: LAST_HOUR });
     await screen.findByText(/Updated/);
+    vi.mocked(getMetrics).mockClear();
 
     panel.update({ range: LAST_DAY });
 
     await waitFor(() => {
       expect(getMetrics).toHaveBeenCalledTimes(2);
     });
-    const { query } = queryOf(1);
-    const minutes =
-      (Date.parse(query?.to ?? "") - Date.parse(query?.from ?? "")) / 60_000;
-    expect(minutes).toBe(LAST_DAY.minutes);
+    expect(windowMinutes(queries()[0])).toBe(LAST_DAY.minutes);
+    expect(queries()[0]?.step).toBe("1m");
   });
 });
 
 describe("MetricsPanel failures", () => {
   it("says the metrics could not be loaded when the first call fails, and Try again asks once more", async () => {
-    vi.mocked(getMetrics)
-      .mockRejectedValueOnce(new ApiError(503, "unavailable", "starting up"))
-      .mockResolvedValueOnce(contractMetrics());
+    answer(rejected(new ApiError(503, "unavailable", "starting up")));
     const user = userEvent.setup();
     renderPanel();
 
@@ -229,26 +304,45 @@ describe("MetricsPanel failures", () => {
       "Could not load the metrics",
     );
     expect(screen.queryByRole("img")).toBeNull();
+    expect(
+      within(screen.getByRole("group", { name: "Requests" })).getByText(
+        "Not shown: the metrics could not be read.",
+      ),
+    ).toBeInTheDocument();
 
+    answer(resolved(contractMetrics()));
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText(/Updated/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("explains a range the server will not cover in words of its own", async () => {
+    answer(
+      rejected(new ApiError(400, "window_too_long", "use step=15m or more")),
+    );
+    renderPanel({ range: LAST_WEEK });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Could not load the metrics: the range is longer than the server answers",
+    );
+    expect(alert).toHaveTextContent("at most 7 days at a time");
+    expect(alert).not.toHaveTextContent("The change was not accepted");
+  });
+
   it("keeps the last charts under a warning when a refresh fails after a good answer", async () => {
-    vi.mocked(getMetrics)
-      .mockResolvedValueOnce(contractMetrics())
-      .mockRejectedValueOnce(new ApiError(503, "unavailable", "starting up"));
+    answer(resolved(contractMetrics()));
     const user = userEvent.setup();
     renderPanel();
     await screen.findByText(/Updated/);
+    answer(rejected(new ApiError(503, "unavailable", "starting up")));
 
     await user.click(screen.getByRole("button", { name: "Refresh" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not refresh the metrics, showing the last ones received",
     );
-    expect(tile("Requests").getByText("412")).toBeInTheDocument();
+    expect(figure("Requests").getByText("412")).toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: "Requests per minute" }),
     ).toBeInTheDocument();

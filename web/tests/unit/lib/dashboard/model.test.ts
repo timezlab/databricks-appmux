@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
 import { MetricsResponse, MetricsRow } from "@/lib/api/schemas";
+import type { FigureKey } from "@/lib/dashboard/figures";
 import {
-  MEMORY_DANGER_RATIO,
-  MEMORY_WARNING_RATIO,
   TONE_TEXTURE,
   buildDashboardModel,
-  comparisonCells,
-  memoryTone,
+  chartOutline,
 } from "@/lib/dashboard/model";
 import type {
   ChartTone,
@@ -24,7 +22,6 @@ import { readExampleObject } from "../../../support/contract-examples";
 const T0 = Date.parse("2026-10-30T08:00:00Z");
 const SALES: DashboardScope = { kind: "app", slug: "sales" };
 const PLATFORM: DashboardScope = { kind: "platform" };
-const APPS: DashboardScope = { kind: "apps" };
 
 function isoAt(offsetMinutes: number): string {
   return new Date(T0 + offsetMinutes * MINUTE_MS)
@@ -87,8 +84,8 @@ function lineChart(model: SeriesModel, id: string): LineChartSpec {
   return chart;
 }
 
-function tile(model: SeriesModel, key: string) {
-  const found = model.tiles.find((candidate) => candidate.key === key);
+function figure(model: SeriesModel, key: FigureKey) {
+  const found = model.figures.find((candidate) => candidate.key === key);
   assert.ok(found !== undefined, key);
   return found;
 }
@@ -267,21 +264,29 @@ describe("one point", () => {
     assert.deepEqual(requests.tones, ["primary", "warning", "danger"]);
   });
 
-  it("reads the percentiles from the histogram (design worked example: p50 in 25 ms, p95 in 500 ms)", () => {
-    assert.equal(tile(model, "p50").value, "at most 25 ms");
-    assert.equal(tile(model, "p95").value, "at most 500 ms");
+  it("reads the percentiles from the histogram (design worked example: p50 in 25 ms, p95 in 500 ms, p99 in 1 s)", () => {
+    assert.deepEqual(
+      [figure(model, "p50").value, figure(model, "p50").unit],
+      ["≤ 25", "ms"],
+    );
+    assert.deepEqual(
+      [figure(model, "p95").value, figure(model, "p95").unit],
+      ["≤ 500", "ms"],
+    );
     const latency = columnChart(model, "latency");
     assert.equal(latency.columns.length, 11);
     assert.deepEqual(latency.columns[2], [140]);
     assert.deepEqual(latency.labels.slice(0, 2), ["5", "10"]);
     assert.equal(latency.labels[10], "> 5,000");
+    // 412 requests: the 408th is the first in the "up to 1 s" bucket (cumulative 402, then 408).
     assert.deepEqual(latency.highlights, [
       { index: 2, label: "p50" },
       { index: 6, label: "p95" },
+      { index: 7, label: "p99" },
     ]);
   });
 
-  it("merges the labels of both percentiles when they fall in the same bucket", () => {
+  it("merges the labels of the percentiles that fall in the same bucket", () => {
     const one = series(
       buildDashboardModel(
         response([row(30, { lat_hist: [0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0] })]),
@@ -289,7 +294,7 @@ describe("one point", () => {
       ),
     );
     assert.deepEqual(columnChart(one, "latency").highlights, [
-      { index: 2, label: "p50, p95" },
+      { index: 2, label: "p50, p95, p99" },
     ]);
   });
 
@@ -300,8 +305,14 @@ describe("one point", () => {
     assert.equal(memory.values[30], 341);
     assert.equal(memory.values.filter((v) => v !== null).length, 1);
     assert.equal(memory.reference, null);
-    assert.equal(tile(model, "memory").value, "341 MB");
-    assert.equal(tile(model, "memory").meter, null);
+    assert.deepEqual(
+      [figure(model, "memory").value, figure(model, "memory").unit],
+      ["341", "MB"],
+    );
+    assert.equal(
+      figure(model, "memory").detail,
+      "highest resident memory of the app",
+    );
   });
 
   it("counts a minute with zero drops as a column of zero, not as a gap", () => {
@@ -309,17 +320,42 @@ describe("one point", () => {
     assert.deepEqual(egress.columns[30], [0]);
     assert.equal(egress.columns[29], null);
     assert.equal(egress.emptyMessage, "No packet was dropped in this window.");
-    assert.equal(tile(model, "egress").value, "0");
+    assert.equal(figure(model, "egress").value, "0");
   });
 
-  it("states the requests tile with the average over the minutes that have data", () => {
-    assert.equal(tile(model, "requests").value, "412");
+  it("states the requests figure with the share of client errors, and the server errors with theirs", () => {
+    assert.equal(figure(model, "requests").value, "412");
+    assert.equal(figure(model, "requests").detail, "2.2% answered 4xx");
+    assert.equal(figure(model, "errors").value, "3");
+    assert.equal(figure(model, "errors").detail, "0.7% of requests");
+  });
+
+  it("gives every figure a sparkline point per column of the charts", () => {
+    for (const item of model.figures) {
+      assert.equal(item.spark.length, 60, item.key);
+    }
+    assert.equal(figure(model, "requests").spark[30], 412);
+    assert.equal(figure(model, "requests").spark[29], null);
+  });
+
+  it("captions a column as the total of its step, and memory as the peak", () => {
     assert.equal(
-      tile(model, "requests").detail,
-      "412 per minute over 1 minute with data",
+      columnChart(model, "requests").xCaption,
+      "1-minute totals, time in UTC",
     );
-    assert.equal(tile(model, "errors").value, "3");
-    assert.equal(tile(model, "errors").detail, "0.7% of requests");
+    assert.equal(
+      columnChart(model, "egress").xCaption,
+      "1-minute totals, time in UTC",
+    );
+    assert.equal(
+      lineChart(model, "memory").xCaption,
+      "1-minute peaks, time in UTC",
+    );
+  });
+
+  it("has no apps-running chart and no apps figure: that is the platform's", () => {
+    assert.ok(model.charts.every((chart) => chart.id !== "apps-running"));
+    assert.ok(model.figures.every((item) => item.key !== "apps"));
   });
 
   it("shows a small share with a decimal and a big one as a whole percent", () => {
@@ -329,21 +365,21 @@ describe("one point", () => {
         SALES,
       ),
     );
-    assert.equal(tile(rare, "errors").detail, "less than 0.1% of requests");
+    assert.equal(figure(rare, "errors").detail, "less than 0.1% of requests");
     const common = series(
       buildDashboardModel(
         response([row(5, { requests: 200, r4xx: 0, r5xx: 50 })]),
         SALES,
       ),
     );
-    assert.equal(tile(common, "errors").detail, "25% of requests");
+    assert.equal(figure(common, "errors").detail, "25% of requests");
     const none = series(
       buildDashboardModel(
         response([row(5, { requests: 200, r4xx: 0, r5xx: 0 })]),
         SALES,
       ),
     );
-    assert.equal(tile(none, "errors").detail, "0% of requests");
+    assert.equal(figure(none, "errors").detail, "0% of requests");
   });
 
   it("raises no notice: one row has no interior gap", () => {
@@ -352,7 +388,7 @@ describe("one point", () => {
 });
 
 describe("rows outside the window", () => {
-  it("do not reach the tiles, the drops or the facts of an app", () => {
+  it("do not reach the figures, the drops or the facts of an app", () => {
     // The answer says it covers 08:00 to 09:00; a row at 07:55 or 09:30 is not part of it.
     const model = series(
       buildDashboardModel(
@@ -370,9 +406,9 @@ describe("rows outside the window", () => {
         SALES,
       ),
     );
-    assert.equal(tile(model, "requests").value, "412");
-    assert.equal(tile(model, "errors").value, "3");
-    assert.equal(tile(model, "egress").value, "0");
+    assert.equal(figure(model, "requests").value, "412");
+    assert.equal(figure(model, "errors").value, "3");
+    assert.equal(figure(model, "egress").value, "0");
     assert.deepEqual(model.drops, []);
     assert.equal(
       model.facts.find((fact) => fact.key === "restarts")?.value,
@@ -381,23 +417,10 @@ describe("rows outside the window", () => {
     // No interior gap is invented between 07:55, 08:10 and 09:30.
     assert.deepEqual(model.notices, []);
   });
-
-  it("do not make an app of the comparison table", () => {
-    const model = buildDashboardModel(
-      response([row(-5, { app_slug: "ghost" }), row(10)]),
-      APPS,
-    );
-    assert.ok(model.kind === "apps");
-    assert.deepEqual(
-      model.rows.map((entry) => entry.slug),
-      ["sales"],
-    );
-    assert.equal(model.rows[0]?.requests, 412);
-  });
 });
 
 describe("other series in the same answer", () => {
-  it("never reach the drops, tiles or facts of the scope on screen", () => {
+  it("never reach the drops, figures or facts of the scope on screen", () => {
     const rows = [
       row(10, {
         egress_dropped: 2,
@@ -414,8 +437,8 @@ describe("other series in the same answer", () => {
     ];
     const model = series(buildDashboardModel(response(rows), SALES));
     assert.deepEqual(model.drops, [{ rule: "app:1", count: 2 }]);
-    assert.equal(tile(model, "requests").value, "412");
-    assert.equal(tile(model, "egress").value, "2");
+    assert.equal(figure(model, "requests").value, "412");
+    assert.equal(figure(model, "egress").value, "2");
     assert.equal(
       model.facts.find((fact) => fact.key === "restarts")?.value,
       "1",
@@ -502,18 +525,18 @@ describe("large counts", () => {
     ),
   );
 
-  it("groups digits in the tiles and the tooltips", () => {
-    assert.equal(tile(model, "requests").value, "12,345,685");
+  it("groups digits in the figures and the tooltips", () => {
+    assert.equal(figure(model, "requests").value, "12,345,685");
     assert.match(
       columnChart(model, "requests").tips[5] ?? "",
       /^2026-10-30 08:05 UTC: 12,345,678 requests, 600 client errors, 78 server errors$/,
     );
   });
 
-  it("averages over the minutes with data and rounds a big rate to a whole number", () => {
+  it("says a share too small for one decimal in words", () => {
     assert.equal(
-      tile(model, "requests").detail,
-      "6,172,843 per minute over 2 minutes with data",
+      figure(model, "requests").detail,
+      "less than 0.1% answered 4xx",
     );
   });
 
@@ -561,6 +584,11 @@ describe("long windows", () => {
     assert.deepEqual(bucket, [800, 18, 6]);
     assert.equal(requests.labels[0], "10-29 09:00");
     assert.equal(memoryTitle(model), "Memory peak per 20 minutes");
+    assert.equal(requests.xCaption, "20-minute totals, time in UTC");
+    assert.equal(
+      lineChart(model, "memory").xCaption,
+      "20-minute peaks, time in UTC",
+    );
   });
 
   it("reads a bucket's table rows and tooltips as sums for counts and the peak for memory", () => {
@@ -621,7 +649,26 @@ describe("long windows", () => {
     assert.equal(latency.tips[10], "Over 5 s: 4 requests (1%)");
   });
 
-  it("marks a bucket that starts before the window as partial", () => {
+  it("marks a bucket that starts before the window as partial, as buckets start on whole UTC multiples", () => {
+    // 08:01 to 09:14 is 73 minutes: 2-minute buckets from 08:00, the first of them cut.
+    const model = series(
+      buildDashboardModel(
+        response([row(1)], { fromMinute: 1, toMinute: 74 }),
+        SALES,
+      ),
+    );
+    const requests = columnChart(model, "requests");
+    assert.equal(requests.columns.length, 37);
+    assert.equal(
+      requests.tips[0],
+      "2026-10-30 08:01 UTC (partial): 412 requests, 9 client errors, 3 server errors",
+    );
+    assert.doesNotMatch(requests.tips[1] ?? "", /partial/);
+    assert.doesNotMatch(requests.tips[36] ?? "", /partial/);
+  });
+
+  it("marks a bucket that the end of the window cuts as partial too", () => {
+    // 08:00 to 09:13: the last 2-minute bucket, from 09:12, holds one minute.
     const model = series(
       buildDashboardModel(
         response([row(0)], { fromMinute: 0, toMinute: 73 }),
@@ -630,8 +677,81 @@ describe("long windows", () => {
     );
     const requests = columnChart(model, "requests");
     assert.equal(requests.columns.length, 37);
-    assert.match(requests.tips[0] ?? "", /\(partial\)/);
-    assert.doesNotMatch(requests.tips[1] ?? "", /partial/);
+    assert.doesNotMatch(requests.tips[0] ?? "", /partial/);
+    assert.match(requests.tips[36] ?? "", /^2026-10-30 09:12 UTC \(partial\)/);
+  });
+});
+
+describe("rows read at a step of 5 minutes", () => {
+  // Six hours at a 5-minute step: 72 columns of one step each.
+  const rows = [row(0), row(5), row(15)];
+  const model = series(
+    buildDashboardModel(response(rows, { toMinute: 360 }), SALES, {
+      stepMinutes: 5,
+    }),
+  );
+
+  it("draws one column per step and names the step in the title and the caption", () => {
+    const requests = columnChart(model, "requests");
+    assert.equal(requests.title, "Requests per 5 minutes");
+    assert.equal(requests.xCaption, "5-minute totals, time in UTC");
+    assert.equal(requests.columns.length, 72);
+    assert.deepEqual(requests.columns[0], [400, 9, 3]);
+    assert.deepEqual(requests.columns[1], [400, 9, 3]);
+    assert.equal(requests.columns[2], null);
+    assert.deepEqual(requests.columns[3], [400, 9, 3]);
+  });
+
+  it("counts a missing step as its 5 minutes, and two steps in a row as no gap", () => {
+    assert.deepEqual(
+      model.notices.map((notice) => notice.title),
+      ["5 minutes without data"],
+    );
+  });
+});
+
+describe("the window before", () => {
+  const current = response([row(30)]);
+  const previous = response(
+    [
+      row(-30, { requests: 206, r5xx: 3 }),
+      row(-30, { app_slug: "ads", requests: 9999 }),
+    ],
+    { fromMinute: -60, toMinute: 0 },
+  );
+
+  it("gives each count figure its change, from the scope's own rows of the window before", () => {
+    const model = series(
+      buildDashboardModel(current, SALES, { previous, span: "hour" }),
+    );
+    assert.deepEqual(figure(model, "requests").change, {
+      direction: "up",
+      text: "100% more than the previous hour",
+    });
+    assert.deepEqual(figure(model, "errors").change, {
+      direction: "same",
+      text: "Same as the previous hour",
+    });
+    assert.equal(
+      figure(model, "p50").change?.text,
+      "Same as the previous hour",
+    );
+  });
+
+  it("gives no change when the window before was not read or has no row of the scope", () => {
+    const unread = series(buildDashboardModel(current, SALES));
+    assert.ok(unread.figures.every((item) => item.change === null));
+    const onlyAnotherApp = response([row(-30, { app_slug: "ads" })], {
+      fromMinute: -60,
+      toMinute: 0,
+    });
+    const model = series(
+      buildDashboardModel(current, SALES, {
+        previous: onlyAnotherApp,
+        span: "hour",
+      }),
+    );
+    assert.ok(model.figures.every((item) => item.change === null));
   });
 });
 
@@ -653,7 +773,7 @@ describe("the platform", () => {
   const model = series(buildDashboardModel(response(rows), PLATFORM));
 
   it("uses only the platform rows", () => {
-    assert.equal(tile(model, "requests").value, "824");
+    assert.equal(figure(model, "requests").value, "824");
   });
 
   it("draws memory used against the limit and keeps the limit on the chart", () => {
@@ -727,21 +847,45 @@ describe("the platform", () => {
       /^4 packets dropped by egress rules in the window\. /,
     );
     assert.equal(
-      tile(model, "egress").detail,
+      figure(model, "egress").detail,
       "packets dropped by egress rules",
     );
   });
 
-  it("shows the peak as a meter in words and in numbers", () => {
-    const peak = tile(model, "memory");
-    assert.equal(peak.value, "6,000 MB");
+  it("states the memory peak against the limit, in words and in numbers", () => {
+    const peak = figure(model, "memory");
+    assert.deepEqual([peak.value, peak.unit], ["6,000", "MB"]);
     assert.equal(peak.detail, "84% of the 7,168 MB limit");
-    assert.deepEqual(peak.meter, {
-      label: "Platform memory peak",
-      value: 6000,
-      max: 7168,
-      tone: "warning",
-    });
+    assert.deepEqual(peak.spark.slice(10, 13), [5775, 6000, null]);
+  });
+
+  it("adds a figure for the apps running out of those registered", () => {
+    const apps = figure(model, "apps");
+    assert.deepEqual([apps.value, apps.unit], ["3", "of 4"]);
+  });
+
+  it("draws the apps running against the apps registered, with a table twin", () => {
+    const apps = lineChart(model, "apps-running");
+    assert.equal(apps.title, "Apps running");
+    assert.deepEqual(apps.values.slice(10, 13), [3, 3, null]);
+    assert.equal(apps.reference, 4);
+    assert.deepEqual(apps.legend, [
+      { label: "Apps running", tone: "primary" },
+      { label: "Apps registered", tone: "warning" },
+    ]);
+    assert.deepEqual(apps.table.headers, ["Time", "Running", "Registered"]);
+    assert.deepEqual(apps.table.rows[10]?.cells, [
+      "2026-10-30 08:10 UTC",
+      "3",
+      "4",
+    ]);
+    assert.deepEqual(apps.table.rows[12]?.cells, [
+      "2026-10-30 08:12 UTC",
+      "no data",
+      "no data",
+    ]);
+    assert.equal(apps.tips[10], "2026-10-30 08:10 UTC: 3 running of 4");
+    assert.equal(apps.emptyMessage, null);
   });
 
   it("lists the drops by rule, most first", () => {
@@ -749,7 +893,7 @@ describe("the platform", () => {
       { rule: "app:2", count: 3 },
       { rule: "global:1", count: 1 },
     ]);
-    assert.equal(tile(model, "egress").value, "4");
+    assert.equal(figure(model, "egress").value, "4");
   });
 
   it("adds the platform's own facts: apps running, refused starts, registry, edge memory", () => {
@@ -769,7 +913,7 @@ describe("the platform", () => {
     assert.ok(!keys.includes("edge-memory"));
   });
 
-  it("has no meter when the rows carry no memory figure", () => {
+  it("falls back on the resident memory, with no limit, when the rows carry no memory figure", () => {
     const bare = series(
       buildDashboardModel(
         response([
@@ -782,9 +926,29 @@ describe("the platform", () => {
         PLATFORM,
       ),
     );
-    assert.equal(tile(bare, "memory").meter, null);
-    assert.equal(tile(bare, "memory").value, "341 MB");
+    assert.equal(figure(bare, "memory").value, "341");
+    assert.equal(
+      figure(bare, "memory").detail,
+      "highest memory the platform used",
+    );
     assert.equal(lineChart(bare, "memory").reference, null);
+  });
+});
+
+describe("chartOutline", () => {
+  it("names the charts the model draws, in its order, for an app and for the platform", () => {
+    const app = series(buildDashboardModel(response([row(30)]), SALES));
+    const platform = series(
+      buildDashboardModel(response([row(30, PLATFORM_FIELDS)]), PLATFORM),
+    );
+    assert.deepEqual(
+      chartOutline(SALES).map((chart) => chart.id),
+      app.charts.map((chart) => chart.id),
+    );
+    assert.deepEqual(
+      chartOutline(PLATFORM).map((chart) => chart.id),
+      platform.charts.map((chart) => chart.id),
+    );
   });
 });
 
@@ -804,23 +968,6 @@ describe("TONE_TEXTURE", () => {
     const requests = columnChart(model, "requests");
     const legendTones: ChartTone[] = requests.legend.map((item) => item.tone);
     assert.deepEqual(legendTones, requests.tones);
-  });
-});
-
-describe("memoryTone", () => {
-  it("is green below the warning ratio, amber from it, red from the danger ratio", () => {
-    assert.ok(MEMORY_WARNING_RATIO < MEMORY_DANGER_RATIO);
-    assert.equal(memoryTone(0, 1000), "success");
-    assert.equal(memoryTone(749, 1000), "success");
-    assert.equal(memoryTone(750, 1000), "warning");
-    assert.equal(memoryTone(899, 1000), "warning");
-    assert.equal(memoryTone(900, 1000), "danger");
-    assert.equal(memoryTone(5000, 1000), "danger");
-  });
-
-  it("does not guess without a limit", () => {
-    assert.equal(memoryTone(500, 0), "success");
-    assert.equal(memoryTone(500, Number.NaN), "success");
   });
 });
 
@@ -847,50 +994,12 @@ describe("a latency histogram with no request", () => {
       "No request was measured in this window.",
     );
     assert.deepEqual(latency.highlights, []);
-    assert.equal(tile(model, "p50").value, "no requests");
+    assert.equal(figure(model, "p50").value, "None");
+    assert.equal(figure(model, "p50").detail, "no requests");
     assert.equal(
       columnChart(model, "requests").emptyMessage,
       "No requests in this window.",
     );
-    assert.equal(tile(model, "errors").detail, "no requests");
-  });
-});
-
-describe("the apps comparison", () => {
-  const rows = [
-    row(5),
-    row(6),
-    row(5, { app_slug: "ads", requests: 1000, r5xx: 0 }),
-    row(5, PLATFORM_FIELDS),
-  ];
-  const model = buildDashboardModel(response(rows), APPS);
-
-  it("lists apps busiest first and leaves the platform row out", () => {
-    assert.equal(model.kind, "apps");
-    assert.ok(model.kind === "apps");
-    assert.deepEqual(
-      model.rows.map((entry) => entry.slug),
-      ["ads", "sales"],
-    );
-  });
-
-  it("formats a row as text, with the percentile as the bucket's upper bound", () => {
-    assert.ok(model.kind === "apps");
-    const sales = model.rows.find((entry) => entry.slug === "sales");
-    assert.ok(sales !== undefined);
-    assert.deepEqual(comparisonCells(sales), {
-      requests: "824",
-      serverErrors: "6",
-      p50: "at most 25 ms",
-      p95: "at most 500 ms",
-      memory: "341 MB",
-      egressDrops: "0",
-      restarts: "0",
-    });
-  });
-
-  it("is empty when no app wrote a row", () => {
-    const none = buildDashboardModel(response([row(5, PLATFORM_FIELDS)]), APPS);
-    assert.equal(none.kind, "empty");
+    assert.equal(figure(model, "errors").detail, "no requests");
   });
 });
