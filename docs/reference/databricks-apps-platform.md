@@ -48,7 +48,7 @@ Not measured: a paid workspace (CPU quota, pod network, container size), the cap
 - No body limit up to 100 MB in either direction (about 10 MB/s). A single header of 32 KB passes; 64 KB fails (431 for a request, 503 for a response).
 - `Set-Cookie` and a relative `Location` pass through unchanged; the proxy adds its own `__Host-databricks-app-router` cookie.
 - Client-supplied `X-Forwarded-Email`, `-User`, `-Access-Token`, `-Host`, `X-Real-Ip` and `X-Databricks-Org-Id` are **overwritten**; a client `X-Forwarded-For` value is kept as the leftmost entry and the proxy appends. `Authorization` is not forwarded; `Cookie` is.
-- The CLI's OAuth token works as `Authorization: Bearer` and yields `X-Forwarded-Email` plus a proxy-minted `X-Forwarded-Access-Token`; without a valid bearer the answer is a 302 to the OIDC page, not 401.
+- The CLI's OAuth token works as `Authorization: Bearer` and yields `X-Forwarded-Email` plus a proxy-minted `X-Forwarded-Access-Token`; without a valid bearer the answer is a 302 to the OIDC page when the request has no `Accept` header (or accepts `text/html`), and a 401 with the body `{}` when it accepts `application/json` ([measured 2026-11-03](mcp-and-a2a.md#what-each-failure-looks-like)).
 
 ## Identities and who may grant
 

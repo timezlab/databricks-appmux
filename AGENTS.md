@@ -75,6 +75,7 @@ waves, and `tasks.md` is ticked only for work whose tests pass.
 | Know what v1 does, part by part | [docs/product/v1-design.md](docs/product/v1-design.md) · tables: [v1-data-model.md](docs/product/v1-data-model.md) · rationale and spikes: [v1-design-brief.md](docs/product/v1-design-brief.md) |
 | Find active work | [specs/001-appmux-v1/](specs/001-appmux-v1/spec.md) · plan: [plan.md](specs/001-appmux-v1/plan.md) |
 | Know what the Databricks Apps platform allows (container, proxy, identities, packages) | [docs/reference/databricks-apps-platform.md](docs/reference/databricks-apps-platform.md#platform-at-a-glance) · Free Edition limits: [databricks-free-edition.md](docs/reference/databricks-free-edition.md) |
+| Know whether app A can call app B over MCP or A2A, inside or outside appmux | [docs/reference/mcp-and-a2a.md](docs/reference/mcp-and-a2a.md) · examples: [examples/mcp-tools](examples/mcp-tools/README.md), [examples/a2a-agent](examples/a2a-agent/README.md) |
 | Understand why a technical choice was made | [docs/index.md](docs/index.md#decisions-adrs--append-only) |
 | Know how the agent harness is laid out, wired, and updated | [docs/reference/agent-harness.md](docs/reference/agent-harness.md) |
 | Understand the learned-context hooks | [.agents/hooks/learned/README.md](.agents/hooks/learned/README.md) (review via `/instinct-review`, graduation via `/evolve`) |

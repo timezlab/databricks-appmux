@@ -44,6 +44,7 @@ Navigation only — content lives in the linked documents.
 - [reference/agent-harness.md](reference/agent-harness.md) — layout, installed items, hook wiring, local changes to upstream vibe, how to update.
 - [reference/databricks-apps-platform.md](reference/databricks-apps-platform.md) — the Apps platform: a one-page *Platform at a glance* (container, privileges, proxy, identities, Lakebase, storage, packages, lifecycle), then the detail of the request path, identities, `app.yaml` and bundle resources, with the spike measurements.
 - [reference/databricks-free-edition.md](reference/databricks-free-edition.md) — Free Edition limits (documented), the container tables measured by the probe and the spikes, what is still unconfirmed, and what it means for development.
+- [reference/mcp-and-a2a.md](reference/mcp-and-a2a.md) — MCP and A2A between Apps inside and outside appmux: the three hops, what each failure looks like (302, 401 `{}`, 404), who the target sees, the shared-SP and `CAN USE` setup, all measured on the Free Edition workspace.
 
 ## Debt
 

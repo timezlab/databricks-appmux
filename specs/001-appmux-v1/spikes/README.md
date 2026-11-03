@@ -116,6 +116,12 @@ environment named `venv` beside it and a Chromium headless shell).
   H2C check (removed, see spike 17). The `appmux-probe` app now runs the
   harness and stays until the last spike ends.
 
+- **Correction (2026-11-03).** "Got 302, not the app" holds for a request with no `Accept` header,
+  which is what the probe sent. A request whose `Accept` includes `application/json`, as MCP and
+  A2A clients send, gets **401 with the body `{}`** for the same causes (a bogus bearer, no
+  bearer, or a service principal with no `CAN USE` on the target). Measured with the
+  [example MCP and A2A apps](../../docs/reference/mcp-and-a2a.md#what-each-failure-looks-like).
+
 ## Spike 17 — `app.yaml` on the real platform (2026-10-30)
 
 - **Run.** Deployed three variants to a throwaway app `appmux-spike-17` and read
