@@ -8,7 +8,7 @@
  */
 import { niceScale } from "./chart";
 import type { NiceScale } from "./chart";
-import type { ColumnChartSpec, LineChartSpec } from "./model";
+import type { ChartSpec, ColumnChartSpec, LineChartSpec } from "./model";
 
 /** Recharts reads a series from a row by key. */
 export interface ChartRow {
@@ -116,4 +116,31 @@ export function lineRows(spec: LineChartSpec): ChartRow[] {
 export function lineAxis(spec: LineChartSpec): NiceScale {
   const data = spec.values.filter((value): value is number => value !== null);
   return niceScale(Math.max(0, limitOf(spec) ?? 0, ...data));
+}
+
+/**
+ * The `fill-opacity` of a mark whose bucket the window cuts short. It holds
+ * fewer minutes than the others, so its smaller total must not read as a dip:
+ * the mark is fainter, the caption under the axis says why, and its tip and
+ * table row say "(partial)". Half strength keeps the mark plainly there.
+ */
+export const PARTIAL_MARK_OPACITY = 0.5;
+
+/**
+ * The `fill-opacity` attribute of the mark at `index`: fainter for a partial
+ * bucket, and none at all (full strength) for a whole one. A presentation
+ * attribute, not a style, so the strict CSP allows it.
+ */
+export function markOpacity(
+  partial: readonly boolean[],
+  index: number,
+): number | undefined {
+  return partial[index] === true ? PARTIAL_MARK_OPACITY : undefined;
+}
+
+/** The text under the axis: the spec's caption, and what a fainter mark is when the chart has one. */
+export function axisCaption(spec: ChartSpec): string {
+  if (!spec.partial.includes(true)) return spec.xCaption;
+  const mark = spec.kind === "columns" ? "column" : "point";
+  return `${spec.xCaption}. A fainter ${mark} is a partial bucket: the window holds only part of it`;
 }

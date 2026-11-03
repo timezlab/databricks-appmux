@@ -102,7 +102,7 @@ export function EgressEditor({
   }
 
   return (
-    <div className={FORM_STACK_CLASSES}>
+    <div className={`${FORM_STACK_CLASSES} max-w-140`}>
       <p className="text-muted-foreground">
         {scope === "global"
           ? "These rules apply to every app, after the app's own rules. "

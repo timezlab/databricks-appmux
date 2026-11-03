@@ -122,7 +122,7 @@ const THEMES = {
 };
 
 const TONES = ["neutral", "info", "success", "warning", "danger"] as const;
-const CHART_SERIES = [1, 2, 3, 4, 5, 6] as const;
+const CHART_SERIES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
 /** Text on its background: WCAG 1.4.3, AA for normal-size text. */
 const TEXT_PAIRS: readonly (readonly [text: string, background: string])[] = [

@@ -12,11 +12,12 @@
 import type { MetricsResponse } from "@/lib/api/schemas";
 import { clockLabel } from "./chart";
 import { buildFigures, shareText } from "./figures";
-import type { Figure } from "./figures";
+import type { Figure, PreviousWindow } from "./figures";
 import { PLATFORM_APP_SLUG } from "./scope";
 import type { DashboardScope } from "./scope";
 import {
   LATENCY_BUCKET_BOUNDS_MS,
+  MINUTE_MS,
   bucketRows,
   describeLatency,
   dropsByRule,
@@ -70,12 +71,13 @@ export type ChartTone =
 /**
  * The pattern laid over a mark (and its legend swatch) besides its colour. The
  * tones differ little in lightness, so a person who cannot tell the hues apart
- * still tells a plain segment from a striped one from a dotted one. The app
- * tones alternate plain and striped, so two neighbours in a stack always differ
- * in pattern; the six tokens fail the colour-blind check between some
- * neighbours (`--chart-2` and `--chart-3` in dark mode), and the pattern is
- * what tells those apart. Apps 7 and 8 reuse the first two hues (7 dotted, 8
- * plain), and the grey of `other`, close in lightness to some hues, is dotted.
+ * still tells a plain segment from a striped one from a dotted one. Each app
+ * has a hue of its own (`--chart-1..8`), and only the first app is plain: two
+ * plain apps would differ by hue alone (tests/contract/chart-tones.test.ts).
+ * The others alternate striped and dotted, so two neighbours in a stack always
+ * differ in pattern; some neighbouring tokens fail the colour-blind check
+ * (`--chart-2` and `--chart-3` in dark mode), and the pattern is what tells
+ * those apart. The grey of `other`, on top of the striped eighth app, is dotted.
  */
 export type ToneTexture = "none" | "stripes" | "dots";
 
@@ -85,12 +87,12 @@ export const TONE_TEXTURE: Record<ChartTone, ToneTexture> = {
   danger: "dots",
   "series-1": "none",
   "series-2": "stripes",
-  "series-3": "none",
+  "series-3": "dots",
   "series-4": "stripes",
-  "series-5": "none",
+  "series-5": "dots",
   "series-6": "stripes",
   "series-7": "dots",
-  "series-8": "none",
+  "series-8": "stripes",
   other: "dots",
 };
 
@@ -118,6 +120,12 @@ interface ChartBase {
   legend: LegendItem[];
   /** The time (or bucket) label of each column, parallel to the data. */
   labels: string[];
+  /**
+   * Per column, whether the window cuts its bucket short (`BucketSlot.isPartial`),
+   * parallel to the data. Such a column holds fewer minutes, so the chart draws
+   * it fainter and its tip and table row say "(partial)".
+   */
+  partial: boolean[];
   /** The hover text of each column, parallel to the data. A value is never only in a tooltip: the table has it. */
   tips: string[];
   /** The most labels under the axis. */
@@ -351,7 +359,7 @@ export function buildDashboardModel(
     kind: "series",
     figures: buildFigures({
       summary,
-      previous: previousSummary(options.previous ?? null, slug, stepMinutes),
+      previous: previousWindow(options.previous ?? null, slug, stepMinutes),
       buckets,
       isPlatform,
       span: options.span ?? "window",
@@ -362,19 +370,22 @@ export function buildDashboardModel(
   };
 }
 
-/** The summary of the window before, or `null` when it was not read or holds nothing usable. */
-function previousSummary(
+/** The window before with its length, or `null` when it was not read or has no usable window. */
+function previousWindow(
   response: MetricsResponse | null,
   slug: string,
   stepMinutes: number,
-): SeriesSummary | null {
+): PreviousWindow | null {
   if (response === null) return null;
   const domain = windowDomain(response.from, response.to);
   if (domain === null) return null;
   const rows = rowsInDomain(response.items, domain, stepMinutes).filter(
     (row) => row.app_slug === slug,
   );
-  return summarizeRows(rows, stepMinutes);
+  return {
+    summary: summarizeRows(rows, stepMinutes),
+    windowMinutes: (domain.endMs - domain.startMs) / MINUTE_MS,
+  };
 }
 
 /** Memory figures of the platform rows are the edge's own; an app's are its resident memory. */
@@ -505,6 +516,11 @@ export function timeLabels(frame: BucketFrame): string[] {
   return frame.buckets.map((bucket) => clockLabel(bucket.startMs, withDate));
 }
 
+/** Per column, whether the window cuts its bucket short. */
+export function partialColumns(frame: BucketFrame): boolean[] {
+  return frame.buckets.map((bucket) => bucket.isPartial);
+}
+
 /** The start of a bucket as written in a tooltip; a bucket the window cuts says so. */
 export function bucketTime(bucket: BucketSlot, frame: BucketFrame): string {
   const start = formatAbsoluteTime(
@@ -560,6 +576,7 @@ function requestsChart(context: ChartContext): ColumnChartSpec {
     legend,
     tones: legend.map((item) => item.tone),
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket, index) => {
       const segments = columns[index];
       const time = bucketTime(bucket, context);
@@ -625,6 +642,8 @@ function latencyChart(context: ChartContext): ColumnChartSpec {
     legend: [],
     tones: ["primary"],
     labels: histogram.map((_, index) => latencyBucketLabel(index)),
+    // The columns are response times, not buckets of time: none is cut.
+    partial: histogram.map(() => false),
     tips: histogram.map(
       (count, index) =>
         `${latencyRangeText(index)}: ${pluralize(count, "request")} (${shareText(count, total)})`,
@@ -692,6 +711,7 @@ function memoryChart(context: ChartContext): LineChartSpec {
       " The table below the chart has every value.",
     legend,
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket, index) => {
       const value = values[index];
       const time = bucketTime(bucket, context);
@@ -739,6 +759,7 @@ function egressChart(context: ChartContext): ColumnChartSpec {
     legend: [],
     tones: ["warning"],
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket) => {
       const time = bucketTime(bucket, context);
       return bucket.hasData
@@ -805,6 +826,7 @@ function appsRunningChart(context: ChartContext): LineChartSpec {
       " The table below the chart has every value.",
     legend,
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket, index) => {
       const value = values[index];
       const time = bucketTime(bucket, context);

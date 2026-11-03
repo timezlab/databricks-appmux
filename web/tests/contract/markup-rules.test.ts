@@ -160,11 +160,6 @@ const TRUSTED_EXPRESSIONS: readonly {
     why: "NAV_ITEMS holds literal paths only",
   },
   {
-    file: "components/sub-nav.tsx",
-    text: "item.href",
-    why: "PLATFORM_PAGES holds literal paths",
-  },
-  {
     file: "components/jump-links.tsx",
     text: "item.href",
     why: "SETTING_GROUPS holds literal #anchors only",
@@ -187,7 +182,7 @@ const TRUSTED_EXPRESSIONS: readonly {
   {
     file: "components/app-sidebar.tsx",
     text: "href",
-    why: "SidebarItemData.href, a literal path or appPagePath (appNavItems builds the app's with it); review each caller's item list as for SubNav",
+    why: "SidebarItemData.href, a literal path or appPagePath (appNavItems builds the app's with it); every caller's item list is checked below (platformSidebarItems, appNavItems)",
   },
   {
     file: "components/app-sidebar.tsx",
@@ -1005,7 +1000,7 @@ describe("the sources of the reviewed expressions are safe", () => {
     }
   });
 
-  it("every platform tab is a safe path (sub-nav.tsx: item.href)", () => {
+  it("every platform section is a safe path (app-sidebar.tsx: href; platformSidebarItems maps PLATFORM_PAGES)", () => {
     assert.ok(PLATFORM_PAGES.length > 0);
     for (const page of PLATFORM_PAGES) {
       assert.ok(isSafePathLiteral(page.href), page.href);

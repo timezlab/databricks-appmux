@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 import { ChartFigure } from "@/components/dashboard/chart-figure";
 import { PLOT_MARGIN, Y_AXIS_WIDTH } from "@/components/dashboard/chart-theme";
 import { formatAxisNumber } from "@/lib/dashboard/chart";
-import { columnAxis } from "@/lib/dashboard/chart-data";
+import { MetricsResponse } from "@/lib/api/schemas";
+import { PARTIAL_MARK_OPACITY, columnAxis } from "@/lib/dashboard/chart-data";
 import type { ColumnChartSpec } from "@/lib/dashboard/model";
 import { CHART_WIDTH_PX, giveChartsASize } from "./chart-sizes";
 import {
@@ -17,6 +18,7 @@ import {
   IDLE_MINUTE,
   WINDOW_MINUTES,
   chartSpec,
+  isoAt,
   metricsResponse,
   platformHalfHour,
   platformRow,
@@ -323,5 +325,78 @@ describe("a line chart", () => {
     expect(
       await screen.findByText(/^2026-10-30 08:0[2-4] UTC: 5,0[2-4]0 MB$/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("a bucket the window cuts short", () => {
+  // 08:01 to 09:14 is 73 minutes: 2-minute buckets from 08:00, so the first
+  // column holds one minute of the window and the rest hold two.
+  const cut = seriesModel(
+    MetricsResponse.parse({
+      from: isoAt(1),
+      to: isoAt(74),
+      truncated: false,
+      items: Array.from({ length: 73 }, (_, offset) => platformRow(offset + 1)),
+    }),
+  );
+  const faint = String(PARTIAL_MARK_OPACITY);
+
+  /** The drawn segments of the chart (not the tiles of its texture patterns), leftmost first. */
+  function drawnSegments(chart: HTMLElement): Element[] {
+    return [...chart.querySelectorAll("rect")]
+      .filter(
+        (rect) =>
+          rect.closest("defs") === null &&
+          [SUCCEEDED, CLIENT_ERRORS, SERVER_ERRORS].includes(
+            rect.getAttribute("fill") ?? "",
+          ),
+      )
+      .toSorted(
+        (left, right) =>
+          Number(left.getAttribute("x")) - Number(right.getAttribute("x")),
+      );
+  }
+
+  it("draws every segment of its column fainter, and the other columns at full strength", () => {
+    const { chart } = renderChart("requests", cut);
+    const drawn = drawnSegments(chart);
+    const firstX = drawn[0]?.getAttribute("x");
+    const [inFirst, inOthers] = [
+      drawn.filter((rect) => rect.getAttribute("x") === firstX),
+      drawn.filter((rect) => rect.getAttribute("x") !== firstX),
+    ];
+    // Its succeeded requests and its client errors.
+    expect(inFirst).toHaveLength(2);
+    for (const rect of inFirst) {
+      expect(rect).toHaveAttribute("fill-opacity", faint);
+    }
+    expect(inOthers.length).toBeGreaterThan(0);
+    for (const rect of inOthers) {
+      expect(rect).not.toHaveAttribute("fill-opacity");
+    }
+  });
+
+  it("says under the axis what a fainter column is, and the tooltip still says (partial)", () => {
+    const { spec } = renderChart("requests", cut);
+    expect(
+      screen.getByText(/A fainter column is a partial bucket/),
+    ).toBeInTheDocument();
+    expect(spec.tips[0]).toMatch(/\(partial\)/);
+  });
+
+  it("gives a line a fainter marker at that point, and keeps the newest point's marker whole", () => {
+    const { chart } = renderChart("memory", cut);
+    const markers = [...chart.querySelectorAll("circle")];
+    expect(
+      markers.map((marker) => marker.getAttribute("fill-opacity")),
+    ).toEqual([faint, null]);
+    expect(
+      screen.getByText(/A fainter point is a partial bucket/),
+    ).toBeInTheDocument();
+  });
+
+  it("is not mentioned under a chart whose buckets are all whole", () => {
+    renderChart("requests");
+    expect(screen.queryByText(/partial bucket/)).toBeNull();
   });
 });

@@ -80,7 +80,7 @@ describe("BreakdownPanel", () => {
     ).toEqual(["Docs Portal/docs/", "/old-reports/", "Other apps"]);
   });
 
-  it("lists the apps busiest first, each linked to its Insights, the rest last and unlinked", async () => {
+  it("lists the apps busiest first, each linked to its Insights, an app no longer registered and the rest last unlinked", async () => {
     vi.mocked(getMetricsBreakdown).mockResolvedValue(example());
     render(<BreakdownPanel range={LAST_HOUR} />);
     await screen.findByText(/Updated/);
@@ -97,9 +97,12 @@ describe("BreakdownPanel", () => {
     expect(
       linkTarget(within(table).getByRole("link", { name: "Docs Portal" })),
     ).toBe(linkTarget(appPagePath("docs", "insights")));
+    // The server sends display_name null for an app no longer registered: its
+    // Insights page would only say the app is not found.
     expect(
-      linkTarget(within(table).getByRole("link", { name: "old-reports" })),
-    ).toBe(linkTarget(appPagePath("old-reports", "insights")));
+      within(table).queryByRole("link", { name: /old-reports/ }),
+    ).toBeNull();
+    expect(rows[1]).toHaveTextContent(/old-reports.*no longer registered/);
     expect(
       within(table).queryByRole("link", { name: "Other apps" }),
     ).toBeNull();

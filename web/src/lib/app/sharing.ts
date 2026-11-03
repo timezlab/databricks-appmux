@@ -375,13 +375,17 @@ export function grantLevelChange(row: GrantRow): GrantLevelChange | null {
     return null;
   }
   const isAdmin = row.permission === "CAN_MANAGE";
+  const permission = isAdmin ? "CAN_USE" : "CAN_MANAGE";
   return {
-    label: isAdmin ? "Make user" : "Make admin",
-    request: {
-      type: row.type,
-      name: row.name,
-      permission: isAdmin ? "CAN_USE" : "CAN_MANAGE",
-    },
+    // A group is not a user or an admin: its label names the level, in the
+    // words the level column shows ("Can use", "Can manage").
+    label:
+      row.type === "group"
+        ? `Make ${permissionLabel(permission)}`
+        : isAdmin
+          ? "Make user"
+          : "Make admin",
+    request: { type: row.type, name: row.name, permission },
   };
 }
 

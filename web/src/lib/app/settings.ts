@@ -187,10 +187,23 @@ export function parseSettingsForm(
 
 // ------------------------------------------------------- carried outcomes
 
+/** A write that failed, with what was being done, as the page it lands on shows it. */
+export interface CarriedRefusal {
+  error: unknown;
+  context: string;
+}
+
 /** What a rename or a delete says on the page it lands on. */
 export interface CarriedOutcome {
   title: string;
   detail: string | null;
+  /**
+   * A write the old page sent after it started to move (the owner change that
+   * follows a rename in the same save). It settles with its refusal, or with
+   * `null` once it went through, and never rejects; the page it lands on shows
+   * the refusal whenever it comes, even after that page is on screen.
+   */
+  followUp?: Promise<CarriedRefusal | null>;
 }
 
 // A rename moves the page to the new slug, and the app's shell is keyed by

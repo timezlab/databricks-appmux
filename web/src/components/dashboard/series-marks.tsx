@@ -56,12 +56,15 @@ export interface MarkerProps {
   x: number;
   y: number;
   color: string;
+  /** The `fill-opacity` of a partial bucket's point (`markOpacity`); none draws it at full strength. */
+  fillOpacity?: number | undefined;
 }
 
 /** A point's marker: a circle, a square or a diamond, ringed in the background colour. */
-export function Marker({ shape, x, y, color }: MarkerProps) {
+export function Marker({ shape, x, y, color, fillOpacity }: MarkerProps) {
   const common = {
     fill: color,
+    fillOpacity,
     stroke: MARKER_RING,
     strokeWidth: MARKER_RING_WIDTH,
   };

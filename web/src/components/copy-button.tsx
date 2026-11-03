@@ -3,6 +3,7 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { clipboardText } from "@/lib/clipboard-text";
 import { LiveRegion } from "./live-region";
 import { Button as UiButton } from "./ui/button";
 
@@ -10,7 +11,7 @@ import { Button as UiButton } from "./ui/button";
 const COPIED_MARK_MS = 2000;
 
 export interface CopyButtonProps {
-  /** The text that goes to the clipboard. */
+  /** The text that goes to the clipboard, less its control characters (`clipboardText`). */
   value: string;
   /** What is copied, for the button's name: "the route" reads "Copy the route". */
   label: string;
@@ -63,7 +64,7 @@ export function CopyButton({ value, label, selectTargetId }: CopyButtonProps) {
       // `navigator.clipboard` is undefined outside a secure context, whatever the types say.
       const clipboard = navigator.clipboard as Clipboard | undefined;
       if (clipboard === undefined) throw new Error("no Clipboard API");
-      await clipboard.writeText(value);
+      await clipboard.writeText(clipboardText(value));
       setIsCopied(true);
       setMessage("Copied");
     } catch {

@@ -55,8 +55,9 @@ export interface WriteController {
    * wait, so a second one is refused with a `WriteBusyError` without being
    * called. On success it announces `message` and reads the app again. On
    * failure it hands the error back so the caller can show it where the
-   * person is looking; a 409 (the page was stale) or a 404 (the thing is gone)
-   * also reads the app again, once, and says so.
+   * person is looking; a stale version or a vanished app (409, see
+   * `shouldReloadAfterError`) or a 404 (the thing is gone) also reads the app
+   * again, once, and says so.
    */
   run: <T>(
     key: string,

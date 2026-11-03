@@ -113,9 +113,12 @@ export function filterLogEntries(
   );
 }
 
-/** "3 lines were not kept". */
+/**
+ * "3 earlier lines are not shown": the server dropped lines before the ones on
+ * screen, so the page never had them to show.
+ */
 export function gapText(count: number): string {
-  return `${pluralize(count, "line")} ${count === 1 ? "was" : "were"} not kept`;
+  return `${pluralize(count, "earlier line")} ${count === 1 ? "is" : "are"} not shown`;
 }
 
 /** What Copy puts on the clipboard: the shown entries, one per line, with the full time. */

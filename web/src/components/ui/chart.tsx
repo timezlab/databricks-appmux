@@ -13,7 +13,7 @@ import { Skeleton } from "./skeleton";
 // (`style-src 'self'`: no `style` attribute, no runtime `<style>`):
 //  - `ChartStyle` is gone. It wrote the series colours into a `<style>` element
 //    built with `dangerouslySetInnerHTML` and read them back as `--color-<key>`.
-//    Here a series takes its colour from the fixed `--chart-1..6` tokens of
+//    Here a series takes its colour from the fixed `--chart-1..8` tokens of
 //    globals.css, written straight into the SVG as a presentation attribute
 //    (`stroke="var(--chart-1)"`), which is not a style attribute.
 //  - The tooltip and legend swatches took their colour from a `style` prop. The

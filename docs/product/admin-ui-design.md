@@ -55,7 +55,7 @@ thresholds, in both schemes: 4.5:1 for text, 3:1 for control edges, bars and the
 | danger | `destructive`, `destructive-hover`, `destructive-foreground` | `#b3261e`, `#8f1d17`, `#ffffff` | `#ff8077`, `#ffa099`, `#2a0705` | destructive actions only |
 | strip | `strip`, `strip-foreground`, `strip-border` | `#f1e8c6`, `#3a3010`, `#cdbf8a` | `#2d2812`, `#ede0a8`, `#5a4e22` | the route strip only |
 | lamps | `tone-*` | unchanged | unchanged | the lamp dots, notices |
-| charts | `chart-1..6` | unchanged | unchanged | chart series |
+| charts | `chart-1..8` | `chart-1..6` unchanged; `chart-7` `#0e7490`, `chart-8` `#4d7c0f` | `chart-1..6` unchanged; `chart-7` `#4cc9e0`, `chart-8` `#a8d45a` | chart series; one hue per app of the breakdown |
 
 The `chrome-*` tokens (the dark header band) and `brand` are removed; the header is the page colour with one hairline
 under it. Radius is a scale, not one value: `rounded-strip` 3 px (the strip), `rounded-control` 8 px (buttons,
@@ -128,9 +128,12 @@ appmux's.
   no section. Loading shows skeleton lines, a failure an error with "Try again", no apps a link to the launcher. At
   390 px the bar wraps without a sideways scroll.
 - **The sidebar** (`AppSidebar`) appears inside one app and inside Platform; Apps and Dashboard are full-width pages.
-  It has a "‹ All apps" link on top, icon plus label per item, a count only where it means something to do
-  (Requests, with words for a screen reader and on hover: `countDescription`), and a collapse button that leaves
-  icons only (kept in `localStorage`, guarded). Below 768 px the column gives way to one button, "Section:
+  It has a "‹ All apps" link on top, icon plus label per item, a count only where it means something to do (an
+  app's Overview and Requests, Platform's Overview), each with its words for a screen reader and on hover
+  (`countDescription`: "3 requests waiting", never a bare "Overview 3"), and a collapse button that leaves
+  icons only (kept in `localStorage`, guarded). Collapsed, the back link stacks over the collapse button and a count
+  is a dot on its icon (the number stays for a screen reader and in the hover title), so nothing reaches past the
+  56 px column, whatever the count (`e2e/shell.spec.ts`, "the sidebar column"). Below 768 px the column gives way to one button, "Section:
   Environment" with a chevron and `aria-expanded`, that opens the same items and the back link in a non-modal popover
   (a modal one would inject the `<style>` the CSP refuses). Choosing an item, Escape and a click outside close it;
   every row is at least 40 px tall.
@@ -138,8 +141,10 @@ appmux's.
   aligned; forms stop at 560 px. Inside it sections are ruled, not boxed into further cards.
 - **One geometry for every bar** (point 8): the top navigation, the sidebar items and the Variables/Packages tabs share
   one rule, a 2 px bar that is transparent at rest, muted on hover and cord on the selected one, and none of them has a
-  text underline. It is the `bar-item` utility of globals.css; a vertical list (the sidebar) puts the bar on the
-  start edge with `bar-axis-vertical` on its container, so every item keeps the same class.
+  text underline. It is the `bar-item` utility of globals.css, padding and text size included: the padding on the
+  bar's side is the gap between the label and the bar, so no caller sets a padding of its own. A vertical list (the
+  sidebar) puts the bar on the start edge, and sets its rows' height, with `bar-axis-vertical` on its container, so
+  every item keeps the same class.
 - **The dashboard** keeps its own page; its six identical figure cards become one strip of figures divided by
   hairlines, each with a sparkline. The same view, scoped to one app, is the app's Insights.
 
@@ -165,7 +170,7 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
 - **shadcn first.** A component that shadcn ships (Select, Popover, Command, DropdownMenu, Tabs, Tooltip, Collapsible,
   Sonner-style toast where useful) is taken from shadcn's source and adapted, not rewritten, and keeps its
   name and props, so a later shadcn update can be diffed. A native `<select>` is used for nothing a person sees
-  (point 9); `NativeSelect` stays only where a phone's own picker is the better control, and says so in a comment.
+  (point 9), so the kit has no `NativeSelect`.
 - **CSP rules for those components.** The strict CSP (no inline style attribute in prerendered HTML, no injected
   `<style>`) shapes the set: Radix `Select` and modal `Dialog` inject a `<style>` through `react-remove-scroll`, so
   Select is built on `Popover` and `Command` with shadcn's markup and classes; `DropdownMenu` runs with `modal={false}`;
@@ -190,7 +195,9 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
   breadcrumb, starting at My folder and Shared; it marks a folder that looks like an app (it holds `app.yaml`,
   `requirements.txt` or `package.json`) and says what that means for memory (Node needs about 768 MB).
 - **Logs (point 4).** The Logs section: the last lines of the child's output, polled, with a stream mark,
-  pause, wrap and copy, and, for an app that stopped, the exit code and signal.
+  pause, wrap and copy, and, for an app that stopped, the exit code and signal. Every copy button leaves out the
+  control characters other than tab, line feed and carriage return, so an ESC the child printed never reaches a
+  terminal it is pasted into.
 - **Resources (point 6), the Databricks flow.** **Add resource** opens an inline panel (no modal: a modal dialog needs
   the scroll lock that the CSP refuses). Step by step, as in the console: choose the type from a menu with an icon and
   a one-line description each; choose the object from a searchable list of what the person can see (warehouses,

@@ -31,6 +31,7 @@ import { useFocusFirstInvalid } from "../use-form-focus";
 
 const SAVE_KEY = "settings:save";
 const REASON_OTHER_WRITE = "Another change is running; wait for it to finish.";
+const OWNER_NOT_CHANGED = "The fields were saved; the owner was not changed";
 
 export interface AppSettingsFormProps {
   app: AppDetail;
@@ -116,18 +117,32 @@ export function AppSettingsForm({
           slug = detail.slug;
           version = detail.version;
         }
-        if (change.owner !== null) {
-          await setOwner(slug, { version, owner: change.owner });
-        }
         const movedPath = slug === from ? null : appPagePath(slug, "settings");
-        if (movedPath !== null) {
-          // The page of the old slug answers 404 from now on: go where the app is.
-          carryOutcome(movedPath, {
-            title: `Renamed ${from} to ${slug}`,
-            detail: renameMessage(from, slug),
-          });
-          router.replace(movedPath);
+        if (movedPath === null) {
+          if (change.owner !== null) {
+            await setOwner(slug, { version, owner: change.owner });
+          }
+          return slug;
         }
+        // The old slug answers 404 from now on, so this page goes where the app
+        // is at once, without waiting for the owner change: read again here, the
+        // app would be "not found" and a refusal of the owner never seen. The
+        // page at the new slug shows how the owner change ended.
+        const ownerChange =
+          change.owner === null
+            ? undefined
+            : setOwner(slug, { version, owner: change.owner }).then(
+                () => null,
+                (error: unknown) => ({ error, context: OWNER_NOT_CHANGED }),
+              );
+        carryOutcome(movedPath, {
+          title: `Renamed ${from} to ${slug}`,
+          detail: renameMessage(from, slug),
+          followUp: ownerChange,
+        });
+        router.replace(movedPath);
+        // One write at a time holds until the owner change has answered too.
+        await ownerChange;
         return slug;
       },
       (slug) =>
@@ -139,10 +154,7 @@ export function AppSettingsForm({
     if (isFieldsSaved) {
       // The fields went through and the owner did not: show what the server now holds.
       onReload();
-      setRefusal({
-        error: result.error,
-        context: "The fields were saved; the owner was not changed",
-      });
+      setRefusal({ error: result.error, context: OWNER_NOT_CHANGED });
     } else {
       setRefusal({
         error: result.error,

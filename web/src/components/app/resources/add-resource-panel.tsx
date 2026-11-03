@@ -136,7 +136,7 @@ export function AddResourcePanel({
         ref={formRef}
         onSubmit={handleSubmit}
         noValidate
-        className={FORM_STACK_CLASSES}
+        className={`${FORM_STACK_CLASSES} max-w-140`}
         aria-label="Add a resource"
       >
         <h3>Add a resource</h3>

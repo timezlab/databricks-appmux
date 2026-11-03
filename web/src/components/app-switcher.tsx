@@ -190,7 +190,7 @@ export function AppSwitcher({ slug }: { slug: string }) {
           type="button"
           variant="ghost"
           className="h-10 min-w-0 shrink gap-1.5 px-2 text-foreground"
-          // The name starts with what is on screen (WCAG 2.5.3, label in name).
+          // The name contains what is on screen (WCAG 2.5.3, label in name).
           aria-label={`App: ${displayName ?? `/${slug}/`}`}
           title="Switch app"
         >

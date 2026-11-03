@@ -171,23 +171,29 @@ function requesterRequests(): JsonObject {
         closed_by: VISITOR_EMAIL,
         closed_at: "2026-10-30T08:40:00Z",
       }),
-      requestRow({
-        request_id: 24,
-        app_slug: null,
-        kind: "register",
-        payload: {
-          slug: "wiki-2",
-          display_name: "Team wiki 2",
-          source_path: "/Workspace/Shared/apps/wiki-2",
-          memory_budget_mb: 128,
-        },
-        reason: "the second team wiki, a small Flask app",
-        requested_by: VISITOR_EMAIL,
-        requested_at: "2026-10-30T09:55:00Z",
-        status: "pending",
-      }),
+      wikiRequest(),
     ],
   };
+}
+
+/** The visitor's one pending request; `fields` close it (the answer of Withdraw). */
+function wikiRequest(fields: JsonObject = {}): JsonObject {
+  return requestRow({
+    request_id: 24,
+    app_slug: null,
+    kind: "register",
+    payload: {
+      slug: "wiki-2",
+      display_name: "Team wiki 2",
+      source_path: "/Workspace/Shared/apps/wiki-2",
+      memory_budget_mb: 128,
+    },
+    reason: "the second team wiki, a small Flask app",
+    requested_by: VISITOR_EMAIL,
+    requested_at: "2026-10-30T09:55:00Z",
+    status: "pending",
+    ...fields,
+  });
 }
 
 /** The platform view with the slot's memory set to `committedMb`; the other figures follow from the example. */
@@ -264,6 +270,14 @@ export function scenarioAnswer(
       }
       if (route === "GET /requests") {
         return { status: 200, body: requesterRequests() };
+      }
+      if (route === "POST /requests/{id}/withdraw") {
+        const closed = {
+          status: "withdrawn",
+          closed_by: VISITOR_EMAIL,
+          closed_at: "2026-10-30T10:05:00Z",
+        };
+        return { status: 200, body: wikiRequest(closed) };
       }
       return null;
     case "memory-low":

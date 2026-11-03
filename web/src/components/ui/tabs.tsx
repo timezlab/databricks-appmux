@@ -23,8 +23,8 @@ import { useIsClient } from "@/hooks/use-is-client";
 //
 // `variant="bar"` is the bar of the section tabs. Its triggers carry the shared
 // `bar-item` geometry of globals.css (a 2 px bar, `primary` on the chosen tab,
-// no text underline), the same as the top navigation, the sidebar and
-// `SubNav`; they do not take the pill classes of the other variants.
+// no text underline), the same as the top navigation and the sidebar; they do
+// not take the pill classes of the other variants.
 
 interface TabsStaticContextValue {
   baseId: string;
@@ -143,9 +143,9 @@ const TABS_TRIGGER_CLASSES = [
 ];
 
 // The bar variant's trigger: `bar-item` draws the bar; `-mb-px` lays it over the
-// list's hairline, as `SubNav` does.
+// list's hairline.
 const TABS_BAR_TRIGGER_CLASSES =
-  "bar-item -mb-px px-3 py-2.5 text-sm whitespace-nowrap disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+  "bar-item -mb-px whitespace-nowrap disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
 function TabsTrigger({
   className,

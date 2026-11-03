@@ -84,7 +84,6 @@ import {
   SkeletonTable,
 } from "@/components/skeletons";
 import { AppStateBadge, StatusBadge } from "@/components/status-badge";
-import { SubNav } from "@/components/sub-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBar } from "@/components/top-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -135,11 +134,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeCheckbox, NativeRadio } from "@/components/ui/native-choice";
-import {
-  NativeSelect,
-  NativeSelectOptGroup,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import {
   Popover,
   PopoverAnchor,
@@ -560,14 +554,6 @@ const UI_SAMPLES: Record<string, () => ReactElement> = {
       <NativeRadio name="b" value="1" />
     </>
   ),
-  "native-select.tsx": () => (
-    <NativeSelect name="a" defaultValue="1">
-      <NativeSelectOption value="1">One</NativeSelectOption>
-      <NativeSelectOptGroup label="More">
-        <NativeSelectOption value="2">Two</NativeSelectOption>
-      </NativeSelectOptGroup>
-    </NativeSelect>
-  ),
   "card.tsx": () => (
     <>
       <Card>Panel</Card>
@@ -881,19 +867,6 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
     <Section title="Releases" actions={<Button>Add</Button>}>
       <p>Body</p>
     </Section>
-  ),
-  "sub-nav.tsx": () => (
-    <SubNav
-      label="Sections"
-      items={[
-        {
-          label: "Overview",
-          href: "/platform/",
-          badge: { text: "3", description: "3 requests waiting" },
-        },
-        { label: "Apps", href: "/platform/apps/" },
-      ]}
-    />
   ),
   "status-badge.tsx": () => (
     <>

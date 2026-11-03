@@ -186,10 +186,41 @@ export interface Figure {
   change: FigureChange | null;
 }
 
+/** The window before this one: what its rows add up to, and how long it is. */
+export interface PreviousWindow {
+  summary: SeriesSummary;
+  /** The minutes the window spans, whether or not they hold rows. */
+  windowMinutes: number;
+}
+
+/**
+ * The share of the previous window's minutes that must hold a row before its
+ * figures are compared with this window's. A running app writes a row every
+ * minute even when nobody calls it (the edge samples its memory every 15 s,
+ * `summarizeRows` counts each row as its step), so a minute with no row is a
+ * minute the app or the edge was not running, or whose flush failed: its
+ * requests are missing, not zero. Counting it as zero would read "500% more"
+ * for flat traffic 70 minutes after an install. At 90% a short restart of the
+ * edge (6 minutes of an hour) still compares, and the missing part can move a
+ * count by about a tenth at most; below that the figure shows no change.
+ */
+export const PREVIOUS_WINDOW_MIN_COVERAGE = 0.9;
+
+/** The previous window's summary when it covers enough of its minutes to compare with, else `null`. */
+function comparablePrevious(
+  previous: PreviousWindow | null,
+): SeriesSummary | null {
+  if (previous === null || !(previous.windowMinutes > 0)) return null;
+  const { summary, windowMinutes } = previous;
+  return summary.reportedMinutes >= windowMinutes * PREVIOUS_WINDOW_MIN_COVERAGE
+    ? summary
+    : null;
+}
+
 export interface FiguresInput {
   summary: SeriesSummary;
   /** The window before, or `null` when it was not read (or is older than the data kept). */
-  previous: SeriesSummary | null;
+  previous: PreviousWindow | null;
   buckets: readonly MetricBucket[];
   isPlatform: boolean;
   /** "hour", "6 hours": the range, as in "the previous hour". */
@@ -287,15 +318,13 @@ function latencyFigure(
 /**
  * The figures of one series: requests, server errors, the p50 and p95, the
  * memory peak, the egress drops and, for the platform, the apps running. A
- * previous window with no data gives no change: "up from none" would only say
- * the data starts here.
+ * previous window with no data, or with too few of its minutes, gives no
+ * change: "up from none" would only say the data starts here, and a part of a
+ * window is not the window (`PREVIOUS_WINDOW_MIN_COVERAGE`).
  */
 export function buildFigures(input: FiguresInput): Figure[] {
   const { summary, buckets, isPlatform, span } = input;
-  const previous =
-    input.previous !== null && input.previous.reportedMinutes > 0
-      ? input.previous
-      : null;
+  const previous = comparablePrevious(input.previous);
   const requestsSpark = sparkOf(buckets, (bucket) => bucket.requests);
   const errorsSpark = sparkOf(buckets, (bucket) => bucket.r5xx);
   const egressSpark = sparkOf(buckets, (bucket) => bucket.egressDropped);

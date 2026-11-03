@@ -34,6 +34,7 @@ src/lib/api/        the API client, one file per route group, schemas/ (Zod)
 src/lib/<feature>/  pure logic per page, no React
 tests/              unit/ (mirrors src/lib), components/ (RTL), contract/ and csp/ (guards), export/
 public/theme.js     the theme script, copied to the root of out/ (see Theme below)
+public/licenses/    the fonts' OFL-1.1 license texts, shipped beside the fonts in out/licenses/ (see Colour, type and the wordmark)
 e2e/                the browser tests: server.ts (edge stand-in with the CSP and a mock API), fixtures.ts (scenarios), pages.ts, page-watch.ts, csp.spec.ts, fonts.spec.ts, motion.spec.ts, theme.spec.ts, shell.spec.ts, screenshots.ts
 e2e/primitives/     a page of every interactive primitive, built and prerendered by Playwright's global setup (build.ts), never part of out/
 ```
@@ -133,10 +134,13 @@ The dashboard (`/dashboard/`, the platform) and an app's Insights (`/app/insight
 and are one `MetricsPanel` (`src/components/dashboard/`, logic in `src/lib/dashboard/`): a range
 from 15 minutes to 7 days (a `ToggleGroup`) asked at the finest step that keeps the window within
 1440 steps (1 minute up to a day, 5 minutes for 3 days, 15 minutes for 7); the figures strip, each
-figure with a sparkline and the change against the previous window; the same requests and
+figure with a sparkline and the change against the previous window (shown only when that window
+holds rows for at least 90% of its minutes, `PREVIOUS_WINDOW_MIN_COVERAGE`); the same requests and
 response-time charts on both. The dashboard adds the breakdown by app (`GET /metrics/breakdown`,
 the 8 busiest apps plus "Other apps"). Each chart frame has its own loading, empty and failed
-state; charts read the colour scheme through `useColorScheme`. The platform view asks
+state; charts read the colour scheme through `useColorScheme`. A bucket the window cuts short is
+drawn at `PARTIAL_MARK_OPACITY` (the `fill-opacity` attribute, never a style), the caption under
+the axis says what a fainter column or point is, and its tip and table row say "(partial)". The platform view asks
 `GET /metrics?app=_platform`, not `GET /metrics` without an app, whose answer mixes every app's
 rows. The e2e worlds `breakdown-live` and `metrics-week` (a busy hour and a week of eleven apps)
 are in `e2e/fixtures-f4.ts`.
@@ -182,14 +186,16 @@ are in `e2e/fixtures-f4.ts`.
   `tests/contract/motion.test.ts` fails on a rule that would stop one.
 - **Bars.** Every item of a navigation (top bar, tab bar, sidebar) carries `bar-item`: a
   2 px bar under it (beside it inside `bar-axis-vertical`), transparent at rest, `input` on
-  hover, `primary` on the item with `aria-current="page"`, and no text underline.
+  hover, `primary` on the item with `aria-current="page"`, and no text underline. `bar-item`
+  also holds the padding and text size (the padding on the bar's side is the gap between the
+  label and the bar), so an item sets no padding of its own; `tests/components/bar-geometry.test.tsx`
+  renders the top bar, the Environment tab bar and the sidebar and fails on one that does.
 - **Apps and states.** An app's route is a `RouteStrip`; a state is a `Lamp` (a dot and its
   word, through `StatusBadge`), never a coloured pill.
 - **Form controls.** `Input`, `Textarea`, `Select`, `Combobox`, `NativeCheckbox`,
   `NativeRadio` inside `Field`. `Select` is the choice from a fixed list; `Combobox` adds
-  search and, with `allowCustom`, a typed value. `NativeSelect` stays only where a phone's
-  own picker is better; its comment lists where it is still used. The Radix checkbox, radio,
-  select and dialog primitives are not used (see [Primitives](#primitives)).
+  search and, with `allowCustom`, a typed value. No page uses a native `<select>`. The Radix
+  checkbox, radio, select and dialog primitives are not used (see [Primitives](#primitives)).
 - **Layout rules.** One answer for each, so a new form or table looks like the others.
   - A field is a label, the control, then its hint or error _below_ the control
     (`Field`). Fields sit in `FORM_STACK_CLASSES` or `FieldGrid` (a grid whose rows share
@@ -210,7 +216,8 @@ are in `e2e/fixtures-f4.ts`.
     the bottom, not one button per row.
 - **Charts.** shadcn's chart component over Recharts, patched in
   `src/components/ui/chart.tsx` to emit no runtime `<style>`; series colours are the fixed
-  `--chart-1..6` tokens.
+  `--chart-1..8` tokens. Each of the breakdown's eight apps has its own colour and texture,
+  and only the first is plain (`tests/contract/chart-tones.test.ts`).
 - **Links.** An `href` or `src` is a literal path on this origin, the result of
   `appLink(slug)` or `appPagePath(slug)`, or an entry of `TRUSTED_EXPRESSIONS` in
   `tests/contract/markup-rules.test.ts`. Never build one from API text. That test reads the
@@ -257,7 +264,12 @@ in both colour schemes.
 
 The interface face is IBM Plex Sans (variable) and routes, paths and code are IBM Plex Mono,
 both self-hosted from npm by `src/app/fonts.css` (latin and latin-ext only, woff2), so the CSP's
-`font-src 'self'` holds.
+`font-src 'self'` holds. Both are under the SIL Open Font License 1.1, which asks that the license
+travel with the fonts: the export carries the two packages' own `LICENSE` files as
+[`licenses/ibm-plex-sans-license.txt`](public/licenses/ibm-plex-sans-license.txt) and
+[`licenses/ibm-plex-mono-license.txt`](public/licenses/ibm-plex-mono-license.txt). Copy them
+again from `node_modules/@fontsource-variable/ibm-plex-sans/LICENSE` and
+`node_modules/@fontsource/ibm-plex-mono/LICENSE` when either package is upgraded.
 
 The header shows the word "appmux" in text, with no logo or icon.
 

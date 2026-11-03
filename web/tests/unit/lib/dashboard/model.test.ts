@@ -84,6 +84,11 @@ function lineChart(model: SeriesModel, id: string): LineChartSpec {
   return chart;
 }
 
+/** The positions of the columns a chart draws as partial. */
+function partialColumns(partial: readonly boolean[]): number[] {
+  return partial.flatMap((isPartial, index) => (isPartial ? [index] : []));
+}
+
 function figure(model: SeriesModel, key: FigureKey) {
   const found = model.figures.find((candidate) => candidate.key === key);
   assert.ok(found !== undefined, key);
@@ -665,6 +670,11 @@ describe("long windows", () => {
     );
     assert.doesNotMatch(requests.tips[1] ?? "", /partial/);
     assert.doesNotMatch(requests.tips[36] ?? "", /partial/);
+    // The picture marks the same column: drawn fainter, and only it.
+    for (const chart of [requests, lineChart(model, "memory")]) {
+      assert.deepEqual(partialColumns(chart.partial), [0], chart.id);
+    }
+    assert.ok(columnChart(model, "latency").partial.every((cut) => !cut));
   });
 
   it("marks a bucket that the end of the window cuts as partial too", () => {
@@ -679,6 +689,7 @@ describe("long windows", () => {
     assert.equal(requests.columns.length, 37);
     assert.doesNotMatch(requests.tips[0] ?? "", /partial/);
     assert.match(requests.tips[36] ?? "", /^2026-10-30 09:12 UTC \(partial\)/);
+    assert.deepEqual(partialColumns(requests.partial), [36]);
   });
 });
 
@@ -712,10 +723,24 @@ describe("rows read at a step of 5 minutes", () => {
 
 describe("the window before", () => {
   const current = response([row(30)]);
+  /** A minute the app ran through without a request: a row is still written. */
+  const quiet = (offsetMinutes: number) =>
+    row(offsetMinutes, {
+      requests: 0,
+      r2xx: 0,
+      r3xx: 0,
+      r4xx: 0,
+      r5xx: 0,
+      upstream_errors: 0,
+      lat_hist: Array.from({ length: 11 }, () => 0),
+    });
+  // Every minute of the hour before holds a row; one of them had requests.
   const previous = response(
     [
+      ...Array.from({ length: 30 }, (_, offset) => quiet(offset - 60)),
       row(-30, { requests: 206, r5xx: 3 }),
       row(-30, { app_slug: "ads", requests: 9999 }),
+      ...Array.from({ length: 29 }, (_, offset) => quiet(offset - 29)),
     ],
     { fromMinute: -60, toMinute: 0 },
   );
@@ -748,6 +773,25 @@ describe("the window before", () => {
     const model = series(
       buildDashboardModel(current, SALES, {
         previous: onlyAnotherApp,
+        span: "hour",
+      }),
+    );
+    assert.ok(model.figures.every((item) => item.change === null));
+  });
+
+  it("gives no change when the window before holds only 10 of its 60 minutes", () => {
+    // Installed 70 minutes ago, flat traffic: the hour before ran only its last 10 minutes.
+    const flat = (offset: number) => row(offset, { requests: 10 });
+    const wholeHour = response(
+      Array.from({ length: 60 }, (_, offset) => flat(offset)),
+    );
+    const tenMinutes = response(
+      Array.from({ length: 10 }, (_, offset) => flat(offset - 10)),
+      { fromMinute: -60, toMinute: 0 },
+    );
+    const model = series(
+      buildDashboardModel(wholeHour, SALES, {
+        previous: tenMinutes,
         span: "hour",
       }),
     );

@@ -11,6 +11,7 @@ import {
 import type { BreakdownModel } from "@/lib/dashboard/breakdown";
 import type { ColumnChartSpec } from "@/lib/dashboard/model";
 import { MINUTE_MS } from "@/lib/dashboard/series";
+import { isValidSlug } from "@/lib/slug-link";
 import { readExample } from "../../../support/contract-examples";
 
 /** The contract example: 09:00 to 09:40 at 15 minutes, "docs" and "old-reports", and the rest as `other`. */
@@ -71,6 +72,18 @@ function response(
 
 describe("the breakdown of the contract example", () => {
   const model = breakdown(EXAMPLE);
+
+  it("keeps that an app is no longer registered (display_name null), so it is not offered as a page", () => {
+    assert.deepEqual(
+      model.apps.map((app) => [app.label, app.isRegistered]),
+      [
+        ["Docs Portal", true],
+        ["old-reports", false],
+        // Not an app: there is no page of it either.
+        [OTHER_APPS_LABEL, false],
+      ],
+    );
+  });
 
   it("stacks the apps in slug order, the apps below the cut on top, one tone each in every chart", () => {
     for (const id of ["requests-by-app", "memory-by-app", "errors-by-app"]) {
@@ -267,6 +280,9 @@ describe("steps against the window", () => {
     const requests = chart(model, "requests-by-app");
     assert.deepEqual(requests.columns, [[10], [10], null]);
     assert.match(requests.tips[0] ?? "", /^2026-10-30 09:05 UTC \(partial\)/);
+    // The picture draws the cut columns fainter: that one, and the newest,
+    // 09:30 to 09:45, which the window ends at 09:40.
+    assert.deepEqual(requests.partial, [true, false, true]);
     assert.equal(model.apps[0]?.cells[0], "20");
   });
 });
@@ -284,5 +300,19 @@ describe("an empty breakdown", () => {
       "No server error in this window.",
     );
     assert.equal(chart(model, "requests-by-app").emptyMessage, null);
+  });
+});
+
+describe("the rows of the apps table", () => {
+  it("are keyed uniquely, the apps below the cut by a key no slug can take, even beside an app called other", () => {
+    const model = breakdown(
+      response([{ slug: "other", points: [point(0)] }], [point(0)]),
+    );
+    const keys = model.apps.map((app) => app.key);
+    assert.equal(new Set(keys).size, keys.length, keys.join(", "));
+    const rest = model.apps.find((app) => app.label === OTHER_APPS_LABEL);
+    assert.ok(rest !== undefined);
+    assert.equal(isValidSlug(rest.key), false, rest.key);
+    assert.equal(model.apps[0]?.key, "other");
   });
 });

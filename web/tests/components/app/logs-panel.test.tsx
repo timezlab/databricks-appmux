@@ -139,7 +139,7 @@ describe("LogsPanel", () => {
     expect(shownTexts()).toEqual(["09:14:03appmuxstarted"]);
   });
 
-  it("says how many lines were not kept", async () => {
+  it("says how many earlier lines are not shown", async () => {
     setup(() =>
       jsonResponse(
         200,
@@ -147,7 +147,7 @@ describe("LogsPanel", () => {
       ),
     );
     await advance(0);
-    expect(shownTexts()[0]).toBe("8 lines were not kept");
+    expect(shownTexts()[0]).toBe("8 earlier lines are not shown");
   });
 
   it("stops asking while paused and asks at once on Resume", async () => {

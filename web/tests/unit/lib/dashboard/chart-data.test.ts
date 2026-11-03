@@ -5,11 +5,14 @@ import {
   HIGHLIGHT_KEY,
   LINE_LIMIT_KEY,
   LINE_VALUE_KEY,
+  PARTIAL_MARK_OPACITY,
+  axisCaption,
   columnAxis,
   columnRows,
   gapRuns,
   lineAxis,
   lineRows,
+  markOpacity,
   segmentKey,
 } from "@/lib/dashboard/chart-data";
 import type {
@@ -31,6 +34,7 @@ function columnSpec(
     description: "",
     legend: [],
     labels: columns.map((_unused, index) => `t${index}`),
+    partial: columns.map(() => false),
     tips: columns.map((_unused, index) => `tip ${index}`),
     maxTicks: 6,
     xCaption: "Time (UTC)",
@@ -46,6 +50,7 @@ function columnSpec(
 function lineSpec(
   values: (number | null)[],
   reference: number | null = null,
+  partial: boolean[] = values.map(() => false),
 ): LineChartSpec {
   return {
     kind: "line",
@@ -54,6 +59,7 @@ function lineSpec(
     description: "",
     legend: [],
     labels: values.map((_unused, index) => `t${index}`),
+    partial,
     tips: values.map((_unused, index) => `tip ${index}`),
     maxTicks: 6,
     xCaption: "Time (UTC)",
@@ -236,5 +242,34 @@ describe("lineAxis", () => {
 
   it("ignores minutes with no data and gives 0 to 1 for a line with none", () => {
     assert.deepEqual(lineAxis(lineSpec([null, null])).ticks, [0, 1]);
+  });
+});
+
+describe("a bucket the window cuts short (partial)", () => {
+  it("draws its mark fainter, through the fill-opacity attribute, and a whole bucket at full strength", () => {
+    const partial = [true, false, false, true];
+    assert.equal(markOpacity(partial, 0), PARTIAL_MARK_OPACITY);
+    assert.equal(markOpacity(partial, 3), PARTIAL_MARK_OPACITY);
+    // No attribute at all for a whole bucket: the mark keeps its tone's full fill.
+    assert.equal(markOpacity(partial, 1), undefined);
+    assert.equal(markOpacity(partial, 9), undefined);
+    assert.ok(PARTIAL_MARK_OPACITY > 0 && PARTIAL_MARK_OPACITY < 1);
+  });
+
+  it("says under the axis what a fainter column or point is, only when the chart has one", () => {
+    assert.equal(
+      axisCaption(
+        columnSpec([[1], [2]], {
+          xCaption: "2-minute totals, time in UTC",
+          partial: [true, false],
+        }),
+      ),
+      "2-minute totals, time in UTC. A fainter column is a partial bucket: the window holds only part of it",
+    );
+    assert.equal(
+      axisCaption(lineSpec([1, 2], null, [false, true])),
+      "Time (UTC). A fainter point is a partial bucket: the window holds only part of it",
+    );
+    assert.equal(axisCaption(columnSpec([[1], [2]])), "Time (UTC)");
   });
 });

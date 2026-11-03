@@ -153,11 +153,12 @@ describe("PlatformPage access", () => {
     const sidebar = await screen.findByRole("navigation", {
       name: "Platform sections",
     });
-    await waitFor(() => {
-      expect(
-        within(sidebar).getByRole("link", { name: /^Overview/ }),
-      ).toHaveTextContent("Overview3");
-    });
+    // The count is read as words, not as "Overview3".
+    expect(
+      await within(sidebar).findByRole("link", {
+        name: "Overview, 3 requests waiting",
+      }),
+    ).toHaveTextContent(/^Overview3/);
     expect(
       within(sidebar).getByRole("link", { name: "Apps" }),
     ).toHaveTextContent(/^Apps$/);

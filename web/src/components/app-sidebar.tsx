@@ -49,16 +49,29 @@ export function SidebarItem({
     count !== undefined && countDescription !== undefined;
   const collapsedTitle = hasCountDescription
     ? `${label}, ${countDescription}`
-    : label;
+    : count === undefined
+      ? label
+      : `${label}, ${String(count)}`;
   return (
     <Link
       // At least 40 px tall on a phone, where it is a row of the section menu.
-      className="bar-item w-full px-3 py-2 text-sm max-md:min-h-10"
+      className="bar-item w-full max-md:min-h-10"
       href={href}
       aria-current={isCurrent ? "page" : undefined}
       title={isCollapsed ? collapsedTitle : undefined}
     >
-      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <span className="relative flex shrink-0">
+        <Icon className="size-4" aria-hidden="true" />
+        {isCollapsed && count !== undefined ? (
+          // Collapsed, the column has room for the icon only, whatever the
+          // number's width: the count is a dot on it, and its number stays
+          // for a screen reader and in the hover title.
+          <span
+            aria-hidden="true"
+            className="absolute -top-1 -right-1 size-2 rounded-full bg-primary ring-2 ring-background"
+          />
+        ) : null}
+      </span>
       <span
         className={cn("min-w-0 flex-1 truncate", isCollapsed && "md:sr-only")}
       >
@@ -68,7 +81,10 @@ export function SidebarItem({
         // With a description, a screen reader reads the words, not the bare number.
         <span
           aria-hidden={hasCountDescription ? "true" : undefined}
-          className="rounded-full bg-primary px-1.5 text-xs leading-5 text-primary-foreground tabular-nums"
+          className={cn(
+            "rounded-full bg-primary px-1.5 text-xs leading-5 text-primary-foreground tabular-nums",
+            isCollapsed && "md:sr-only",
+          )}
           title={countDescription}
         >
           {count}
@@ -190,7 +206,13 @@ export function AppSidebar(props: AppSidebarProps) {
       )}
     >
       <PhoneSectionMenu {...props} />
-      <div className="hidden items-center justify-between gap-1 md:flex">
+      {/* Collapsed, the back link and the toggle stack: side by side they are wider than the icon column. */}
+      <div
+        className={cn(
+          "hidden items-center justify-between gap-1 md:flex",
+          isCollapsed && "md:flex-col md:items-start",
+        )}
+      >
         <Link
           className="inline-flex items-center gap-1 px-2 py-1 text-sm text-muted-foreground no-underline hover:text-foreground"
           href={backHref}

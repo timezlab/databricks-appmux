@@ -116,7 +116,7 @@ export function GrantForm({ app, actions, onReload }: GrantFormProps) {
         ref={formRef}
         onSubmit={handleSubmit}
         noValidate
-        className={FORM_STACK_CLASSES}
+        className={`${FORM_STACK_CLASSES} max-w-140`}
         aria-label="Add a permission"
       >
         <h3>Add a permission</h3>
