@@ -804,7 +804,9 @@ def test_the_service_principal_migration_replaces_the_type_check_of_the_baseline
     )
     assert statement.count("ADD CONSTRAINT ") == 2
     assert "ADD CONSTRAINT app_grants_service_principal_check CHECK " in statement
-    assert not re.search(r"\b(BEGIN|COMMIT|START TRANSACTION)\b", _strip_sql_comments(sql_text))
+    assert not re.search(
+        r"\b(BEGIN|COMMIT|START TRANSACTION)\b", _strip_sql_comments(sql_text), re.IGNORECASE
+    )
 
 
 @pytest.mark.parametrize(
