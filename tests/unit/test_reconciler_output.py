@@ -201,6 +201,31 @@ async def test_the_childs_environment_values_never_reach_the_ring() -> None:
     assert HIDDEN_VALUE not in (world.row(1).build_log_tail or "")
 
 
+async def test_the_values_to_hide_are_gathered_once_per_start_not_once_per_line() -> None:
+    # Gathering them reads the length of every value; done per line, a flood of lines costs as
+    # many passes over the environment, all in the shared event loop.
+    length_reads = 0
+
+    class CountedValue(str):
+        def __len__(self) -> int:
+            nonlocal length_reads
+            length_reads += 1
+            return str.__len__(self)
+
+    line_count = 200
+    world = pending_world()
+    world.environments.environment = {"API_KEY": CountedValue(HIDDEN_VALUE)}
+    world.launcher.log_of_next_child = "\n".join(f"line {n}" for n in range(line_count))
+
+    await world.run()
+    world.launcher.children[0].exit("exited with status 7", code=7)
+    await let_the_watchers_run()
+
+    assert f"line {line_count - 1}" in ring_texts(world)
+    assert length_reads < line_count
+    await world.stop()
+
+
 async def test_an_app_that_never_started_here_has_no_ring() -> None:
     world = World()
     world.app()

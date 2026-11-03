@@ -55,7 +55,6 @@ Not here (other tasks): the retention cap (T114).
 from __future__ import annotations
 
 import asyncio
-import functools
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -781,8 +780,9 @@ class Reconciler:
             overlays=overlays,
             app_egress=tuple(attempt.app.egress),
         )
-        hide_values = functools.partial(_without_values, values=tuple(attempt.environment.values()))
-        writer = self._output.ring(row.app_slug).begin(mask=hide_values)
+        writer = self._output.ring(row.app_slug).begin(
+            mask=_value_hider(attempt.environment.values())
+        )
         output = attempt.output = _Output(writer, self._clock.monotonic())
         try:
             child = await self._launcher.start(start)
@@ -1089,14 +1089,26 @@ def _health_failure(
     return (result.reason if result is not None else None) or "the health check did not finish"
 
 
-def _without_values(text: str, values: Iterable[str]) -> str:
-    """``text`` with each long-enough value of the child's environment replaced by ``***``."""
+def _value_hider(values: Iterable[str]) -> Callable[[str], str]:
+    """What replaces each long-enough value of the child's environment by ``***`` in a text.
+
+    The values are gathered once: the hider runs on every line of a child's output.
+    """
     hidden = sorted(
         {v for v in values if len(v) >= MIN_REDACTED_VALUE_CHARS}, key=len, reverse=True
     )
-    for value in hidden:
-        text = text.replace(value, _REDACTED)
-    return text
+
+    def hide(text: str) -> str:
+        for value in hidden:
+            text = text.replace(value, _REDACTED)
+        return text
+
+    return hide
+
+
+def _without_values(text: str, values: Iterable[str]) -> str:
+    """``text`` with each long-enough value of the child's environment replaced by ``***``."""
+    return _value_hider(values)(text)
 
 
 def _name(release: Release) -> str:

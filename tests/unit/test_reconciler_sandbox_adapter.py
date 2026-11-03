@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from appmux.reconciler.children import ChildStart, ChildStartError
+from appmux.reconciler.output import OUTPUT_MAX_LINES, OutputRing
 from appmux.reconciler.sandbox_adapter import (
     MAX_OUTPUT_READ_BYTES,
     MAX_SOCKET_PATH_BYTES,
@@ -274,6 +275,33 @@ async def test_a_flood_between_two_reads_keeps_its_end_and_says_what_it_skipped(
     assert "skipped" in lines[0][1]
     assert lines[-1] == ("stdout", "the end")
     assert sum(len(text) + 1 for _, text in lines[1:]) <= MAX_OUTPUT_READ_BYTES
+
+
+async def test_a_flood_of_empty_lines_is_read_no_further_than_a_ring_holds(tmp_path: Path) -> None:
+    # One read is masked line by line in the shared event loop: 256 KiB of newlines is 262144
+    # lines, which held every other app's requests for seconds. The ring keeps OUTPUT_MAX_LINES.
+    starter = FakeStarter()
+    running = await launcher(tmp_path, starter).start(child_start())
+    starter.specs[0].log_path.write_bytes(b"\n" * MAX_OUTPUT_READ_BYTES)
+    masked: list[str] = []
+
+    def mask(text: str) -> str:
+        masked.append(text)
+        return text
+
+    lines = running.read_output()
+    ring = OutputRing()
+    writer = ring.begin(mask=mask)
+    for stream, text in lines:
+        writer.add(stream, text)
+
+    assert len(lines) <= OUTPUT_MAX_LINES + 1
+    assert len(masked) <= OUTPUT_MAX_LINES
+    note = ring.read(after=0, limit=OUTPUT_MAX_LINES).lines[0]
+    assert note.stream == "appmux"
+    skipped_bytes = MAX_OUTPUT_READ_BYTES - (len(lines) - 1)
+    assert note.text == f"skipped {skipped_bytes} bytes of stdout written faster than read"
+    assert running.read_output() == []  # what was skipped is not read again
 
 
 # --- a run directory on the host (the shared service principal's token files) -------------------

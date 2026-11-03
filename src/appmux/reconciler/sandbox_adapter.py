@@ -13,8 +13,10 @@ rules file and the unix socket the edge connects to; none of it is visible insid
 
 The reconciler reads a child's output as it comes (``read_output``) into the app's output ring
 (``output.py``): each file is followed from where the last read stopped, a line is returned only
-once it is whole (or the child has ended), and a flood of more than ``MAX_OUTPUT_READ_BYTES``
-between two reads keeps its end and says how much it skipped.
+once it is whole (or the child has ended), and a flood between two reads of more than
+``MAX_OUTPUT_READ_BYTES``, or of more lines than the ring keeps (``OUTPUT_MAX_LINES``), keeps its
+end and says how many bytes it skipped. Each line read is masked in the event loop that serves
+every app, so these two caps are what bound the time one read can hold it.
 
 A child whose environment names the shared service principal's token command also gets a *host*
 run directory, ``<scratch>/run``, bound read-write at ``/run/appmux`` instead of the tmpfs (the
@@ -39,6 +41,7 @@ from pathlib import Path
 from typing import Final, Protocol
 
 from appmux.reconciler.children import ChildExit, ChildStart, ChildStartError, OutputStream
+from appmux.reconciler.output import OUTPUT_MAX_LINES
 from appmux.sandbox.launcher import (
     LAUNCH_SOCKET_NAME,
     SCRATCH_DIRECTORY_MODE,
@@ -151,16 +154,22 @@ class _OutputFile:
             # is tried again at the next read, and the child runs on either way.
             logger.warning("could not read %s: %s", self._path, exc.strerror)
             return []
-        lines: list[tuple[OutputStream, str]] = []
-        if skipped:
-            lines.append(
-                ("appmux", f"skipped {skipped} bytes of {self._stream} written faster than read")
-            )
         *whole, self._partial = (self._partial + data).split(b"\n")
         if final or len(self._partial) > MAX_PARTIAL_LINE_BYTES:
             if self._partial:
                 whole.append(self._partial)
             self._partial = b""
+        if skipped or len(whole) > OUTPUT_MAX_LINES:
+            # The note takes a line of the ring too, so it is not pushed out by what follows it.
+            kept = whole[-(OUTPUT_MAX_LINES - 1) :]
+            dropped = len(whole) - len(kept)
+            skipped += sum(map(len, whole[:dropped])) + dropped  # each with its newline
+            whole = kept
+        lines: list[tuple[OutputStream, str]] = []
+        if skipped:
+            lines.append(
+                ("appmux", f"skipped {skipped} bytes of {self._stream} written faster than read")
+            )
         lines.extend((self._stream, _decode(line)) for line in whole)
         return lines
 
@@ -242,7 +251,8 @@ class SandboxRunningChild:
             await self._host_run_dir.release()
 
     def read_output(self, *, final: bool = False) -> list[tuple[OutputStream, str]]:
-        # Read in the event loop: a local file, at most MAX_OUTPUT_READ_BYTES of each per call.
+        # Read in the event loop: a local file, at most MAX_OUTPUT_READ_BYTES and
+        # OUTPUT_MAX_LINES lines of each per call.
         return [line for output in self._output for line in output.read(final=final)]
 
     # What the metrics sampler reads (T192): which sandbox this is, its pid, its pump's counters.
