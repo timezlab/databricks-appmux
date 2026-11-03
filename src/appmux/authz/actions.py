@@ -47,6 +47,8 @@ class Action(StrEnum):
     RESOURCE_ATTACH = "resource.attach"
     RESOURCE_DETACH = "resource.detach"
     GRANT_APP = "grant.app"
+    # The directory the Sharing form suggests from (no app named: any app the person manages).
+    PRINCIPAL_SEARCH = "principal.search"
     # Requests to a platform admin.
     REQUEST_CREATE = "request.create"
     REQUEST_WITHDRAW = "request.withdraw"
@@ -111,6 +113,7 @@ ACTION_REQUIREMENTS: Final[Mapping[Action, Requirement]] = MappingProxyType(
         Action.RESOURCE_ATTACH: Requirement.APP_CAN_MANAGE,
         Action.RESOURCE_DETACH: Requirement.APP_CAN_MANAGE,
         Action.GRANT_APP: Requirement.APP_CAN_MANAGE,
+        Action.PRINCIPAL_SEARCH: Requirement.ANY_APP_MANAGER,
         Action.REQUEST_CREATE: Requirement.APP_CAN_MANAGE_OR_NO_APP,
         Action.REQUEST_WITHDRAW: Requirement.APP_CAN_MANAGE_OR_NO_APP,
         Action.REQUEST_DECIDE: Requirement.PLATFORM_CAN_MANAGE,

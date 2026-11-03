@@ -282,6 +282,7 @@ def _load_wiring(
             rename_cascade=service,
             memory=service.memory_ledger,
             workspace_client=workspace,
+            principal_directory=service.principal_directory,
         )
 
     steps = (

@@ -39,7 +39,12 @@ export const AccessAs = z.enum(["obo", "own_sp", "shared_sp"]);
 
 export type AccessAs = z.infer<typeof AccessAs>;
 
-export const GrantType = z.enum(["user", "group", "everyone"]);
+export const GrantType = z.enum([
+  "user",
+  "group",
+  "everyone",
+  "service_principal",
+]);
 
 export type GrantType = z.infer<typeof GrantType>;
 

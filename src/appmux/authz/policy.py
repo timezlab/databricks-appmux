@@ -10,7 +10,9 @@ Rules that hold everywhere:
 * The default is deny. An unknown action, an actor without an email, and an action on an app that
   is not in the data are denied. Platform-level actions (``Requirement.PLATFORM_CAN_MANAGE``) never
   read the app, so a platform admin is allowed them whatever slug is passed; the caller answers
-  ``404`` for a slug that does not exist after authorizing.
+  ``404`` for a slug that does not exist after authorizing. ``Requirement.ANY_APP_MANAGER``
+  (``principal.search``, ``resource.suggest``) does not read the app either: ``CAN_MANAGE`` on any
+  one app is enough.
 * ``groups`` is ``None`` when the lookup failed and nothing usable is cached. Then no group grant
   and no group entry of ``platform_admins`` matches: only the owner, a user grant, an ``everyone``
   grant and a ``user`` entry of ``platform_admins`` can. The same holds while the ``user
@@ -18,6 +20,9 @@ Rules that hold everywhere:
 * A platform admin holds ``CAN_MANAGE`` on every app with no row in ``app_grants`` (rule 17).
 * ``everyone`` is ``CAN_USE`` at most: a stored ``CAN_MANAGE`` on it counts as ``CAN_USE``, because
   the shared-SP token can write ``app_grants`` (data model section 6).
+* A ``service_principal`` grant names an App's service principal by its application id, which
+  the Apps proxy forwards in place of an email (ADR 0020). It matches that id in any case, needs no
+  groups, and is ``CAN_USE`` at most for the same reason as ``everyone``.
 * A ``Decision`` holds a code and a level, never text taken from the request.
 """
 
@@ -55,6 +60,7 @@ class Reason(StrEnum):
     USER_GRANT = "user_grant"
     GROUP_GRANT = "group_grant"
     EVERYONE_GRANT = "everyone_grant"
+    SERVICE_PRINCIPAL_GRANT = "service_principal_grant"
     ANY_VISITOR = "any_visitor"
     # Denied by the default or by missing standing.
     UNKNOWN_ACTION = "unknown_action"
@@ -70,6 +76,7 @@ class Reason(StrEnum):
     GROUPS_UNKNOWN = "groups_unknown"
     OWNER_PROTECTED = "owner_protected"
     EVERYONE_CAN_USE_ONLY = "everyone_can_use_only"
+    SERVICE_PRINCIPAL_CAN_USE_ONLY = "service_principal_can_use_only"
     LAST_USER_ADMIN = "last_user_admin"
     UNEXPECTED_CHANGE = "unexpected_change"
 
@@ -87,11 +94,15 @@ class Decision:
     level: Permission | None
 
 
+GrantType = Literal["user", "group", "everyone", "service_principal"]
+
+
 @dataclass(frozen=True, slots=True)
 class Grant:
-    """One row of ``app_grants``: ``type`` is user, group or everyone (``name`` is ``*``)."""
+    """One row of ``app_grants``: ``type`` is user, group, everyone (``name`` is ``*``) or a
+    service principal (``name`` is its application id)."""
 
-    type: Literal["user", "group", "everyone"]
+    type: GrantType
     name: str
     level: Permission
 
@@ -127,7 +138,7 @@ class AuthzData:
 class GrantChange:
     """A proposed ``grant.app`` write: set ``level`` for a principal, or remove it (``None``)."""
 
-    principal_type: Literal["user", "group", "everyone"]
+    principal_type: GrantType
     principal: str
     level: Permission | None
 
@@ -146,10 +157,13 @@ def check_grant_change(owner: str, change: GrantChange) -> Reason | None:
     """The reason a grant write breaks a rule of the model, or ``None`` when it is acceptable.
 
     Rule 1: the owner is always ``CAN_MANAGE``, so a user entry naming the owner may neither be
-    removed nor set lower. ``everyone`` is ``CAN_USE`` only (FR-022).
+    removed nor set lower. ``everyone`` is ``CAN_USE`` only (FR-022), and so is a service principal
+    (ADR 0020).
     """
     if change.principal_type == "everyone" and change.level is Permission.CAN_MANAGE:
         return Reason.EVERYONE_CAN_USE_ONLY
+    if change.principal_type == "service_principal" and change.level is Permission.CAN_MANAGE:
+        return Reason.SERVICE_PRINCIPAL_CAN_USE_ONLY
     if (
         change.principal_type == "user"
         and _fold(change.principal) == _fold(owner)
@@ -273,15 +287,17 @@ def _platform_decision(email: str, data: AuthzData, groups: frozenset[str] | Non
 def _any_app_manager_decision(
     email: str, data: AuthzData, groups: frozenset[str] | None
 ) -> Decision:
-    """`resource.suggest`: a platform admin, or anyone with `CAN_MANAGE` on at least one app.
+    """`resource.suggest` and `principal.search`: a platform admin, or anyone with `CAN_MANAGE` on
+    at least one app.
 
-    The first app that gives `CAN_MANAGE` decides; a group grant counts only while the groups are
-    known, as everywhere else, so an unknown lookup never widens who is let in.
+    The first app that gives `CAN_MANAGE` decides, in slug order so the reason reported does not
+    depend on dict order; a group grant counts only while the groups are known, as everywhere
+    else, so an unknown lookup never widens who is let in.
     """
     if is_platform_admin(email, data, groups):
         return Decision(True, Reason.PLATFORM_ADMIN, Permission.CAN_MANAGE)
-    for app in data.apps.values():
-        level, source = effective_permission(email, app, data, groups)
+    for slug in sorted(data.apps):
+        level, source = effective_permission(email, data.apps[slug], data, groups)
         if level is Permission.CAN_MANAGE and source is not None:
             return Decision(True, source, level)
     return Decision(False, Reason.NO_MANAGED_APP, None)
@@ -348,9 +364,12 @@ def _best_grant(
         elif grant.type == "everyone":
             reason = Reason.EVERYONE_GRANT
             level = Permission.CAN_USE
+        elif grant.type == "service_principal" and _fold(grant.name) == email:
+            reason = Reason.SERVICE_PRINCIPAL_GRANT
+            level = Permission.CAN_USE
         else:
             continue
-        # Strictly higher wins, so on a tie the first of user, group, everyone in row order stays.
+        # Strictly higher wins, so on a tie the first matching grant in row order stays.
         if best is None or _RANK[level] > _RANK[best[0]]:
             best = (level, reason)
     return (None, None) if best is None else best

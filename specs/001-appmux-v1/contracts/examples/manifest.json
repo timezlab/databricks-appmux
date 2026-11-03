@@ -452,5 +452,12 @@
     "routes": [
       "GET /platform"
     ]
+  },
+  "PrincipalList": {
+    "file": "PrincipalList.json",
+    "direction": "response",
+    "routes": [
+      "GET /principals"
+    ]
   }
 }

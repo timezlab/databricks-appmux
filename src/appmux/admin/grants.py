@@ -6,7 +6,8 @@ The rules, in the order a request meets them:
 2. ``grant.app`` on the app (``CAN_MANAGE``): a person who cannot even open the app gets the same
    ``404`` as for a missing one, a person who can open it but not manage it gets ``403``;
 3. the body or the path against the schema (``GrantRequest``): ``everyone`` is named ``*`` and is
-   ``CAN_USE`` only, a user is a lower-case email, the type is one of three: ``400``;
+   ``CAN_USE`` only, a user is a lower-case email, a service principal is its lower-case
+   application id and is ``CAN_USE`` only (ADR 0020), the type is one of four: ``400``;
 4. the owner is always ``CAN_MANAGE`` and is not a grant row (data model rule 1): naming the owner
    with a lower level, or removing the owner, is ``400``. ``authz.check_grant_change`` repeats the
    rule as the policy's own check, so the two cannot drift apart;
@@ -77,7 +78,7 @@ def _path_target(request: Request) -> GrantRequest:
     try:
         return GrantRequest.model_validate({"type": kind, "name": name, "permission": "CAN_USE"})
     except ValidationError as exc:
-        field = "type" if kind not in ("user", "group", "everyone") else "name"
+        field = "type" if kind not in ("user", "group", "everyone", "service_principal") else "name"
         raise BadRequest(f"the request is not valid: {field} in the path is not valid") from exc
 
 

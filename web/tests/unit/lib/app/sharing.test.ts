@@ -228,6 +228,21 @@ describe("grantLevelChange", () => {
       null,
     );
   });
+
+  it("offers nothing for a service principal, which is CAN_USE only", () => {
+    assert.equal(
+      grantLevelChange({
+        id: "service_principal:4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab",
+        type: "service_principal",
+        name: "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab",
+        permission: "CAN_USE",
+        grantedBy: "x@example.com",
+        grantedAt: "2026-10-30T08:00:00Z",
+        isOwner: false,
+      }),
+      null,
+    );
+  });
 });
 
 describe("grantLevelChangePrompt", () => {

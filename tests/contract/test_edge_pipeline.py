@@ -720,6 +720,55 @@ async def test_an_unknown_app_and_a_denied_one_answer_the_same_404_after_the_sam
     assert docs.received == []
 
 
+# An App's service principal reaches a child with its application id in X-Forwarded-Email
+# (docs/reference/mcp-and-a2a.md); these two ids are made up (T188, ADR 0020).
+SALES_BOT: Final = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
+OTHER_BOT: Final = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+
+
+def seed_service_principal_grant(rig: Rig, slug: str, application_id: str) -> None:
+    rig.registry.seed(
+        "app_grants",
+        {
+            "app_slug": slug,
+            "principal_type": "service_principal",
+            "principal": application_id,
+            "permission": "CAN_USE",
+            "granted_by": ALICE,
+            "granted_at": NOW,
+        },
+    )
+
+
+@pytest.mark.parametrize("forwarded", [SALES_BOT, SALES_BOT.upper()], ids=["lower", "upper"])
+async def test_a_service_principal_with_a_grant_reaches_the_child(rig: Rig, forwarded: str) -> None:
+    seed_service_principal_grant(rig, "sales", SALES_BOT)
+    child = await rig.serve("sales", answer())
+
+    reply = await rig.request("GET", "/sales/x", email=forwarded)
+
+    assert reply.status == 200
+    assert len(child.received) == 1
+
+
+async def test_an_application_id_with_no_grant_gets_the_same_404_as_an_unknown_app(
+    rig: Rig,
+) -> None:
+    # Regression for T188: a new grant type must not open a door for an id no grant names.
+    seed_service_principal_grant(rig, "sales", SALES_BOT)
+    sales = await rig.serve("sales", answer())
+    docs = await rig.serve("docs", answer())
+
+    unknown = await rig.request("GET", "/nowhere/x", email=OTHER_BOT)
+    other_bot = await rig.request("GET", "/sales/x", email=OTHER_BOT)
+    no_grant = await rig.request("GET", "/docs/x", email=SALES_BOT)
+
+    assert unknown.status == other_bot.status == no_grant.status == 404
+    assert unknown.body == other_bot.body == no_grant.body
+    assert unknown.headers == other_bot.headers == no_grant.headers
+    assert sales.received == [] and docs.received == []
+
+
 @pytest.mark.parametrize(
     "target",
     [

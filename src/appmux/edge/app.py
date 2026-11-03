@@ -2,8 +2,8 @@
 
 ``/_appmux/api/v1`` goes to the admin API (``admin.api.create_admin_app`` with the route providers
 that exist: identity, grants, the platform routes, the app and egress routes, the request inbox,
-delegation, audit and metrics, and, for each part the start-up gives, the control, release, resource
-source-viewer and folder-browser routes), ``/`` and ``/_appmux/...``
+delegation, audit and metrics, and, for each part the start-up gives, the control, release,
+resource, source-viewer, folder-browser and principal-directory routes), ``/`` and ``/_appmux/...``
 go to the UI application when one is given (``edge.ui_static``), and every other path goes to the
 request pipeline (``edge.pipeline``): ``/<slug>/...`` is a request for a child app. The pipeline
 exists only when the caller gives a route table; without one those paths answer ``404``, which is
@@ -42,6 +42,7 @@ from appmux.admin.platform import (
     MemorySource,
     PlatformRoutes,
 )
+from appmux.admin.principals import PrincipalDirectory, PrincipalRoutes
 from appmux.admin.releases import ReleaseRoutes
 from appmux.admin.requests import RenameCascade, RequestRoutes
 from appmux.admin.resource_suggestions import ResourceSuggestionRoutes
@@ -194,6 +195,7 @@ def create_edge_app(
     rename_cascade: RenameCascade | None = None,
     memory: MemorySource | None = None,
     workspace_client: httpx.AsyncClient | None = None,
+    principal_directory: PrincipalDirectory | None = None,
 ) -> ASGIApplication:
     """The application behind an open gate.
 
@@ -230,6 +232,7 @@ def create_edge_app(
     * ``source_store`` (the content store) mounts the read-only source viewer;
     * ``workspace_client`` (the client every call to the workspace goes through) mounts the
       folder browser and the resource pickers, which read with the visitor's own token;
+    * ``principal_directory`` (``identity.directory.DirectoryLookup``) mounts ``GET /principals``;
     * ``open_mode_cookies`` is the one writer and reader of the Open as a user cookie: the
       ``POST /apps/{app}/open-mode`` route sets it, and, unless ``forward_token_policy`` is given,
       the pipeline reads the same instance to decide whether a child receives an admin's token.
@@ -289,6 +292,8 @@ def create_edge_app(
     if workspace_client is not None:
         providers.append(WorkspaceBrowseRoutes(WorkspaceHttpApi(workspace_client)))
         providers.append(ResourceSuggestionRoutes(workspace_client))
+    if principal_directory is not None:
+        providers.append(PrincipalRoutes(principal_directory))
     admin_app = create_admin_app(
         registry=registry, authorizer=authorizer, route_providers=providers
     )

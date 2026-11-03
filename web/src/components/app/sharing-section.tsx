@@ -34,7 +34,12 @@ export interface SharingSectionProps {
   onReload: () => void;
 }
 
-const TYPE_WORD = { user: "Person", group: "Group", everyone: "Everyone" };
+const TYPE_WORD = {
+  user: "Person",
+  group: "Group",
+  everyone: "Everyone",
+  service_principal: "Service principal",
+};
 
 function displayName(row: GrantRow): string {
   return row.type === "everyone" ? "Everyone" : row.name;

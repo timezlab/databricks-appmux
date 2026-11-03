@@ -39,6 +39,7 @@ const TYPE_LABEL: Record<GrantType, string> = {
   user: "A person",
   group: "A group",
   everyone: "Everyone",
+  service_principal: "A service principal",
 };
 
 const GRANT_TYPES: readonly GrantType[] = ["user", "group", "everyone"];

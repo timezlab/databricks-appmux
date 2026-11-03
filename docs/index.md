@@ -38,6 +38,7 @@ Navigation only — content lives in the linked documents.
 - [0016 — Admin UI on Tailwind and shadcn, tests outside `src/`](decisions/0016-build-the-admin-ui-with-tailwind-shadcn-and-tests-outside-src.md) — tokens, CSP-safe primitives, Recharts, `web/` layout; extends 0012.
 - [0017 — Admin UI sub-pages and Databricks red](decisions/0017-split-the-admin-ui-into-sub-pages-and-use-databricks-red.md) — five sub-pages each for the app and platform pages, red primary with non-hue danger cues, the Databricks mark in the header; extends 0016.
 - [0018 — Admin UI layout rules and the Settings save bar](decisions/0018-settle-the-admin-ui-layout-rules-and-give-settings-one-save-bar.md) — one field anatomy, control height, button order, spacing scale and table pattern; the launcher as a searchable table; Settings as one list with one save bar; a flat capacity strip for memory; extends 0017.
+- [0020 — A service principal may hold an app grant](decisions/0020-let-a-service-principal-hold-an-app-grant.md) — a `service_principal` grant names another App's SP by its application id, `CAN_USE` only, instead of opening the child to `everyone`; extends 0010. *Proposed 2026-11-03.*
 
 ## Reference
 

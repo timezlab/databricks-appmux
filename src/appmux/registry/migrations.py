@@ -9,9 +9,11 @@ anything it refuses in two cases (design 13.1, "What the operator sets up"):
 * a role the grants need does not exist (``appmux_sp``, ``appmux_platform_writers``). The Lakebase
   project owner creates both before the loader runs and ``0002_grants.sql`` creates no role.
 
-It invents no migration table: v1 has the baseline only, and a later migration needs its own
-decision. The consequence is that the loader keeps no record of what it applied, so the ``apps``
-check is also what stops a second run.
+It invents no migration table: v1 has the baseline, its grants and one later file
+(``0003_service_principal_grants.sql``, ADR 0020), and a later migration needs its own decision.
+The consequence is that the loader keeps no record of what it applied, so the ``apps`` check is
+also what stops a second run, and a registry loaded before a later file existed gets that file
+applied by hand.
 
 Choices that are easy to get wrong:
 

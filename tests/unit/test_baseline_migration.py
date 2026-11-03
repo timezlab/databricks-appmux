@@ -753,6 +753,75 @@ def test_row_models_refuse_what_the_check_constraints_refuse(
         model.model_validate(row)
 
 
+# --- migrations after the baseline -----------------------------------------------------------
+
+SERVICE_PRINCIPAL_MIGRATION_PATH = (
+    REPOSITORY_ROOT / "migrations" / "0003_service_principal_grants.sql"
+)
+APPLICATION_ID = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
+SERVICE_PRINCIPAL_GRANT_ROW: dict[str, Any] = _with(
+    GRANT_ROW, principal_type="service_principal", principal=APPLICATION_ID
+)
+
+# Every CHECK of 0003 (ADR 0020), with rows it refuses, kept as CHECK_REFUSALS is for the baseline.
+SERVICE_PRINCIPAL_CHECK_REFUSALS: dict[str, tuple[Case, ...]] = {
+    "principal_type IN ('user', 'group', 'everyone', 'service_principal')": (
+        (models.AppGrant, _with(GRANT_ROW, principal_type="role")),
+        (models.AppGrant, _with(GRANT_ROW, principal_type="Service_Principal")),
+    ),
+    "principal_type <> 'service_principal' OR principal ~ "
+    "'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'": (
+        (models.AppGrant, _with(SERVICE_PRINCIPAL_GRANT_ROW, principal="sales-bot")),
+        (models.AppGrant, _with(SERVICE_PRINCIPAL_GRANT_ROW, principal=APPLICATION_ID.upper())),
+        (
+            models.AppGrant,
+            _with(SERVICE_PRINCIPAL_GRANT_ROW, principal=APPLICATION_ID.replace("-", "")),
+        ),
+        (models.AppGrant, _with(SERVICE_PRINCIPAL_GRANT_ROW, principal=APPLICATION_ID + "\n")),
+    ),
+}
+
+
+def test_every_check_of_the_service_principal_migration_has_refusal_rows() -> None:
+    in_sql = _check_constraints_of(SERVICE_PRINCIPAL_MIGRATION_PATH.read_text())
+
+    assert sorted(SERVICE_PRINCIPAL_CHECK_REFUSALS) == sorted(in_sql)
+
+
+def test_the_service_principal_migration_replaces_the_type_check_of_the_baseline() -> None:
+    # PostgreSQL names a column's CHECK `<table>_<column>_check`, so the baseline's list of types
+    # is `app_grants_principal_type_check`; the migration drops it before it adds the longer one.
+    statements = [
+        " ".join(statement.split())
+        for statement in _statements(SERVICE_PRINCIPAL_MIGRATION_PATH.read_text())
+    ]
+    assert statements[0] == "ALTER TABLE app_grants DROP CONSTRAINT app_grants_principal_type_check"
+    assert all(statement.startswith("ALTER TABLE app_grants ") for statement in statements)
+    assert sum("ADD CONSTRAINT app_grants_principal_type_check " in s for s in statements) == 1
+
+
+@pytest.mark.parametrize(
+    ("model", "row"),
+    [
+        pytest.param(model, row, id=f"{check} #{number}")
+        for check, cases in SERVICE_PRINCIPAL_CHECK_REFUSALS.items()
+        for number, (model, row) in enumerate(cases, start=1)
+    ],
+)
+def test_the_grant_row_model_refuses_what_the_service_principal_checks_refuse(
+    model: type[models.RowModel], row: dict[str, Any]
+) -> None:
+    with pytest.raises(ValidationError):
+        model.model_validate(row)
+
+
+def test_the_grant_row_model_accepts_a_service_principal_named_by_its_application_id() -> None:
+    grant = models.AppGrant.model_validate(SERVICE_PRINCIPAL_GRANT_ROW)
+    assert grant.principal_type == "service_principal"
+    # The level is the policy's to cap, as for everyone: the database keeps either level.
+    models.AppGrant.model_validate(_with(SERVICE_PRINCIPAL_GRANT_ROW, permission="CAN_MANAGE"))
+
+
 # Rows the database accepts although a catalogue of the code would not: the SQL leaves these
 # lists to the code, so a row model that refused one would fail a whole read on a forged or a
 # future row (data model 4.3 and the residual of section 6).

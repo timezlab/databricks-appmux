@@ -636,7 +636,7 @@ The model copies Databricks Apps ([reference](../reference/databricks-apps-platf
 | Concept | In appmux |
 |---|---|
 | **Permission levels** | `CAN_USE` (open the app) and `CAN_MANAGE` (manage settings, releases and permissions; includes `CAN_USE`) |
-| **Principals** | a `user` (an email), a `group` (a **Databricks group**) or `everyone` (all users Databricks lets into the slot; app grants only) |
+| **Principals** | a `user` (an email), a `group` (a **Databricks group**), `everyone` (all users Databricks lets into the slot; app grants only) or a `service_principal` (another Databricks App's service principal, named by its application id; app grants only, `CAN_USE` only, [ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md)) |
 | **Resources** | each app, and the **platform** itself |
 | **Who can grant** | only a `CAN_MANAGE` holder of that resource |
 | **Owner** | each app's one `owner` is an undeletable `CAN_MANAGE` holder; only a platform admin changes it |
@@ -652,12 +652,16 @@ A **platform admin** is anyone listed in the `platform_admins` setting; an **app
 
 ```
 principals(actor)      = { user:<email> } ∪ { group:g for every g in actor.groups } ∪ { everyone:* }
+                         ∪ { service_principal:<email> }                      (the forwarded id, ADR 0020)
 platform(actor)        = CAN_MANAGE if any entry of platform_admins ∈ principals(actor), else none
 permission(actor, app) = CAN_MANAGE if actor is the owner of app
                          else CAN_MANAGE if platform(actor) = CAN_MANAGE      (implicit: no row)
                          else the highest permission among app_grants(app) rows whose principal ∈ principals(actor)
+                              (an everyone or service_principal row counts as CAN_USE whatever it stores)
                          else none
 ```
+
+**A service principal as a visitor.** When another Databricks App calls a child through appmux with its own service principal's token, the Apps proxy puts that service principal's application id (a UUID) in `X-Forwarded-Email` ([reference](../reference/mcp-and-a2a.md)). A `service_principal` grant names that id in lower case and matches it in any case; it needs no groups, so it works with user authorization off. It is `CAN_USE` only: the schema and `authorize` refuse `CAN_MANAGE`, and a stored `CAN_MANAGE` counts as `CAN_USE`, as for `everyone`. An id that no grant names gets the same `404` as an unknown app. A service principal cannot be a platform admin.
 
 For example Bob resolves to `CAN_USE` on `sales` because Databricks reports `sales-team` among Bob's groups; Carol to `CAN_MANAGE` through a user grant that outranks the group's `CAN_USE`; Dana, a platform admin, to `CAN_MANAGE` on `sales` although no row names Dana, because every platform admin holds it implicitly ([9.2](#92-who-may-do-what)).
 

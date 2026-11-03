@@ -754,6 +754,109 @@ def test_a_removal_needs_the_registry(harness: Harness) -> None:
     assert harness.delete_grant("sales", CAROL, "user", BOB).status_code == 503
 
 
+# --- service principal grants (T188, ADR 0020) ------------------------------------------------
+
+# A made-up application id: an App's service principal reaches a child under this value in
+# X-Forwarded-Email (docs/reference/mcp-and-a2a.md).
+SALES_BOT: Final = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
+
+
+def test_an_app_admin_shares_an_app_with_a_service_principal(harness: Harness) -> None:
+    response = harness.put_grant(
+        "sales", CAROL, {"type": "service_principal", "name": SALES_BOT, "permission": "CAN_USE"}
+    )
+
+    assert response.status_code == 200, response.text
+    body = AppGrantBody.model_validate_json(response.text)
+    assert (body.type, body.name, body.permission, body.granted_by) == (
+        "service_principal",
+        SALES_BOT,
+        "CAN_USE",
+        CAROL,
+    )
+    assert harness.grants_of("sales")[("service_principal", SALES_BOT)] == "CAN_USE"
+    row = harness.registry.audit_rows[-1]
+    assert row.detail == {"principal": f"service_principal:{SALES_BOT}", "permission": "CAN_USE"}
+
+
+def test_a_service_principal_grant_matches_the_application_id_in_any_case(
+    harness: Harness,
+) -> None:
+    harness.put_grant(
+        "sales", CAROL, {"type": "service_principal", "name": SALES_BOT, "permission": "CAN_USE"}
+    )
+
+    for forwarded in (SALES_BOT, SALES_BOT.upper()):
+        listed = harness.listed(forwarded)
+        assert listed["sales"]["permission"] == "CAN_USE"
+        assert set(listed) == {"sales", "docs"}  # docs is shared with everyone
+        assert ask(harness, forwarded, "app.open", "sales") is True
+        assert ask(harness, forwarded, "app.view", "sales") is False
+
+
+def test_a_service_principal_cannot_be_given_can_manage(harness: Harness) -> None:
+    response = harness.put_grant(
+        "sales",
+        CAROL,
+        {"type": "service_principal", "name": SALES_BOT, "permission": "CAN_MANAGE"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "bad_request"
+    assert ("service_principal", SALES_BOT) not in harness.grants_of("sales")
+    assert harness.registry.audit_rows == ()
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["sales-bot", SALES_BOT.upper(), SALES_BOT.replace("-", ""), f"{{{SALES_BOT}}}", "*", ""],
+    ids=["a-name", "upper-case", "no-dashes", "braces", "star", "empty"],
+)
+def test_a_service_principal_not_named_by_a_lower_case_application_id_is_refused(
+    harness: Harness, name: str
+) -> None:
+    response = harness.put_grant(
+        "sales", CAROL, {"type": "service_principal", "name": name, "permission": "CAN_USE"}
+    )
+
+    assert response.status_code == 400
+    assert len(harness.grants_of("sales")) == 3
+    assert harness.registry.audit_rows == ()
+
+
+def test_an_app_admin_removes_a_service_principal_grant(harness: Harness) -> None:
+    harness.put_grant(
+        "sales", CAROL, {"type": "service_principal", "name": SALES_BOT, "permission": "CAN_USE"}
+    )
+
+    response = harness.delete_grant("sales", CAROL, "service_principal", SALES_BOT)
+
+    assert response.status_code == 204
+    assert ("service_principal", SALES_BOT) not in harness.grants_of("sales")
+    row = harness.registry.audit_rows[-1]
+    assert row.detail == {
+        "principal": f"service_principal:{SALES_BOT}",
+        "permission": "CAN_USE",
+        "to": "removed",
+    }
+    assert "sales" not in harness.listed(SALES_BOT)
+
+
+@pytest.mark.parametrize("name", ["sales-bot", SALES_BOT.upper()], ids=["a-name", "upper-case"])
+def test_a_service_principal_path_that_is_not_a_lower_case_application_id_is_a_400(
+    harness: Harness, name: str
+) -> None:
+    response = harness.delete_grant("sales", CAROL, "service_principal", name)
+
+    assert response.status_code == 400
+    assert "name" in response.json()["error"]["message"]
+
+
+def test_an_application_id_with_no_grant_sees_only_what_everyone_sees(harness: Harness) -> None:
+    assert set(harness.listed(SALES_BOT)) == {"docs"}
+    assert ask(harness, SALES_BOT, "app.open", "sales") is False
+
+
 def test_a_manager_who_loses_the_grant_loses_the_right_to_share(harness: Harness) -> None:
     harness.put_grant("ops", ERIN, {"type": "user", "name": GRACE, "permission": "CAN_MANAGE"})
     assert (

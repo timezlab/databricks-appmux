@@ -65,6 +65,7 @@ export {
   AuditList,
 } from "./platform.ts";
 export { ResourceKey } from "./primitives.ts";
+export { PrincipalSuggestion, PrincipalList } from "./principals.ts";
 export {
   UpdateReleaseRequest,
   ReleaseSummary,

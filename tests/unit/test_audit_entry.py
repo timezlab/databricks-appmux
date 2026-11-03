@@ -576,6 +576,16 @@ def test_user_and_everyone_principals_keep_their_shapes(principal: str) -> None:
     assert _entry(action="grant.app", detail={"principal": "everyone:*"})
 
 
+def test_a_service_principal_is_recorded_by_its_application_id() -> None:
+    # ADR 0020; the id is made up. The grant schema holds it to a UUID; the audit keeps the shape.
+    application_id = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
+
+    assert _entry(action="grant.app", detail={"principal": f"service_principal:{application_id}"})
+    for principal in ("service_principal:", "service_principal:a b", "robot:" + application_id):
+        with pytest.raises(ValidationError):
+            _entry(action="grant.app", detail={"principal": principal})
+
+
 def test_a_refused_group_name_is_not_repeated_in_the_error() -> None:
     with pytest.raises(ValidationError) as refusal:
         _entry(action="grant.app", detail={"principal": "group:" + FAKE_DATABRICKS_TOKEN})

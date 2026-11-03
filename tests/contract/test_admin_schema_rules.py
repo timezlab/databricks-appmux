@@ -79,9 +79,94 @@ def test_a_user_is_a_lower_case_email(name: str) -> None:
     refused(schemas.GrantRequest, grant(type="user", name=name), "lower case")
 
 
-def test_a_grant_type_is_one_of_three() -> None:
+def test_a_grant_type_is_one_of_four() -> None:
     with pytest.raises(ValidationError):
         schemas.GrantRequest.model_validate(grant(type="team", name="x"))
+
+
+SALES_BOT = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
+
+
+def test_a_service_principal_is_named_by_its_application_id_and_is_can_use() -> None:
+    accepted(schemas.GrantRequest, grant(type="service_principal", name=SALES_BOT))
+
+
+def test_a_service_principal_is_never_can_manage() -> None:
+    refused(
+        schemas.GrantRequest,
+        grant(type="service_principal", name=SALES_BOT, permission="CAN_MANAGE"),
+        "a service principal is CAN_USE only",
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "sales-bot",
+        SALES_BOT.upper(),
+        SALES_BOT.replace("-", ""),
+        "{" + SALES_BOT + "}",
+        SALES_BOT + "\n",
+        " " + SALES_BOT,
+        SALES_BOT[:-1] + "g",
+        "*",
+        "",
+    ],
+    ids=[
+        "a-name",
+        "upper-case",
+        "no-dashes",
+        "braces",
+        "newline",
+        "space",
+        "not-hex",
+        "star",
+        "empty",
+    ],
+)
+def test_a_service_principal_name_that_is_not_a_lower_case_uuid_is_refused(name: str) -> None:
+    refused(
+        schemas.GrantRequest,
+        grant(type="service_principal", name=name),
+        "application id",
+    )
+
+
+# `GET /principals`: q goes into a SCIM filter, so the allow-list is the only thing between a
+# person's text and Databricks' filter parser (contracts/admin-api.md addendum).
+@pytest.mark.parametrize("query", ['a"b', "a\\b", "a)b", "a(b", "a\x00b", "é", "x" * 65])
+def test_a_principal_query_holds_only_the_allowed_characters(query: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        schemas.PrincipalSearchQuery.from_query({"q": query})
+    assert [error["loc"] for error in caught.value.errors()] == [("q",)]
+
+
+def test_a_principal_query_takes_64_allowed_characters_and_defaults_the_rest() -> None:
+    query = "Aa0 ._@+-" * 7 + "a"
+
+    parsed = schemas.PrincipalSearchQuery.from_query({"q": query})
+
+    assert (parsed.q, parsed.types, parsed.limit) == (
+        query,
+        ["user", "group", "service_principal", "everyone"],
+        10,
+    )
+
+
+@pytest.mark.parametrize(
+    ("params", "field"),
+    [
+        ({"types": "user,robot"}, "types"),
+        ({"types": ""}, "types"),
+        ({"limit": "0"}, "limit"),
+        ({"limit": "51"}, "limit"),
+        ({"limit": "1e1"}, "limit"),
+    ],
+)
+def test_principal_types_and_limit_are_closed(params: dict[str, str], field: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        schemas.PrincipalSearchQuery.from_query(params)
+    assert {error["loc"][0] for error in caught.value.errors()} == {field}
 
 
 @pytest.mark.parametrize(
