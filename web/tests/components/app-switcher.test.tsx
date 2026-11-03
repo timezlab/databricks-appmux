@@ -9,7 +9,7 @@ import { jsonResponse, stubFetch } from "../support/fake-fetch";
 import type { RecordedCall } from "../support/fake-fetch";
 
 const navigation = vi.hoisted(() => ({
-  pathname: "/app/releases/",
+  pathname: "/app/requests/",
   push: vi.fn<(href: string) => void>(),
 }));
 
@@ -28,7 +28,7 @@ let respond: () => Response | Promise<Response> = () =>
 beforeEach(() => {
   calls = [];
   respond = () => jsonResponse(200, APP_LIST);
-  navigation.pathname = "/app/releases/";
+  navigation.pathname = "/app/requests/";
   navigation.push.mockReset();
   stubFetch((call) => {
     calls.push(call);
@@ -121,7 +121,7 @@ describe("AppSwitcher", () => {
     await user.click(
       await within(dialog).findByRole("option", { name: /Team docs/ }),
     );
-    expect(navigation.push).toHaveBeenCalledWith("/app/releases/?slug=docs");
+    expect(navigation.push).toHaveBeenCalledWith("/app/requests/?slug=docs");
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });

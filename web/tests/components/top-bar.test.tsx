@@ -43,7 +43,7 @@ describe("TopBar", () => {
   });
 
   it("shows `/ <app> ▾` on the pages of one app", () => {
-    navigation.pathname = "/app/releases/";
+    navigation.pathname = "/app/requests/";
     navigation.search = "slug=unnamed";
     render(<TopBar />);
     const banner = screen.getByRole("banner");
