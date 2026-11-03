@@ -18,6 +18,12 @@ export interface AppPageContextValue {
   reloadRequests: () => void;
   /** Reads the app, the launcher list and the requests again: offered after a 409. */
   reloadAll: () => void;
+  /**
+   * Says the server has taken a new slug for the app and this page will move
+   * there once the write that follows the rename has answered: until then the
+   * old slug's 404 keeps the app on screen (`appLoadView`'s `isMoving`).
+   */
+  startMove: () => void;
 }
 
 const AppPageContext = createContext<AppPageContextValue | null>(null);

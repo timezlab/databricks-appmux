@@ -64,7 +64,9 @@ export function AppView({ slug, children }: AppViewProps) {
   const apps = usePoll((signal) => listApps({ signal }), {
     intervalMs: DIRECTORY_POLL_INTERVAL_MS,
   });
-  const view = appLoadView(app);
+  // A rename sets it (see `startMove`); the page at the new slug is a new shell.
+  const [isMoving, setIsMoving] = useState(false);
+  const view = appLoadView(app, { isMoving });
   const requests = usePoll((signal) => listRequests({ signal }), {
     intervalMs: REQUESTS_POLL_INTERVAL_MS,
     enabled: view.kind === "ready",
@@ -138,6 +140,9 @@ export function AppView({ slug, children }: AppViewProps) {
         requests,
         reloadRequests: requests.refresh,
         reloadAll: refreshAll,
+        startMove: () => {
+          setIsMoving(true);
+        },
       }}
     >
       <div className="flex flex-col gap-6">

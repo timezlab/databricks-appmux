@@ -11,7 +11,7 @@ import {
   dropCarriedOutcome,
   settingsAccess,
 } from "@/lib/app/settings";
-import type { CarriedRefusal, SettingsPartAccess } from "@/lib/app/settings";
+import type { SettingsPartAccess } from "@/lib/app/settings";
 import { pollData } from "@/lib/app/view";
 import { formatMegabytes } from "@/lib/format";
 import { Button } from "@/components/button";
@@ -33,7 +33,8 @@ import { SettingsRequestForm } from "../settings-request-form";
  * `settingsAccess` (lib/app/settings.ts).
  */
 export function AppSettingsPage() {
-  const { app, actor, actions, requests, reloadAll } = useAppPageContext();
+  const { app, actor, actions, requests, reloadAll, startMove } =
+    useAppPageContext();
   const access = settingsAccess(actor);
   const path = appPagePath(app.slug, "settings") ?? "";
   // A rename lands here from the old slug's page with what it did (see `carryOutcome`).
@@ -41,21 +42,6 @@ export function AppSettingsPage() {
   useEffect(() => {
     dropCarriedOutcome(path);
   }, [path]);
-  // The owner change sent with the rename may answer after this page is on screen.
-  const [followUpRefusal, setFollowUpRefusal] = useState<CarriedRefusal | null>(
-    null,
-  );
-  const followUp = arrival?.followUp;
-  useEffect(() => {
-    if (followUp === undefined) return;
-    let isCurrent = true;
-    void followUp.then((refusal) => {
-      if (isCurrent) setFollowUpRefusal(refusal);
-    });
-    return () => {
-      isCurrent = false;
-    };
-  }, [followUp]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -65,16 +51,21 @@ export function AppSettingsPage() {
           {arrival.detail === null ? null : <p>{arrival.detail}</p>}
         </Notice>
       )}
-      {followUpRefusal === null ? null : (
+      {arrival?.refusal === undefined ? null : (
         <ErrorNotice
-          error={followUpRefusal.error}
-          context={followUpRefusal.context}
+          error={arrival.refusal.error}
+          context={arrival.refusal.context}
           onReload={reloadAll}
         />
       )}
       <Section title="Settings">
         {access.fields.kind === "edit" ? (
-          <AppSettingsForm app={app} actions={actions} onReload={reloadAll} />
+          <AppSettingsForm
+            app={app}
+            actions={actions}
+            onReload={reloadAll}
+            onMove={startMove}
+          />
         ) : (
           <ReadOnlySettings
             app={app}

@@ -197,13 +197,8 @@ export interface CarriedRefusal {
 export interface CarriedOutcome {
   title: string;
   detail: string | null;
-  /**
-   * A write the old page sent after it started to move (the owner change that
-   * follows a rename in the same save). It settles with its refusal, or with
-   * `null` once it went through, and never rejects; the page it lands on shows
-   * the refusal whenever it comes, even after that page is on screen.
-   */
-  followUp?: Promise<CarriedRefusal | null>;
+  /** The owner change sent with a rename was refused: the fields were saved, the owner was not. */
+  refusal?: CarriedRefusal;
 }
 
 // A rename moves the page to the new slug, and the app's shell is keyed by
@@ -247,6 +242,31 @@ export function renameWarning(from: string, to: string): string {
 /** What to tell the person once `PATCH /apps/{app}` answered with a new slug: the row holds it. */
 export function renameMessage(from: string, to: string): string {
   return `Renamed ${from} to ${to}. The app's URL prefix is saved as /${to}/. ${swapSentence(to)}`;
+}
+
+/**
+ * What the page at the new slug says once a rename and the owner change sent
+ * with it (`owner`, `null` when the owner was left alone) have both answered:
+ * one notice that names the new owner when it went through, or the rename
+ * with the owner's refusal beside it.
+ */
+export function renamedOutcome(
+  from: string,
+  to: string,
+  owner: string | null,
+  ownerRefusal: CarriedRefusal | null,
+): CarriedOutcome {
+  const detail = renameMessage(from, to);
+  if (ownerRefusal !== null) {
+    return { title: `Renamed ${from} to ${to}`, detail, refusal: ownerRefusal };
+  }
+  return {
+    title:
+      owner === null
+        ? `Renamed ${from} to ${to}`
+        : `Renamed ${from} to ${to}; the owner is now ${owner}`,
+    detail,
+  };
 }
 
 // ------------------------------------------------------------------- access

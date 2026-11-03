@@ -65,6 +65,36 @@ describe("appLoadView", () => {
     );
   });
 
+  it("keeps the last copy through a 404 while the page moves the app to a new slug", () => {
+    // From the rename's answer on, the old slug answers 404: the page leaves
+    // for the new slug once the write that follows it has answered.
+    assert.deepEqual(
+      appLoadView(
+        { status: "stale", data: APP, updatedAtMs: 0, error: apiError(404) },
+        { isMoving: true },
+      ),
+      { kind: "ready", app: APP, refreshError: null },
+    );
+  });
+
+  it("still carries any other failure, and drops the app on a 403, while it moves", () => {
+    const error = apiError(503);
+    assert.deepEqual(
+      appLoadView(
+        { status: "stale", data: APP, updatedAtMs: 0, error },
+        { isMoving: true },
+      ),
+      { kind: "ready", app: APP, refreshError: error },
+    );
+    assert.deepEqual(
+      appLoadView(
+        { status: "stale", data: APP, updatedAtMs: 0, error: apiError(403) },
+        { isMoving: true },
+      ),
+      { kind: "no-access" },
+    );
+  });
+
   it("drops the app once access is withdrawn (a stale 403)", () => {
     assert.deepEqual(
       appLoadView({

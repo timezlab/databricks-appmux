@@ -14,10 +14,14 @@ import {
   carryOutcome,
   nodeMemoryHint,
   parseSettingsForm,
-  renameMessage,
   renameWarning,
+  renamedOutcome,
 } from "@/lib/app/settings";
-import type { AppSettingsValues, SettingsChange } from "@/lib/app/settings";
+import type {
+  AppSettingsValues,
+  CarriedRefusal,
+  SettingsChange,
+} from "@/lib/app/settings";
 import { Button } from "@/components/button";
 import { ErrorNotice } from "@/components/error-notice";
 import { Field } from "@/components/field";
@@ -38,6 +42,8 @@ export interface AppSettingsFormProps {
   actions: AppActions;
   /** Reads the app again: offered after a 409, and run when only part of a save went through. */
   onReload: () => void;
+  /** Called once the server has taken a new slug, before the page moves there (`startMove`). */
+  onMove: () => void;
 }
 
 /**
@@ -46,12 +52,14 @@ export interface AppSettingsFormProps {
  * `app.set_owner`). It starts from the polled app and keeps what the person
  * typed until a field the form shows changes on the server; Save reads the
  * latest version. A new slug moves the app's address, so Save asks first and
- * then moves this page to the new slug.
+ * then moves this page to the new slug, once the owner change sent with it
+ * (if any) has answered too.
  */
 export function AppSettingsForm({
   app,
   actions,
   onReload,
+  onMove,
 }: AppSettingsFormProps) {
   const router = useRouter();
   const key = appSettingsKey(app);
@@ -124,25 +132,23 @@ export function AppSettingsForm({
           }
           return slug;
         }
-        // The old slug answers 404 from now on, so this page goes where the app
-        // is at once, without waiting for the owner change: read again here, the
-        // app would be "not found" and a refusal of the owner never seen. The
-        // page at the new slug shows how the owner change ended.
-        const ownerChange =
+        // The old slug answers 404 from now on: the shell keeps the copy it has
+        // (`onMove`) while this page sends the owner change, still holding the
+        // one write so nothing else starts meanwhile. Then the page moves once,
+        // and the page at the new slug says what both writes did.
+        onMove();
+        const ownerRefusal: CarriedRefusal | null =
           change.owner === null
-            ? undefined
-            : setOwner(slug, { version, owner: change.owner }).then(
+            ? null
+            : await setOwner(slug, { version, owner: change.owner }).then(
                 () => null,
                 (error: unknown) => ({ error, context: OWNER_NOT_CHANGED }),
               );
-        carryOutcome(movedPath, {
-          title: `Renamed ${from} to ${slug}`,
-          detail: renameMessage(from, slug),
-          followUp: ownerChange,
-        });
+        carryOutcome(
+          movedPath,
+          renamedOutcome(from, slug, change.owner, ownerRefusal),
+        );
         router.replace(movedPath);
-        // One write at a time holds until the owner change has answered too.
-        await ownerChange;
         return slug;
       },
       (slug) =>
