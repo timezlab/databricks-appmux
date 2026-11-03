@@ -64,6 +64,7 @@ AuditAction = Literal[
     "release.unlock",
     "release.delete",
     "release.view_source",
+    "app.view_logs",
 ]
 AUDIT_ACTIONS: Final[tuple[str, ...]] = get_args(AuditAction)
 
@@ -116,7 +117,7 @@ _DATABRICKS_TOKEN_SHAPES: Final = (
     re.compile(r"dapi[0-9a-fA-F]{16,}"),  # Databricks personal access token
     re.compile(r"dose[0-9a-fA-F]{16,}"),  # Databricks OAuth client secret
 )
-_CREDENTIAL_SHAPES: Final = (
+_CREDENTIAL_VALUE_SHAPES: Final = (
     *_DATABRICKS_TOKEN_SHAPES,
     re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."),  # JSON web token
     re.compile(_NOT_AFTER_ALNUM + r"bearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
@@ -125,9 +126,14 @@ _CREDENTIAL_SHAPES: Final = (
     re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS access key id
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"://[^/\s:@]+:[^/\s@]+@"),  # a password in a URL
-    # NAME=value and NAME: value, also quoted ("NAME": "value") and with a longer name around it.
-    re.compile(_CREDENTIAL_NAME + r"""[\w.-]*["']?\s*[=:]\s*["']?\S+""", re.IGNORECASE),
 )
+# NAME=value and NAME: value, also quoted ("NAME": "value") and with a longer name around it. The
+# group is the name and its separator, which masking keeps.
+_NAMED_CREDENTIAL: Final = re.compile(
+    "(" + _CREDENTIAL_NAME + r"""[\w.-]*["']?\s*[=:]\s*["']?)\S+""", re.IGNORECASE
+)
+_CREDENTIAL_SHAPES: Final = (*_CREDENTIAL_VALUE_SHAPES, _NAMED_CREDENTIAL)
+_MASK: Final = "***"
 
 
 def _refuse_credential_shape(text: str) -> str:
@@ -137,6 +143,19 @@ def _refuse_credential_shape(text: str) -> str:
             "looks like a credential; an audit entry holds names and references, never a value"
         )
     return text
+
+
+def mask_credentials(text: str) -> str:
+    """``text`` with every credential shape above replaced by ``***``, for output kept to be read.
+
+    A child's output and a build's log are shown to the people who manage the app, so what this
+    module refuses in an audit entry is masked there. The value shapes go first, so that in
+    ``Authorization: Bearer <token>`` the token is gone before the name rule masks one word; a
+    ``NAME=value`` keeps its name. Like the refusal, it knows common shapes, not all of them.
+    """
+    for shape in _CREDENTIAL_VALUE_SHAPES:
+        text = shape.sub(_MASK, text)
+    return _NAMED_CREDENTIAL.sub(lambda found: found.group(1) + _MASK, text)
 
 
 def _refuse_token_shape(text: str) -> str:

@@ -24,10 +24,12 @@ from stub_registry import StubRegistry
 import appmux.assembly as assembly
 from appmux import __main__ as entry
 from appmux.reconciler.admission import MemoryLedger
+from appmux.reconciler.output import OutputRing
 
 CONTAINER_IP: Final = IPv4Address("10.0.2.15")
 MEMORY_LIMIT_MB: Final = 8192
 RECORDED_LEDGER: Final = MemoryLedger(limit_mb=MEMORY_LIMIT_MB, reserve_mb=512, committed_mb=269)
+RECORDED_RING: Final = OutputRing()
 SERVICE_PRINCIPAL_TOKEN: Final = "service-principal-token-placeholder"  # noqa: S105 - a fake value
 
 
@@ -100,6 +102,10 @@ class RecordingReconciler:
 
     def running_app_count(self) -> int:
         return self.app_count
+
+    def output(self, slug: str) -> OutputRing | None:
+        self.calls.append(("output", slug))
+        return RECORDED_RING
 
     async def stop_all(self, within_s: float) -> None:
         self.calls.append(("stop_all", within_s))

@@ -6,10 +6,15 @@ vocabulary (``ChildStart``, ``RunningChild``) meets the launcher's (``SandboxSpe
 else: no policy about when to start, restart or stop a child belongs here.
 
 Each start gets a scratch directory of its own, ``<run_base>/<slug>/<release_no>-<n>``, emptied
-before use. It holds the supervisor's log, the child's log, the egress rules file and the unix
-socket the edge connects to; none of it is visible inside the sandbox (design 6.1, 6.4).
-Directories of finished children stay until the same name is used again: they hold only the logs
-a person reads to learn why a release failed.
+before use. It holds the supervisor's log, the child's two output files (``child.log`` for its
+standard output and the supervisor's own lines, ``child.err`` for its standard error), the egress
+rules file and the unix socket the edge connects to; none of it is visible inside the sandbox
+(design 6.1, 6.4). Directories of finished children stay until the same name is used again.
+
+The reconciler reads a child's output as it comes (``read_output``) into the app's output ring
+(``output.py``): each file is followed from where the last read stopped, a line is returned only
+once it is whole (or the child has ended), and a flood of more than ``MAX_OUTPUT_READ_BYTES``
+between two reads keeps its end and says how much it skipped.
 
 A child whose environment names the shared service principal's token command also gets a *host*
 run directory, ``<scratch>/run``, bound read-write at ``/run/appmux`` instead of the tmpfs (the
@@ -24,14 +29,16 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import logging
 import os
 import shutil
+import signal
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Final, Protocol
 
-from appmux.reconciler.children import ChildExit, ChildStart, ChildStartError
+from appmux.reconciler.children import ChildExit, ChildStart, ChildStartError, OutputStream
 from appmux.sandbox.launcher import (
     LAUNCH_SOCKET_NAME,
     SCRATCH_DIRECTORY_MODE,
@@ -53,6 +60,7 @@ from appmux.sandbox.run_dir import (
 MAX_SOCKET_PATH_BYTES: Final = 107
 RELAY_SOCKET_NAME: Final = "relay.sock"
 CHILD_LOG_NAME: Final = "child.log"
+CHILD_ERR_NAME: Final = "child.err"
 RULES_FILE_NAME: Final = "rules.json"
 HOST_RUN_DIR_NAME: Final = "run"
 # The SIGTERM grace of a child stopped for filling its run directory.
@@ -61,6 +69,13 @@ RUN_DIR_STOP_GRACE_S: Final = 5.0
 LOG_READ_BYTES: Final = 16 * 1024
 # How long the metrics sampler waits for a pump's counters; under its own 3 s probe timeout.
 PUMP_STATS_TIMEOUT_S: Final = 2.0
+# The most of one output file read at once: the size of the app's output ring, so a flood between
+# two reads cannot hold the event loop longer than one ring's worth of text.
+MAX_OUTPUT_READ_BYTES: Final = 256 * 1024
+# A line still without its newline past this size is returned as it is (the ring cuts it further).
+MAX_PARTIAL_LINE_BYTES: Final = 16 * 1024
+
+logger = logging.getLogger(__name__)
 
 
 class SandboxProcess(Protocol):
@@ -117,6 +132,62 @@ class _HostRunDir:
         await self.keeper.stop()
 
 
+class _OutputFile:
+    """One output file of a child, followed from where the last read stopped."""
+
+    def __init__(self, path: Path, stream: OutputStream) -> None:
+        self._path = path
+        self._stream = stream
+        self._offset = 0
+        self._partial = b""
+
+    def read(self, *, final: bool) -> list[tuple[OutputStream, str]]:
+        try:
+            data, skipped = self._read_new()
+        except FileNotFoundError:
+            return []  # the child has not written to it yet
+        except OSError as exc:
+            # Best effort: the output ring is for a person to read; a file that cannot be read now
+            # is tried again at the next read, and the child runs on either way.
+            logger.warning("could not read %s: %s", self._path, exc.strerror)
+            return []
+        lines: list[tuple[OutputStream, str]] = []
+        if skipped:
+            lines.append(
+                ("appmux", f"skipped {skipped} bytes of {self._stream} written faster than read")
+            )
+        *whole, self._partial = (self._partial + data).split(b"\n")
+        if final or len(self._partial) > MAX_PARTIAL_LINE_BYTES:
+            if self._partial:
+                whole.append(self._partial)
+            self._partial = b""
+        lines.extend((self._stream, _decode(line)) for line in whole)
+        return lines
+
+    def _read_new(self) -> tuple[bytes, int]:
+        with self._path.open("rb") as handle:
+            size = os.fstat(handle.fileno()).st_size
+            if size < self._offset:  # cut or replaced: start again from its beginning
+                self._offset, self._partial = 0, b""
+            skipped = 0
+            if size - self._offset > MAX_OUTPUT_READ_BYTES:
+                skipped = size - MAX_OUTPUT_READ_BYTES - self._offset
+                self._offset, self._partial = size - MAX_OUTPUT_READ_BYTES, b""
+            handle.seek(self._offset)
+            data = handle.read(size - self._offset)
+        self._offset += len(data)
+        if skipped:
+            # The read starts inside a line: that piece is part of what was skipped.
+            first_newline = data.find(b"\n")
+            cut = first_newline + 1 if first_newline >= 0 else len(data)
+            data, skipped = data[cut:], skipped + cut
+        return data, skipped
+
+
+def _decode(line: bytes) -> str:
+    return line.decode("utf-8", errors="replace").removesuffix("\r")
+
+
 class SandboxRunningChild:
     def __init__(
         self,
@@ -124,11 +195,12 @@ class SandboxRunningChild:
         *,
         socket_path: Path,
         log_path: Path,
+        stderr_path: Path,
         host_run_dir: _HostRunDir | None = None,
     ) -> None:
         self._process = process
         self._socket_path = socket_path
-        self._log_path = log_path
+        self._output = (_OutputFile(log_path, "stdout"), _OutputFile(stderr_path, "stderr"))
         self._host_run_dir = host_run_dir
 
     @property
@@ -145,7 +217,7 @@ class SandboxRunningChild:
         # Released only once the child has ended: the reconciler cancels a ``wait`` it started
         # for the health check while the child still runs.
         exit_ = await self._process.wait()
-        return await self._ended(exit_.describe())
+        return await self._ended(exit_)
 
     async def stop(self, *, grace_s: float) -> ChildExit:
         try:
@@ -153,21 +225,25 @@ class SandboxRunningChild:
         except BaseException:
             await self._release()
             raise
-        return await self._ended(exit_.describe())
+        return await self._ended(exit_)
 
-    async def _ended(self, description: str) -> ChildExit:
+    async def _ended(self, exit_: SandboxExit) -> ChildExit:
         host_run_dir = self._host_run_dir
         await self._release()
+        description = exit_.describe()
         if host_run_dir is not None and host_run_dir.offence is not None:
             return ChildExit(f"{host_run_dir.offence.reason}; {description}")
-        return ChildExit(description)
+        if exit_.signal is not None:
+            return ChildExit(description, signal=_signal_name(exit_.signal))
+        return ChildExit(description, code=exit_.status)
 
     async def _release(self) -> None:
         if self._host_run_dir is not None:
             await self._host_run_dir.release()
 
-    def log_tail(self) -> str:
-        return _read_tail(self._log_path)
+    def read_output(self, *, final: bool = False) -> list[tuple[OutputStream, str]]:
+        # Read in the event loop: a local file, at most MAX_OUTPUT_READ_BYTES of each per call.
+        return [line for output in self._output for line in output.read(final=final)]
 
     # What the metrics sampler reads (T192): which sandbox this is, its pid, its pump's counters.
 
@@ -229,6 +305,7 @@ class SandboxChildLauncher:
             overlays=tuple(child.overlays),
             scratch_dir=scratch_dir,
             log_path=scratch_dir / CHILD_LOG_NAME,
+            stderr_path=scratch_dir / CHILD_ERR_NAME,
             rules_path=scratch_dir / RULES_FILE_NAME,
             relay_socket_path=socket_path,
             child_port=child.port,
@@ -259,7 +336,11 @@ class SandboxChildLauncher:
                 name=f"run-dir-{child.slug}",
             )
         return SandboxRunningChild(
-            process, socket_path=socket_path, log_path=spec.log_path, host_run_dir=host_run_dir
+            process,
+            socket_path=socket_path,
+            log_path=spec.log_path,
+            stderr_path=scratch_dir / CHILD_ERR_NAME,
+            host_run_dir=host_run_dir,
         )
 
     async def _watch(
@@ -309,11 +390,8 @@ def _require_socket_path_fits(path: Path) -> None:
         )
 
 
-def _read_tail(path: Path) -> str:
+def _signal_name(number: int) -> str:
     try:
-        with path.open("rb") as handle:
-            handle.seek(0, os.SEEK_END)
-            handle.seek(max(0, handle.tell() - LOG_READ_BYTES))
-            return handle.read().decode("utf-8", errors="replace").strip()
-    except OSError:
-        return ""
+        return signal.Signals(number).name
+    except ValueError:
+        return str(number)  # a real-time signal has no name of its own

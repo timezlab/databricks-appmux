@@ -362,7 +362,7 @@ CREATE INDEX app_grants_by_principal ON app_grants (principal_type, principal); 
 
 **Purpose and rules.** One row per snapshot-plus-config: the unit that is built, health-checked, activated and rolled back. A release's **content** (snapshot, config, detected manifest) never changes after creation, and its wheel list is written once, when the Update flow creates the row (a config edit that creates a release copies the list of the release it starts from), and is only read afterwards by the build, a restart or a rollback; its **status**, **name**, **tags** and **lock** do change. Snapshots and wheels are files in the content store named by their digest, so identical bytes are stored once; the row points to them. Deleting a release removes the pointers and keeps the row, so numbers are never reused and audit entries still resolve.
 
-`status` is `pending → building → starting → healthy → active`, plus `failed` and `superseded`; `status_reason` and `build_log_tail` (the last 40 lines, kept for failed releases) explain a failure.
+`status` is `pending → building → starting → healthy → active`, plus `failed` and `superseded`; `status_reason` and `build_log_tail` (the last 40 lines of a build, or the last 50 lines of the child's output for a failed start, kept for failed releases) explain a failure.
 
 **Columns.**
 
@@ -376,7 +376,7 @@ CREATE INDEX app_grants_by_principal ON app_grants (principal_type, principal); 
 | `wheels` | `jsonb` | no, `[]` | see below | the wheels the install used, with source and hash; written once, by the Update flow, and never changed afterwards (a deletion empties it) |
 | `status` | `text` | no, `'pending'` | `active` | the states above |
 | `status_reason` | `text` | yes | *null* | why a release is `failed`, for example `health check did not pass within 60 s (last error: connection refused)` |
-| `build_log_tail` | `text` | yes | *null* | the last 40 lines of the build, kept for failed releases |
+| `build_log_tail` | `text` | yes | *null* | the last 40 lines of the build, or the last 50 lines of the child's output for a failed start, kept for failed releases |
 | `status_at` | `timestamptz` | no, `now()` | 2026-10-30T09:14Z | when the status last changed |
 | `label` | `text` | yes | `fix pagination` | a name, 1 to 80 characters |
 | `tags` | `text[]` | no, `{}` | `{stable}` | free labels, lower case, up to 32 characters each, up to 10 per release; **they protect nothing** |
@@ -717,7 +717,7 @@ CREATE TABLE metrics (
 | 2026-10-30T09:45Z | `dana@example.com` | `release.view_source` | `sales` | `{"release": 7, "path": "app.py"}` | |
 | 2026-10-30T10:20Z | `dana@example.com` | `request.deny` | `docs` | `{"request": 8, "kind": "settings", "automatic": true}` | slug 'reports' is already taken (automatic) |
 
-Action names: `app.register`, `app.delete`, `app.rename`, `app.view_as_user`, `app.set_owner`, `app.edit_platform_fields`, `app.start`, `app.stop`, `app.restart`, `request.create`, `request.withdraw`, `request.approve`, `request.deny`, `delegation.grant`, `delegation.revoke`, `platform_admin.add`, `platform_admin.remove`, `grant.app`, `egress.edit`, `settings.edit`, `resource.attach`, `resource.detach`, `config.edit`, `release.create`, `release.activate`, `release.tag`, `release.untag`, `release.label`, `release.lock`, `release.unlock`, `release.delete`, `release.view_source`.
+Action names: `app.register`, `app.delete`, `app.rename`, `app.view_as_user`, `app.set_owner`, `app.edit_platform_fields`, `app.start`, `app.stop`, `app.restart`, `request.create`, `request.withdraw`, `request.approve`, `request.deny`, `delegation.grant`, `delegation.revoke`, `platform_admin.add`, `platform_admin.remove`, `grant.app`, `egress.edit`, `settings.edit`, `resource.attach`, `resource.detach`, `config.edit`, `release.create`, `release.activate`, `release.tag`, `release.untag`, `release.label`, `release.lock`, `release.unlock`, `release.delete`, `release.view_source`, `app.view_logs` (the first read of an app's output by an actor in 10 minutes; no content).
 
 **DDL.**
 

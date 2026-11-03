@@ -16,8 +16,10 @@ Four rules the builders keep for their callers:
   has no snapshot to run, so it cannot be activated or retried.
 * Text is cleaned before it is written: a NUL byte makes the registry refuse the row
   (``InvalidRow``), and a child can print anything, so a log tail is cut to the last
-  ``LOG_TAIL_LINES`` lines and ``MAX_LOG_TAIL_CHARS`` characters. Removing a secret from a log is
-  the caller's job: only the caller knows the values.
+  ``LOG_TAIL_LINES`` lines (``START_LOG_TAIL_LINES`` for a failed start) and
+  ``MAX_LOG_TAIL_CHARS`` characters, and the credential shapes of the audit log are masked in it
+  (``registry.audit.mask_credentials``). Removing the child's own secret values from a log is the
+  caller's job: only the caller knows the values.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from datetime import datetime
 from typing import Final
 
 from appmux.reconciler.states import IllegalTransition, check_transition
+from appmux.registry.audit import mask_credentials
 from appmux.registry.models import (
     AppConfig,
     DetectedManifest,
@@ -40,6 +43,8 @@ from appmux.registry.writers import WriteKind
 
 # "The last 40 lines of the build, kept for failed releases" (data model 4.6).
 LOG_TAIL_LINES: Final = 40
+# A failed start keeps the child's last 50 lines of output (contracts/admin-api.md, addendum).
+START_LOG_TAIL_LINES: Final = 50
 MAX_LOG_TAIL_CHARS: Final = 8000
 MAX_REASON_CHARS: Final = 500
 _ELLIPSIS: Final = "..."
@@ -98,12 +103,14 @@ def release_status_change(
     *,
     reason: str | None = None,
     log_tail: str | None = None,
+    log_tail_lines: int = LOG_TAIL_LINES,
     by_hand: bool = False,
 ) -> Change:
     """The write that moves ``release`` to ``new_status`` (``IllegalTransition`` if forbidden).
 
-    ``reason`` and ``log_tail`` replace the stored ones (``None`` clears them); the registry
-    stamps ``status_at``. A deleted release takes no step (``IllegalTransition``).
+    ``reason`` and ``log_tail`` replace the stored ones (``None`` clears them), the tail cut to its
+    last ``log_tail_lines`` lines; the registry stamps ``status_at``. A deleted release takes no
+    step (``IllegalTransition``).
     """
     if release.deleted_at is not None:
         raise IllegalTransition(
@@ -116,7 +123,7 @@ def release_status_change(
         values={
             "status": new_status,
             "status_reason": clean_reason(reason) if reason else None,
-            "build_log_tail": clean_log_tail(log_tail) if log_tail else None,
+            "build_log_tail": clean_log_tail(log_tail, lines=log_tail_lines) if log_tail else None,
         },
     )
 
@@ -222,10 +229,10 @@ def clean_reason(text: str) -> str:
     return cleaned[: MAX_REASON_CHARS - len(_ELLIPSIS)] + _ELLIPSIS
 
 
-def clean_log_tail(text: str) -> str | None:
-    """The end of ``text`` fit for ``build_log_tail``; ``None`` when nothing is left."""
-    lines = text.replace(_NUL, "").strip().splitlines()
-    tail = "\n".join(lines[-LOG_TAIL_LINES:])
+def clean_log_tail(text: str, *, lines: int = LOG_TAIL_LINES) -> str | None:
+    """The last ``lines`` lines of ``text``, masked, for ``build_log_tail``; ``None`` if empty."""
+    kept = mask_credentials(text.replace(_NUL, "")).strip().splitlines()
+    tail = "\n".join(kept[-lines:])
     if len(tail) > MAX_LOG_TAIL_CHARS:
         tail = tail[-MAX_LOG_TAIL_CHARS:]
     return tail or None

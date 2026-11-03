@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Final, Protocol
 
 from pydantic import SecretStr
 
+from appmux.admin.environment import ChildSetup
 from appmux.admin.identity import state_from_desired
 from appmux.admin.platform import EGRESS_GLOBAL_KEY
 from appmux.admin.resources import DatabricksAttachChecker
@@ -73,6 +74,7 @@ from appmux.reconciler.child_env import EnvironmentRefused, PlatformIdentity, Re
 from appmux.reconciler.children import ChildStartError
 from appmux.reconciler.clock import SystemClock
 from appmux.reconciler.health import UnixSocketHealthProbe
+from appmux.reconciler.output import OutputRing
 from appmux.reconciler.reconciler import Reconciler
 from appmux.reconciler.route_table import RouteTable
 from appmux.reconciler.sandbox_adapter import (
@@ -300,6 +302,11 @@ class Service:
         self.principal_directory = DirectoryLookup(
             workspace, platform_token=service_principal_token_async
         )
+        # What ``GET /apps/{app}/environment`` reads: the releases the builder writes and the
+        # platform values every child is started with.
+        self.child_setup = ChildSetup(
+            platform=platform_identity(settings), releases_dir=self._releases_dir
+        )
         # The edge counts requests into ``metrics``; the metrics service samples the container and
         # the children into it and writes the finished minutes. A figure no file states is left
         # out, never invented (``metrics/sources.py``).
@@ -432,6 +439,10 @@ class Service:
             for slug, child in self._reconciler.running_children()
             if isinstance(child, SandboxRunningChild)
         ]
+
+    def output(self, slug: str) -> OutputRing | None:
+        """What ``slug``'s child wrote; ``None`` before the reconciler (or that child) ran."""
+        return None if self._reconciler is None else self._reconciler.output(slug)
 
     async def stop(self) -> None:
         """``SIGTERM``: stop the children within the budget, then close the clients."""

@@ -44,6 +44,7 @@ export {
   PackageMode,
   SettingKey,
 } from "./enums.ts";
+export { AppEnvironment } from "./environment.ts";
 export { GrantRequest, AppGrant } from "./grants.ts";
 export {
   OpenModeRequest,
@@ -51,6 +52,7 @@ export {
   AppSummary,
   AppList,
 } from "./launcher.ts";
+export { AppLogs } from "./logs.ts";
 export { MetricsQuery, MetricsRow, MetricsResponse } from "./metrics.ts";
 export {
   MetricStep,

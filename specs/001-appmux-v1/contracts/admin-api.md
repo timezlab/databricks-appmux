@@ -456,7 +456,8 @@ Returned by `GET /apps/{app}/releases/{id}` and by the release writes (`activate
 | `created_by` | string | always | Who pressed Update, or changed the config |
 | `created_at` | time | always | |
 | `snapshot_digest` | string | always | `sha256:` and 64 hex digits |
-| `build_log_tail` | string or null | always | The last 40 lines of the build, kept for failed releases |
+| `build_log_tail` | string or null | always | The last 40 lines of the build, or the last 50 lines of the child's output for a failed start, kept for failed releases |
+| `failure_hint` | string or null | always | One sentence on what to change for a failed release (addendum below); `null` when none applies |
 | `detected` | object | always | What appmux found in the snapshot ([design 5.4](../../../docs/product/v1-design.md#54-appyaml-requirements-and-start)) |
 | `detected.runtime` | string | always | `python` or `node`; a release whose snapshot recorded no runtime (detection failed) shows `python`, so that its `status_reason` can still be read |
 | `detected.framework` | string or null | always | A hint such as `fastapi`; never a gate |
@@ -796,7 +797,7 @@ rest of the contract. A lane that finds a detail below wrong changes this sectio
 |---|---|---|---|
 | `GET /principals?q=&types=&limit=` | `principal.search`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `PrincipalList` | suggestions for the Sharing form. `q` is at most 64 characters of `A-Z a-z 0-9 space . _ @ + -` (anything else is `400`, because the text goes into a SCIM filter); `types` is a comma list of `user`, `group`, `service_principal`, `everyone` (default all); `limit` 1 to 50 (default 10); a parameter sent twice is `400`, and the message names the parameter, never the value. An empty `q` reads no directory and returns only the `everyone` row. Each directory is read with the person's token first and the platform's service-principal token when that is refused; a directory that neither can read is named `unavailable` in `sources` and the UI keeps free typing. `403` `user_token_missing` is not raised: the fallback exists for that |
 | `GET /workspace/browse?path=` | `workspace.browse`: any visitor with a token | `WorkspaceListing` | the sub-folders and files of one workspace folder, read with the person's token (scope `workspace.workspace:read`). No `path` returns the roots (`My folder` is `/Workspace/Users/<the person's e-mail>`, `Shared` is `/Workspace/Shared`) and calls nothing upstream. `400` `invalid_path` for a path that does not start with `/Workspace/`, has an empty, `.` or `..` segment (a name that merely contains two dots is fine), holds a control character or has more than 512 characters (one trailing `/` is dropped). `403` `user_token_missing` without the person's token, the roots included; `403` `session_expired` when Databricks does not accept the token; `404` `not_found` (the folder does not exist or the person cannot see it: Databricks answers the same); `403` `no_access` when Databricks answers 403; `503` `workspace_unavailable` for any other failure or no answer. At most 200 entries, folders first, then by name without regard to case (`truncated`). Writes nothing and records nothing |
-| `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500). Lines pass the same credential masking as `build_log_tail`. Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content) |
+| `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500); the newest `limit` lines after `after` are returned, and an `after` beyond the newest `seq` (a cursor from before appmux restarted) reads from the start. A value that is not a whole number in range is `400`. Lines pass the same credential masking as `build_log_tail`, when they are written. Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content); that memory is per process, and a read whose row cannot be written answers `503` |
 | `GET /apps/{app}/environment` | `app.view_environment`: `CAN_MANAGE` on the app | `AppEnvironment` | what the app is started with: runtime versions, variables and packages (see schema). A value that belongs to a `secret` resource is never returned (`is_secret` is `true`, `value` is `null`) |
 | `GET /resources/types` | `resource.suggest`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `ResourceTypeList` | the resource catalogue of [data model 4.7](../../../docs/product/v1-data-model.md#47-app_resources) with a label, a description, the permission levels (the first is the default), the access modes and a target example for each type, so the UI holds no copy of it. Calls nothing upstream |
 | `GET /resources/suggestions?type=&q=&limit=` | the same | `ResourceSuggestionList` | objects of one type the person can see, read with their token: SQL warehouses, serving endpoints, secret scopes (and, for `q` of the form `scope/` or `scope/prefix`, the key names of that scope; never a value), MLflow experiments, jobs. `q` is matched as a case-insensitive substring of the label and the target. A type with no safe list call answers `items: []` and `source: "not_supported"`. A call Databricks refuses or does not answer (no token, a refused scope, a failure) is not an error page: it answers `200`, `items: []`, `source: "unavailable"` and a `note` in words, so the form keeps free typing. `limit` 1 to 50 (default 20); `400` `unknown_type` for a `type` that is missing or not in the catalogue; `400` `invalid_query` for a `q` of more than 256 characters or with a control character; `400` `invalid_limit`. Writes nothing and records nothing |
@@ -822,6 +823,11 @@ usual, and no audit row except where a row says so.
   exits instead of at the deadline, and `build_log_tail` holds the child's last 50 lines of output for a failed start.
   `failure_hint` is one sentence the person can act on, for example that the memory budget is below what the runtime
   needs (the address-space limit is twice the budget, and Node.js needs about 768 MB); `null` when none applies.
+  It is judged when the release is read, with the app's budget then, and only for a `failed` release: a known
+  out-of-memory text in the tail of an exit at start; an end at start by `SIGSEGV`, `SIGABRT`, `SIGKILL`,
+  `SIGTRAP`, `SIGBUS` or `SIGILL` (or an exit code of 128 + one of them) under the runtime's minimum (768 MB for
+  Node.js, 256 MB otherwise); and a Node.js app under 768 MB that printed nothing before the health deadline (Node.js 22
+  at a 64 MB budget hangs at start: a thread stack cannot be mapped under the limit and the main thread waits for it).
 
 ### New schemas
 
@@ -858,21 +864,21 @@ principal without a UUID application id) is left out.
 
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
-| `state` | string | always | The app's state as in `AppStateResponse`, or `never_started` |
+| `state` | string | always | The app's state as in `AppStateResponse`, or `never_started` when appmux has not started the app since appmux itself started (then `instance` is `null`, `lines` is `[]` and `last_exit` is `null`) |
 | `instance` | string or null | always | Changes at every start; the client clears its view when it changes |
 | `lines` | array<{seq, at, stream, text}> | always | Oldest first; `seq` rises by one; `stream` is `stdout`, `stderr` or `appmux` (a line appmux wrote about the app: started, exited with code) |
 | `next_after` | integer | always | The `seq` to send as `after` next time |
-| `dropped` | integer | always | Lines after `after` that the ring no longer holds |
+| `dropped` | integer | always | Lines after `after` that are not in `lines`: the ring no longer holds them, or `limit` left them out |
 | `last_exit` | object or null | always | `code`, `signal`, `at`, `ran_for_s` of the last end of a process, or `null` |
 
 #### AppEnvironment
 
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
-| `release` | integer or null | always | The active release the figures describe |
+| `release` | integer or null | always | The active release the figures describe; with `null` (no active release), `variables` and `packages` are `[]` |
 | `runtime` | object | always | `kind` (`python`, `node`, `unknown`), `python_version`, `node_version` (strings or null) |
-| `variables` | array<{name, value, source, resource_key, is_secret}> | always | `source` is `config` (the release's env entries), `resource` (a `valueFrom`, shown by its key) or `platform` (set for every child: port, host, root path); `value` is `null` for a secret |
-| `packages` | array<{name, version, source}> | always | `source` is `release` (declared by `requirements.txt` or `package.json`), `wheel` (resolved for this release) or `platform` (provided by the platform's own environment) |
+| `variables` | array<{name, value, source, resource_key, is_secret}> | always | `source` is `config` (the release's env entries), `resource` (a `valueFrom`, shown by its key) or `platform` (set for every child: port, host, root path); a later layer replaces an earlier entry of the same name, as at start. `value` is `null` for a secret and for a resource key the app does not have; any other resource shows its target. The credential variables of a delegated app (design 8.5) are not listed |
+| `packages` | array<{name, version, source}> | always | `source` is `release` (declared by `requirements.txt` or by the `dependencies` and `devDependencies` of `package.json`; `version` is the specifier or range as written; a URL, path, option or `-r` line is left out, never echoed; a release this appmux process has not built lists none), `wheel` (resolved for this release, exact version) or `platform` (the distributions of the platform's Python environment, listed for a Python app only) |
 
 #### ResourceTypeList
 

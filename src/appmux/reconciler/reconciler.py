@@ -17,7 +17,8 @@ become the new ``active`` one. The way up is fixed and every step is a status th
   passed" (constitution II) has exactly one place to be wrong.
 
 A release that fails before health leaves the running release, its child and its route alone
-(FR-004) and stores the reason and the end of the child's log (FR-002). ``failed`` is final: no
+(FR-004) and stores the reason (with the exit code or the signal when the child ended first,
+``start_failure.py``) and the last lines of that start's output (FR-002). ``failed`` is final: no
 later pass retries it. A release interrupted by a restart (``building``, ``starting`` or
 ``healthy`` with nothing running) goes back to ``pending`` and is built again from the stored
 snapshot, which is safe because nothing was ever routed to it. At start-up the ``active`` release
@@ -44,12 +45,17 @@ For the metrics (design 10.2) it counts every restart (after a crash, asked for,
 copy) and every admission refusal through ``ReconcilerMetrics``, and ``running_children`` answers
 the children that run now, so the sampler can read their memory and their pumps.
 
+Every start writes into its app's output ring (``output.py``, T189): ``started``, the child's lines
+as a follower task reads them, and how it ended. The ring is the one place the tail of a failed
+start and of a crash comes from; it moves with a rename and goes with the app.
+
 Not here (other tasks): the retention cap (T114).
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -79,20 +85,30 @@ from appmux.reconciler.children import (
 )
 from appmux.reconciler.clock import Clock
 from appmux.reconciler.health import HealthProbe, HealthResult, wait_until_healthy
+from appmux.reconciler.output import OutputBook, OutputRing, OutputWriter
 from appmux.reconciler.rename import under_new_slug
 from appmux.reconciler.restart import CrashReport, RestartBudget
 from appmux.reconciler.route_table import RouteTable
+from appmux.reconciler.start_failure import start_exit_reason
 from appmux.reconciler.swap import DRAIN_S, ConnectionCloser, LiveCopy, Swap
 from appmux.registry.errors import RegistryError, RegistryUnavailable
 from appmux.registry.models import App, AppConfig, Release
 from appmux.registry.protocol import Registry
-from appmux.registry.releases import clean_log_tail, clean_reason, release_status_change
+from appmux.registry.releases import (
+    LOG_TAIL_LINES,
+    START_LOG_TAIL_LINES,
+    clean_log_tail,
+    clean_reason,
+    release_status_change,
+)
 from appmux.registry.snapshot import RegistrySnapshot
 
 logger = logging.getLogger(__name__)
 
 # How often the watcher looks at the registry's snapshot for a change (design 5.2: in memory only).
 DEFAULT_WATCH_INTERVAL_S: Final = 5.0
+# How often a running child's output is read into its app's ring; ``None`` reads it when it ends.
+OUTPUT_POLL_S: Final = 1.0
 # A value shorter than this is not hidden in stored text: it would match ordinary words.
 MIN_REDACTED_VALUE_CHARS: Final = 8
 _REDACTED: Final = "***"
@@ -133,6 +149,28 @@ class _Refused(Exception):
         self.log_tail = log_tail
 
 
+@dataclass(slots=True, eq=False)
+class _Output:
+    """One start's output on its way into the app's ring: the writer, and the child once started.
+
+    A read is a plain call on the loop's one thread, so the follower task and a failure path can
+    both drain the child without taking turns. ``started_s`` is when the child was up (or the
+    start began, for one that never was): what "after 2.3 s" counts from.
+    """
+
+    writer: OutputWriter
+    started_s: float
+    child: RunningChild | None = None
+
+    def drain(self, *, final: bool = False) -> None:
+        if self.child is not None:
+            for stream, text in self.child.read_output(final=final):
+                self.writer.add(stream, text)
+
+    def tail(self, *, lines: int) -> str:
+        return self.writer.tail(lines=lines)
+
+
 @dataclass(slots=True)
 class _Copy:
     """A running copy, the memory budget it was admitted with and what a crash report needs.
@@ -146,6 +184,7 @@ class _Copy:
     environment: Mapping[str, str] = field(default_factory=dict, repr=False)
     since_s: float = 0.0
     watcher: asyncio.Task[None] | None = None
+    output: _Output | None = None
 
 
 @dataclass(slots=True)
@@ -195,6 +234,7 @@ class _Attempt:
     is_restore: bool
     environment: Mapping[str, str] = field(default_factory=dict)
     child: RunningChild | None = None
+    output: _Output | None = None
     # A second copy of the release that is already running, or a copy replacing one that died.
     # Its failure is not the release's: the registry row keeps the status it has.
     is_restart: bool = False
@@ -220,6 +260,7 @@ class Reconciler:
         drain_s: float = DRAIN_S,
         watch_interval_s: float | None = DEFAULT_WATCH_INTERVAL_S,
         metrics: ReconcilerMetrics | None = None,
+        output_poll_s: float | None = OUTPUT_POLL_S,
     ) -> None:
         self._registry = registry
         self._launcher = launcher
@@ -234,6 +275,9 @@ class Reconciler:
         self._stop_grace_s = stop_grace_s
         self._watch_interval_s = watch_interval_s
         self._metrics: ReconcilerMetrics = metrics if metrics is not None else _NoMetrics()
+        self._output_poll_s = output_poll_s
+        self._output = OutputBook()
+        self._followers: set[asyncio.Task[None]] = set()
         self._swap = Swap(
             registry=registry,
             routes=routes,
@@ -369,6 +413,10 @@ class Reconciler:
         state = self._states.get(slug)
         return None if state is None else state.crash
 
+    def output(self, slug: str) -> OutputRing | None:
+        """The output ring of ``slug``: what its children printed since this process started it."""
+        return self._output.get(slug)
+
     def last_restart_failure(self, slug: str) -> str | None:
         """Why the last copy started beside the running one did not come up, if it did not."""
         state = self._states.get(slug)
@@ -394,6 +442,7 @@ class Reconciler:
                 if copy is not None and copy.watcher is not None:
                     copy.watcher.cancel()
                     workers.append(copy.watcher)
+        workers.extend(self._followers)
         for worker in workers:
             worker.cancel()
         grace_s = min(self._stop_grace_s, within_s / 2)
@@ -472,6 +521,8 @@ class Reconciler:
         app, config = snapshot.app(slug), snapshot.app_config(slug)
         if app is None or config is None or config.desired_state == "stopped":
             await self._take_down(state)
+            if app is None:
+                self._output.forget(slug)  # a later app with this slug must not see its lines
             return
         if not await self._reset_interrupted(snapshot, slug):
             return
@@ -576,6 +627,7 @@ class Reconciler:
         state.restart_requested = False
         if new_slug is None:
             return
+        self._output.rename(state.slug, new_slug)
         successor = self._states.get(new_slug) or self._spawn(new_slug)
         if live is not None:
             if live.watcher is not None:
@@ -585,6 +637,7 @@ class Reconciler:
                 live.budget_mb,
                 live.environment,
                 live.since_s,
+                output=live.output,
             )
             self._swap.rename_route(state.slug, new_slug, moved.live)
             self._guard(successor, moved)
@@ -728,13 +781,48 @@ class Reconciler:
             overlays=overlays,
             app_egress=tuple(attempt.app.egress),
         )
+        hide_values = functools.partial(_without_values, values=tuple(attempt.environment.values()))
+        writer = self._output.ring(row.app_slug).begin(mask=hide_values)
+        output = attempt.output = _Output(writer, self._clock.monotonic())
         try:
             child = await self._launcher.start(start)
-            attempt.child = incoming.child = child
+            attempt.child = incoming.child = output.child = child
+            self._follow(output, child, row.app_slug)
             await child.wait_started(timeout_s=self._start_timeout_s)
         except ChildStartError as exc:
             raise _Refused(str(exc)) from exc
+        output.started_s = self._clock.monotonic()
+        writer.note("started")
         return child
+
+    def _follow(self, output: _Output, child: RunningChild, slug: str) -> None:
+        follower = asyncio.create_task(self._read_until_exit(output, child), name=f"output-{slug}")
+        self._followers.add(follower)
+        follower.add_done_callback(self._followers.discard)
+
+    async def _read_until_exit(self, output: _Output, child: RunningChild) -> None:
+        """Move the child's lines into the ring as they come, then say how it ended."""
+        try:
+            ended = asyncio.ensure_future(child.wait())
+            try:
+                while not ended.done():
+                    await asyncio.wait({ended}, timeout=self._output_poll_s)
+                    output.drain()
+            finally:
+                ended.cancel()
+            output.drain(final=True)
+            exit_ = ended.result()
+            if exit_.code is None and exit_.signal is None:
+                output.writer.note(exit_.description)  # appmux ended it, and says why
+            output.writer.note_exit(
+                code=exit_.code,
+                signal=exit_.signal,
+                ran_for_s=self._clock.monotonic() - output.started_s,
+            )
+        except Exception:
+            # Boundary of a best-effort task: the ring is for a person to read, and the child and
+            # its release go on whatever happens to it.
+            logger.exception("could not follow the output of a child")
 
     async def _wait_until_healthy(self, attempt: _Attempt, child: RunningChild) -> None:
         """Poll the child; a process that exits first fails the release without waiting."""
@@ -750,7 +838,8 @@ class Reconciler:
         exited = asyncio.create_task(child.wait())
         try:
             await asyncio.wait({health, exited}, return_when=asyncio.FIRST_COMPLETED)
-            failure = _health_failure(health, exited)
+            started_s = attempt.output.started_s if attempt.output is not None else 0.0
+            failure = _health_failure(health, exited, self._clock.monotonic() - started_s)
         finally:
             for task in (health, exited):
                 task.cancel()
@@ -772,6 +861,7 @@ class Reconciler:
             attempt.app.memory_budget_mb,
             attempt.environment,
             self._clock.monotonic(),
+            output=attempt.output,
         )
         self._guard(state, state.live)
         state.incoming = None
@@ -801,6 +891,9 @@ class Reconciler:
     # --- when it does not go up ------------------------------------------------------------
 
     async def _fail(self, attempt: _Attempt, reason: str, log_tail: str) -> None:
+        if attempt.output is not None:
+            attempt.output.drain()
+            attempt.output.writer.note(f"start failed: {reason}")
         if attempt.is_restart:
             await self._restart_failed(attempt, reason, log_tail)
         else:
@@ -813,10 +906,9 @@ class Reconciler:
         keeps serving (FR-004, FR-010); the reason is kept in memory and in the log, because the
         registry's ``status_reason`` belongs to the release.
         """
-        child = attempt.child
-        if child is not None:
-            log_tail = log_tail or child.log_tail()
-            await self._stop_child(child)
+        if attempt.child is not None:
+            await self._stop_child(attempt.child)
+        log_tail, _ = self._start_tail(attempt, log_tail)
         values = attempt.environment.values()
         shown = _without_values(reason, values)
         attempt.state.restart_failure = clean_reason(shown)
@@ -829,10 +921,9 @@ class Reconciler:
 
     async def _give_up(self, attempt: _Attempt, reason: str, log_tail: str) -> None:
         """Stop the child, then store the failure on the release, minus any value the child held."""
-        child = attempt.child
-        if child is not None:
-            log_tail = log_tail or child.log_tail()
-            await self._stop_child(child)
+        if attempt.child is not None:
+            await self._stop_child(attempt.child)
+        log_tail, tail_lines = self._start_tail(attempt, log_tail)
         values = attempt.environment.values()
         try:
             await self._registry.write(
@@ -842,6 +933,7 @@ class Reconciler:
                         "failed",
                         reason=_without_values(reason, values),
                         log_tail=_without_values(log_tail, values),
+                        log_tail_lines=tail_lines,
                     )
                 ]
             )
@@ -851,6 +943,16 @@ class Reconciler:
                 _name(attempt.row),
                 exc,
             )
+
+    def _start_tail(self, attempt: _Attempt, log_tail: str) -> tuple[str, int]:
+        """The tail a failure stores, and how many lines of it: a build's own, or the start's.
+
+        Read after the child was stopped, so what it printed on its way out is in it.
+        """
+        if log_tail or attempt.output is None:
+            return log_tail, LOG_TAIL_LINES
+        attempt.output.drain(final=True)
+        return attempt.output.tail(lines=START_LOG_TAIL_LINES), START_LOG_TAIL_LINES
 
     async def _interrupted(self, attempt: _Attempt) -> None:
         """Cancelled mid-way (shutdown): hand the release back as pending.
@@ -876,10 +978,14 @@ class Reconciler:
         if state.live is not copy or self._is_stopping:
             return  # this reconciler ended it: replaced, stopped, renamed or shutting down
         values = copy.environment.values()
+        tail = ""
+        if copy.output is not None:
+            copy.output.drain(final=True)
+            tail = copy.output.tail(lines=LOG_TAIL_LINES)
         report = CrashReport(
             release_no=copy.live.release.release_no,
             exit_description=_without_values(ended.description, values),
-            log_tail=_without_values(clean_log_tail(copy.live.child.log_tail()) or "", values),
+            log_tail=_without_values(clean_log_tail(tail) or "", values),
         )
         self._swap.close(state.slug)
         state.live = None
@@ -968,14 +1074,18 @@ def _start_command(release: Release, environment: Mapping[str, str]) -> tuple[st
 
 
 def _health_failure(
-    health: asyncio.Task[HealthResult], exited: asyncio.Task[ChildExit]
+    health: asyncio.Task[HealthResult], exited: asyncio.Task[ChildExit], ran_for_s: float
 ) -> str | None:
     """Why the release is not healthy, or ``None`` if the first answer came before any exit."""
     result = health.result() if health.done() and not health.cancelled() else None
     if result is not None and result.is_healthy:
         return None
     if exited.done() and not exited.cancelled():
-        return f"the process {exited.result().description} before the health check passed"
+        ended = exited.result()
+        return (
+            start_exit_reason(code=ended.code, signal=ended.signal, ran_for_s=ran_for_s)
+            or f"the process {ended.description} before the health check passed"
+        )
     return (result.reason if result is not None else None) or "the health check did not finish"
 
 

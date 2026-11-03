@@ -222,7 +222,7 @@ def test_the_contract_the_manifest_the_examples_and_the_models_name_the_same_sch
 
 def test_the_contract_lists_the_schemas_this_file_expects() -> None:
     # A guard on the parser: if the headings change shape the coverage test must not pass empty.
-    assert len(contract_sections()) == len(MANIFEST) == 46
+    assert len(contract_sections()) == len(MANIFEST) == 53
 
 
 def test_a_schema_without_a_manifest_entry_an_example_or_a_model_is_reported() -> None:
@@ -384,6 +384,11 @@ CLOSED_LIST_FIELDS: Final[tuple[tuple[str, tuple[str | int, ...]], ...]] = (
     ("AdminList", ("items", 0, "type")),
     ("EgressRules", ("items", 0, "action")),
     ("MetricsBreakdown", ("step",)),
+    ("AppLogs", ("state",)),
+    ("AppLogs", ("lines", 0, "stream")),
+    ("AppEnvironment", ("runtime", "kind")),
+    ("AppEnvironment", ("variables", 0, "source")),
+    ("AppEnvironment", ("packages", 0, "source")),
 )
 
 

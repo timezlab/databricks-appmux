@@ -87,6 +87,7 @@ from appmux.reconciler.retention import (
     lock_changes,
     unlock_changes,
 )
+from appmux.reconciler.start_failure import failure_hint
 from appmux.registry.audit import AuditAction, AuditDetail, AuditEntry
 from appmux.registry.errors import RegistryUnavailable
 from appmux.registry.models import Release, RowModel
@@ -126,8 +127,10 @@ def _runtime_of(release: Release) -> Runtime:
     return _FALLBACK_RUNTIME
 
 
-def build_release_detail(release: Release, *, is_target: bool) -> ReleaseDetail:
-    """The contract's ``ReleaseDetail`` for a live ``release``."""
+def build_release_detail(
+    release: Release, *, is_target: bool, memory_budget_mb: int
+) -> ReleaseDetail:
+    """The contract's ``ReleaseDetail`` for a live ``release`` of an app with that budget now."""
     if release.snapshot_digest is None:
         raise ValueError("a deleted release has no detail to show")
     detected = release.detected
@@ -135,6 +138,12 @@ def build_release_detail(release: Release, *, is_target: bool) -> ReleaseDetail:
         **dict(release_summary(release, is_target=is_target)),
         snapshot_digest=release.snapshot_digest,
         build_log_tail=release.build_log_tail,
+        failure_hint=failure_hint(
+            reason=release.status_reason if release.status == "failed" else None,
+            log_tail=release.build_log_tail,
+            runtime=detected.runtime,
+            memory_budget_mb=memory_budget_mb,
+        ),
         detected=DetectedManifest(
             runtime=_runtime_of(release),
             framework=detected.framework,
@@ -200,8 +209,18 @@ def _detail_response(context: AdminContext, release: Release, *, reread: bool = 
         release = stored
     config = snapshot.app_config(release.app_slug)
     is_target = config is not None and config.target_release_no == release.release_no
-    detail = build_release_detail(release, is_target=is_target)
+    detail = build_release_detail(
+        release, is_target=is_target, memory_budget_mb=_memory_budget_mb(context, release)
+    )
     return JSONResponse(detail.model_dump(mode="json"))
+
+
+def _memory_budget_mb(context: AdminContext, release: Release) -> int:
+    """The budget of the release's app now: the failure hint is judged against it."""
+    app = context.registry.snapshot.app(release.app_slug)
+    if app is None:
+        raise ValueError("a release whose app is not in the registry has no detail to show")
+    return app.memory_budget_mb
 
 
 def _require_fresh_registry(context: AdminContext) -> None:

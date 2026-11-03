@@ -177,10 +177,15 @@ class OperationRoutes:
             if activation.is_serving and control.run_state(slug, "running") == "crashed":
                 control.request_restart(slug)
 
-            stored = context.registry.snapshot.release(slug, release_no) or activation.release
-            return JSONResponse(
-                build_release_detail(stored, is_target=True).model_dump(mode="json")
+            snapshot = context.registry.snapshot
+            stored = snapshot.release(slug, release_no) or activation.release
+            app = snapshot.app(slug)
+            if app is None:
+                raise ValueError("the app of a release activated a moment ago is gone")
+            detail = build_release_detail(
+                stored, is_target=True, memory_budget_mb=app.memory_budget_mb
             )
+            return JSONResponse(detail.model_dump(mode="json"))
 
         async def put_config(request: Request) -> Response:
             slug = request.path_params["app"]

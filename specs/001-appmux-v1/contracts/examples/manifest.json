@@ -466,5 +466,19 @@
     "routes": [
       "GET /metrics/breakdown"
     ]
+  },
+  "AppLogs": {
+    "file": "AppLogs.json",
+    "direction": "response",
+    "routes": [
+      "GET /apps/{app}/logs"
+    ]
+  },
+  "AppEnvironment": {
+    "file": "AppEnvironment.json",
+    "direction": "response",
+    "routes": [
+      "GET /apps/{app}/environment"
+    ]
   }
 }

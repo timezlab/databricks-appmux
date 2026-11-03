@@ -17,6 +17,7 @@ import pytest
 
 from appmux.reconciler.children import ChildStart, ChildStartError
 from appmux.reconciler.sandbox_adapter import (
+    MAX_OUTPUT_READ_BYTES,
     MAX_SOCKET_PATH_BYTES,
     PUMP_STATS_TIMEOUT_S,
     SandboxChildLauncher,
@@ -214,13 +215,65 @@ async def test_exit_and_stop_report_how_the_child_ended(tmp_path: Path) -> None:
     assert starter.handle.stopped_with == [10.0]
 
 
-async def test_the_log_tail_is_the_end_of_the_childs_log(tmp_path: Path) -> None:
+async def test_an_exit_carries_its_code_and_a_death_by_signal_its_name(tmp_path: Path) -> None:
+    starter = FakeStarter()
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    exited = await running.wait()
+    starter.handle.exit = SandboxExit(status=133, signal=5)
+    trapped = await running.wait()
+
+    assert (exited.code, exited.signal) == (3, None)
+    assert (trapped.code, trapped.signal) == (None, "SIGTRAP")
+    assert trapped.description == "was killed by SIGTRAP"
+
+
+async def test_stdout_and_stderr_go_to_two_files_in_the_scratch_directory(tmp_path: Path) -> None:
+    starter = FakeStarter()
+
+    await launcher(tmp_path, starter).start(child_start())
+
+    (spec,) = starter.specs
+    assert spec.stderr_path is not None
+    assert spec.stderr_path.parent == spec.scratch_dir
+    assert spec.stderr_path != spec.log_path
+
+
+async def test_the_output_is_read_as_whole_lines_with_their_stream_each_line_once(
+    tmp_path: Path,
+) -> None:
     starter = FakeStarter()
     running = await launcher(tmp_path, starter).start(child_start())
     spec = starter.specs[0]
-    spec.log_path.write_text("starting\nTraceback: boom\n")
+    assert spec.stderr_path is not None
+    assert running.read_output() == []  # nothing written yet, no file yet
 
-    assert running.log_tail() == "starting\nTraceback: boom"
+    spec.log_path.write_text("starting\nTraceback: bo")
+    spec.stderr_path.write_text("warning: slow disk\r\n")
+
+    assert running.read_output() == [("stdout", "starting"), ("stderr", "warning: slow disk")]
+    with spec.log_path.open("a") as log:
+        log.write("om\nValueError: no con")
+    assert running.read_output() == [("stdout", "Traceback: boom")]
+    assert running.read_output() == []
+    assert running.read_output(final=True) == [("stdout", "ValueError: no con")]
+
+
+async def test_a_flood_between_two_reads_keeps_its_end_and_says_what_it_skipped(
+    tmp_path: Path,
+) -> None:
+    starter = FakeStarter()
+    running = await launcher(tmp_path, starter).start(child_start())
+    spec = starter.specs[0]
+    line = "x" * 99 + "\n"
+    spec.log_path.write_text(line * (3 * MAX_OUTPUT_READ_BYTES // len(line)) + "the end\n")
+
+    lines = running.read_output()
+
+    assert lines[0][0] == "appmux"
+    assert "skipped" in lines[0][1]
+    assert lines[-1] == ("stdout", "the end")
+    assert sum(len(text) + 1 for _, text in lines[1:]) <= MAX_OUTPUT_READ_BYTES
 
 
 # --- a run directory on the host (the shared service principal's token files) -------------------

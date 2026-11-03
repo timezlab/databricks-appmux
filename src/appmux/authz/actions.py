@@ -22,6 +22,8 @@ class Action(StrEnum):
     APP_OPEN = "app.open"
     APP_VIEW = "app.view"
     APP_VIEW_AS_USER = "app.view_as_user"
+    APP_VIEW_LOGS = "app.view_logs"
+    APP_VIEW_ENVIRONMENT = "app.view_environment"
     # Apps: lifecycle, by an app admin.
     APP_UPDATE = "app.update"
     APP_RESTART = "app.restart"
@@ -92,6 +94,8 @@ ACTION_REQUIREMENTS: Final[Mapping[Action, Requirement]] = MappingProxyType(
         Action.APP_OPEN: Requirement.APP_CAN_USE,
         Action.APP_VIEW: Requirement.APP_CAN_MANAGE,
         Action.APP_VIEW_AS_USER: Requirement.PLATFORM_ADMIN_WITHOUT_GRANT_ON_OBO_APP,
+        Action.APP_VIEW_LOGS: Requirement.APP_CAN_MANAGE,
+        Action.APP_VIEW_ENVIRONMENT: Requirement.APP_CAN_MANAGE,
         Action.APP_UPDATE: Requirement.APP_CAN_MANAGE,
         Action.APP_RESTART: Requirement.APP_CAN_MANAGE,
         Action.APP_STOP: Requirement.APP_CAN_MANAGE,

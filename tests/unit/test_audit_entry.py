@@ -509,6 +509,7 @@ def test_every_action_name_of_the_data_model_is_known() -> None:
         "egress.edit", "settings.edit", "resource.attach", "resource.detach", "config.edit",
         "release.create", "release.activate", "release.tag", "release.untag", "release.label",
         "release.lock", "release.unlock", "release.delete", "release.view_source",
+        "app.view_logs",
     }  # fmt: skip
     assert set(audit.AUDIT_ACTIONS) == expected
 

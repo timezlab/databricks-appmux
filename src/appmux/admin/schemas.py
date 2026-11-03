@@ -678,6 +678,8 @@ class ReleaseDetail(ReleaseSummary):
     # holds that form, and a response is built from a row it has already validated.
     snapshot_digest: str
     build_log_tail: str | None
+    # One sentence on what to change for a failed release (``reconciler/start_failure.py``).
+    failure_hint: str | None
     detected: DetectedManifest
     config: ReleaseConfigView
     wheels: list[WheelEntry]
@@ -1111,3 +1113,65 @@ class MetricsBreakdown(_Body):
     step: MetricStep
     series: list[MetricsSeries]
     other: list[MetricsPoint] | None
+
+
+# --- the admin UI overhaul (the contract's addendum) --------------------------------------------
+
+
+class AppLogLine(_Body):
+    seq: int
+    at: UtcTime
+    stream: Literal["stdout", "stderr", "appmux"]
+    text: str
+
+
+class AppLogExit(_Body):
+    code: int | None
+    signal: str | None
+    at: UtcTime
+    ran_for_s: float
+
+
+class AppLogs(_Body):
+    state: Literal["stopped", "starting", "running", "crashed", "never_started"]
+    instance: str | None
+    lines: list[AppLogLine]
+    next_after: int
+    dropped: int
+    last_exit: AppLogExit | None
+
+
+class EnvironmentRuntime(_Body):
+    kind: Literal["python", "node", "unknown"]
+    python_version: str | None
+    node_version: str | None
+
+
+class EnvironmentVariable(_Body):
+    name: str
+    value: str | None
+    source: Literal["config", "resource", "platform"]
+    resource_key: str | None
+    is_secret: bool
+
+    @model_validator(mode="after")
+    def _a_secret_has_no_value_and_only_a_resource_has_a_key(self) -> Self:
+        # Fail closed: a route that put a secret's value here is refused, not answered.
+        if self.is_secret and self.value is not None:
+            raise ValueError("a secret's value is never returned")
+        if (self.source == "resource") != (self.resource_key is not None):
+            raise ValueError("resource_key is set exactly for a resource")
+        return self
+
+
+class EnvironmentPackage(_Body):
+    name: str
+    version: str | None
+    source: Literal["release", "wheel", "platform"]
+
+
+class AppEnvironment(_Body):
+    release: int | None
+    runtime: EnvironmentRuntime
+    variables: list[EnvironmentVariable]
+    packages: list[EnvironmentPackage]

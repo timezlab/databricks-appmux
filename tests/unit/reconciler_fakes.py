@@ -24,7 +24,7 @@ from typing import Any
 
 from appmux.packages.store import ContentStoreError, MissingFromStore
 from appmux.reconciler.build import BuildFailed, BuiltRelease
-from appmux.reconciler.children import ChildExit, ChildStart, ChildStartError
+from appmux.reconciler.children import ChildExit, ChildStart, ChildStartError, OutputStream
 from appmux.reconciler.health import ProbeFailed
 from appmux.registry.models import Release
 
@@ -107,13 +107,17 @@ class FakeProbe:
 
 
 class FakeChild:
-    """A running child: it exits when ``exit`` is called, and stopping it ends it."""
+    """A running child: it exits when ``exit`` is called, and stopping it ends it.
+
+    ``log`` is what it printed to its standard output; ``read_output`` hands each line over once.
+    """
 
     def __init__(self, socket_path: Path, *, log: str = "") -> None:
         self.socket_path = socket_path
         self.log = log
         self.stops: list[float] = []
         self.started_calls = 0
+        self._lines_read = 0
         self._ended = asyncio.Event()
         self._exit: ChildExit | None = None
 
@@ -131,11 +135,19 @@ class FakeChild:
             self.exit("was stopped")
         return await self.wait()
 
-    def log_tail(self) -> str:
-        return self.log
+    def read_output(self, *, final: bool = False) -> list[tuple[OutputStream, str]]:
+        lines = self.log.splitlines()
+        new, self._lines_read = lines[self._lines_read :], len(lines)
+        return [("stdout", line) for line in new]
 
-    def exit(self, description: str = "exited with status 1") -> None:
-        self._exit = ChildExit(description)
+    def exit(
+        self,
+        description: str = "exited with status 1",
+        *,
+        code: int | None = None,
+        signal: str | None = None,
+    ) -> None:
+        self._exit = ChildExit(description, code=code, signal=signal)
         self._ended.set()
 
     @property

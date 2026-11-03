@@ -196,6 +196,9 @@ class SandboxSpec(BaseModel):
     scratch_dir: Path
     log_path: Path
     rules_path: Path
+    # Where the child's stderr goes; ``None`` sends it to ``log_path`` with its stdout. The
+    # reconciler keeps the two apart so a line of the app's output says which stream it came from.
+    stderr_path: Path | None = None
     overlays: tuple[Path, ...] = ()
     build_output: Path | None = None
     host_run_dir: Path | None = None
@@ -646,6 +649,10 @@ class SandboxExit:
         return f"{what} ({self.reason})" if self.reason else what
 
 
+def _open_log(path: Path) -> int:
+    return os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, LOG_FILE_MODE)
+
+
 def _read_children(pid: int) -> str:
     return Path(f"/proc/{pid}/task/{pid}/children").read_text(encoding="ascii")
 
@@ -825,11 +832,8 @@ class Supervisor:
     ) -> subprocess.Popen[bytes]:
         arguments = [f"--channel-path={launch_path}"]
         spec_fd = create_memory_file("appmux-sandbox-spec")
-        log_fd = os.open(
-            self.spec.log_path,
-            os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC,
-            LOG_FILE_MODE,
-        )
+        log_fd = _open_log(self.spec.log_path)
+        stderr_fd = log_fd if self.spec.stderr_path is None else _open_log(self.spec.stderr_path)
         try:
             with open(spec_fd, "wb", closefd=False) as spec_file:
                 spec_file.write(self.spec.to_json().encode("utf-8"))
@@ -843,7 +847,7 @@ class Supervisor:
                 [*self._launch_command, *arguments],
                 stdin=subprocess.DEVNULL,
                 stdout=log_fd,
-                stderr=log_fd,
+                stderr=stderr_fd,
                 env=dict(self._stage1_environment),
                 pass_fds=pass_fds,
                 preexec_fn=_die_with_parent,  # safe: see _die_with_parent
@@ -851,6 +855,8 @@ class Supervisor:
         finally:
             os.close(spec_fd)
             os.close(log_fd)
+            if stderr_fd != log_fd:
+                os.close(stderr_fd)
 
     def _accept_stage1(
         self, listener: socket.socket, process: subprocess.Popen[bytes]
@@ -867,7 +873,9 @@ class Supervisor:
                 return connection
             if exited:
                 how = SandboxExit.from_returncode(process.returncode).describe()
-                tail = log_tail(self.spec.log_path)
+                tail = "\n".join(
+                    part for part in (log_tail(self.spec.log_path), self._stderr_tail()) if part
+                )
                 raise SandboxStartError(
                     f"the sandbox process {how} before it connected to the supervisor"
                     + (f"; the end of its log: {tail}" if tail else "")
@@ -877,6 +885,9 @@ class Supervisor:
                     f"stage 1 did not connect to the supervisor within "
                     f"{self._handoff_timeout_s:g} s; check {self.spec.log_path}"
                 )
+
+    def _stderr_tail(self) -> str:
+        return "" if self.spec.stderr_path is None else log_tail(self.spec.stderr_path)
 
     def _receive_packet_socket(self, channel: socket.socket) -> socket.socket:
         try:

@@ -283,6 +283,8 @@ def _load_wiring(
             memory=service.memory_ledger,
             workspace_client=workspace,
             principal_directory=service.principal_directory,
+            app_output=service,
+            child_setup=service.child_setup,
         )
 
     steps = (

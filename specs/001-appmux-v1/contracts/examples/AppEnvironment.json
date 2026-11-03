@@ -1,0 +1,48 @@
+{
+  "release": 4,
+  "runtime": {
+    "kind": "python",
+    "python_version": "3.11.9",
+    "node_version": "22.22.1"
+  },
+  "variables": [
+    {
+      "name": "LOG_LEVEL",
+      "value": "info",
+      "source": "config",
+      "resource_key": null,
+      "is_secret": false
+    },
+    {
+      "name": "DB_PASSWORD",
+      "value": null,
+      "source": "resource",
+      "resource_key": "db-password",
+      "is_secret": true
+    },
+    {
+      "name": "APPMUX_BASE_PATH",
+      "value": "/sales",
+      "source": "platform",
+      "resource_key": null,
+      "is_secret": false
+    }
+  ],
+  "packages": [
+    {
+      "name": "fastapi",
+      "version": "==0.115.0",
+      "source": "release"
+    },
+    {
+      "name": "acme-tools",
+      "version": "1.2.0",
+      "source": "wheel"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.11.7",
+      "source": "platform"
+    }
+  ]
+}
