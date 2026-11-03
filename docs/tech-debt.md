@@ -69,6 +69,7 @@ Entry schema — copy for each new item:
 - **Symptom:** the loader applies `migrations/*.sql` in one transaction, but no task adds a command that calls it and design 13.1 has no "load the schema" step between creating the Lakebase roles (item 2) and the first start (item 7). The appmux SP cannot create the tables itself (it is not the table owner and holds no DDL grant), so the operator must run the loader with their own credentials.
 - **Why deferred:** found when the loader was reviewed on 2026-10-30; the entry point needs a decision on who runs it (the operator's laptop against Lakebase, or a one-off command inside the App) and how that run logs in.
 - **Trigger to fix:** before the first deploy that needs a real database; add the command, a design 13.1 step and a task, and cover the refusals (`apps` already exists, a role missing) in the quickstart.
+- **Note (2026-11-03):** until that command exists, a migration after the baseline is applied by hand to a loaded registry, for example `psql -v ON_ERROR_STOP=1 -f migrations/0003_service_principal_grants.sql`. Such a file is written to be safe there: one statement, so it applies whole or not at all without a `BEGIN`, and re-runnable (`DROP CONSTRAINT IF EXISTS` before each `ADD`). It holds no `BEGIN`/`COMMIT`, because the loader runs every file inside its own transaction.
 - **Created:** 2026-10-30
 
 ## TD-009: The app page and the dashboard leave out parts of the design

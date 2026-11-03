@@ -8,11 +8,16 @@
 -- 'everyone', the policy reads a stored CAN_MANAGE on a service principal as CAN_USE.
 --
 -- The loader runs this file with the others only on an empty database. A registry loaded before
--- this file existed gets it applied by hand, once (docs/tech-debt.md, TD-008). No grant changes:
--- the grants of 0002_grants.sql are table-level.
+-- this file existed gets it applied by hand (docs/tech-debt.md, TD-008), for example with psql in
+-- autocommit, so the file is one ALTER TABLE: PostgreSQL applies all of its actions or none, and
+-- the IF EXISTS drops also take out what an earlier run added, so a second run gives the same
+-- table. Like the baseline it holds no BEGIN or COMMIT: the loader owns the transaction, and a
+-- COMMIT here would end it early. No grant changes: the grants of 0002_grants.sql are table-level.
 
-ALTER TABLE app_grants DROP CONSTRAINT app_grants_principal_type_check;
-ALTER TABLE app_grants ADD CONSTRAINT app_grants_principal_type_check
-  CHECK (principal_type IN ('user', 'group', 'everyone', 'service_principal'));
-ALTER TABLE app_grants ADD CONSTRAINT app_grants_service_principal_check
-  CHECK (principal_type <> 'service_principal' OR principal ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+ALTER TABLE app_grants
+  DROP CONSTRAINT IF EXISTS app_grants_principal_type_check,
+  DROP CONSTRAINT IF EXISTS app_grants_service_principal_check,
+  ADD CONSTRAINT app_grants_principal_type_check
+    CHECK (principal_type IN ('user', 'group', 'everyone', 'service_principal')),
+  ADD CONSTRAINT app_grants_service_principal_check
+    CHECK (principal_type <> 'service_principal' OR principal ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');

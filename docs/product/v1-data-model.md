@@ -339,7 +339,7 @@ The three composite keys are not in this `CREATE TABLE`: they refer to `releases
 | `docs` | `everyone` | `*` | `CAN_USE` | `frank@example.com` | 2026-10-29T16:10Z |
 | `sales` | `service_principal` | `4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab` | `CAN_USE` | `alice@example.com` | 2026-11-03T10:05Z |
 
-**DDL.** The baseline below; `migrations/0003_service_principal_grants.sql` then replaces the `principal_type` check with one that also admits `service_principal`, and adds `app_grants_service_principal_check`: `principal_type <> 'service_principal' OR principal ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`. A registry loaded before 0003 existed gets it applied by hand ([TD-008](../tech-debt.md)).
+**DDL.** The baseline below; `migrations/0003_service_principal_grants.sql` then replaces the `principal_type` check with one that also admits `service_principal`, and adds `app_grants_service_principal_check`: `principal_type <> 'service_principal' OR principal ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`. A registry loaded before 0003 existed gets it applied by hand ([TD-008](../tech-debt.md)); the file is one `ALTER TABLE` that drops both checks `IF EXISTS` before it adds them, so it applies whole or not at all, even in autocommit, and a second run changes nothing.
 
 ```sql
 CREATE TABLE app_grants (

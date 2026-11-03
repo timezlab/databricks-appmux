@@ -791,13 +791,20 @@ def test_every_check_of_the_service_principal_migration_has_refusal_rows() -> No
 def test_the_service_principal_migration_replaces_the_type_check_of_the_baseline() -> None:
     # PostgreSQL names a column's CHECK `<table>_<column>_check`, so the baseline's list of types
     # is `app_grants_principal_type_check`; the migration drops it before it adds the longer one.
-    statements = [
-        " ".join(statement.split())
-        for statement in _statements(SERVICE_PRINCIPAL_MIGRATION_PATH.read_text())
-    ]
-    assert statements[0] == "ALTER TABLE app_grants DROP CONSTRAINT app_grants_principal_type_check"
-    assert all(statement.startswith("ALTER TABLE app_grants ") for statement in statements)
-    assert sum("ADD CONSTRAINT app_grants_principal_type_check " in s for s in statements) == 1
+    # An operator applies the file by hand to a loaded registry (TD-008), perhaps twice and perhaps
+    # in autocommit: one ALTER TABLE is all or nothing on its own, and IF EXISTS also drops what a
+    # first run added. The file has no BEGIN or COMMIT, which would end the loader's transaction.
+    sql_text = SERVICE_PRINCIPAL_MIGRATION_PATH.read_text()
+    (statement,) = [" ".join(statement.split()) for statement in _statements(sql_text)]
+    assert statement.startswith(
+        "ALTER TABLE app_grants "
+        "DROP CONSTRAINT IF EXISTS app_grants_principal_type_check, "
+        "DROP CONSTRAINT IF EXISTS app_grants_service_principal_check, "
+        "ADD CONSTRAINT app_grants_principal_type_check CHECK "
+    )
+    assert statement.count("ADD CONSTRAINT ") == 2
+    assert "ADD CONSTRAINT app_grants_service_principal_check CHECK " in statement
+    assert not re.search(r"\b(BEGIN|COMMIT|START TRANSACTION)\b", _strip_sql_comments(sql_text))
 
 
 @pytest.mark.parametrize(
