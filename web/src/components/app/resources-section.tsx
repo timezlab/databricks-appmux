@@ -115,7 +115,7 @@ export function ResourcesSection({
           >
             {resource.key}
           </span>
-          <span className="text-xs wrap-break-word text-muted-foreground">
+          <span className="text-xs font-normal wrap-break-word text-muted-foreground">
             Attached <RelativeTime value={resource.attached_at} /> by{" "}
             {resource.attached_by}
           </span>
@@ -123,22 +123,19 @@ export function ResourcesSection({
       ),
     },
     {
-      key: "type",
-      header: "Type",
+      // The type and its target in one cell, so a long target gets the width.
+      key: "resource",
+      header: "Type and target",
       cell: (resource) => (
-        <span className="inline-flex items-center gap-2">
-          <ResourceTypeIcon type={resource.type} />
-          {resourceTypeLabel(catalogue, resource.type)}
-        </span>
-      ),
-    },
-    {
-      key: "target",
-      header: "Target",
-      cell: (resource) => (
-        <span className="font-mono text-[0.9em] break-all">
-          {resource.target}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className="inline-flex items-center gap-2">
+            <ResourceTypeIcon type={resource.type} />
+            {resourceTypeLabel(catalogue, resource.type)}
+          </span>
+          <span className="font-mono text-[0.9em] wrap-anywhere">
+            {resource.target}
+          </span>
+        </div>
       ),
     },
     {

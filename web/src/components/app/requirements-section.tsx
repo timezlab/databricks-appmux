@@ -67,8 +67,10 @@ function RequirementDetail({
           </span>
         </div>
         <div className="text-muted-foreground">
-          {resourceLevelLabel(resource.permission)},{" "}
-          {accessAsLabel(resource.access_as).toLowerCase()}
+          {resourceLevelLabel(resource.permission)}
+        </div>
+        <div className="text-muted-foreground">
+          {accessAsLabel(resource.access_as)}
         </div>
       </div>
     );
