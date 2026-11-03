@@ -782,6 +782,109 @@ Returned by `GET /metrics?app=&from=&to=`. `app` is a slug, or `_platform` for t
 | `truncated` | boolean | always | `true` when the 10000-row cap dropped the oldest minutes |
 | `items` | array<MetricsRow> | always | Minutes in the window, oldest first, then by `app_slug`; at most 10000 |
 
+## Addendum: routes and fields for the admin UI overhaul (T187 onward)
+
+Added 2026-11-03 after the owner's hand test ([ADR 0019](../../../docs/decisions/0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md),
+[ADR 0020](../../../docs/decisions/0020-let-a-service-principal-hold-an-app-grant.md),
+[UI design](../../../docs/product/admin-ui-design.md)). Everything above is unchanged except where a row below says
+so. Each new schema gets an example in [examples/](examples/manifest.json) and a Pydantic and a Zod model, as for the
+rest of the contract. A lane that finds a detail below wrong changes this section in the same commit as its code.
+
+### Routes
+
+| Route | Needs | Response | Returns / does |
+|---|---|---|---|
+| `GET /principals?q=&types=&limit=` | `principal.search`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `PrincipalList` | suggestions for the Sharing form. `q` is at most 64 characters of `A-Z a-z 0-9 space . _ @ + -` (anything else is `400`, because the text goes into a SCIM filter); `types` is a comma list of `user`, `group`, `service_principal`, `everyone` (default all); `limit` 1 to 50 (default 10). An empty `q` returns only the `everyone` row. Each directory is read with the person's token first and the platform's service-principal token when that is refused; a directory that neither can read is named `unavailable` in `sources` and the UI keeps free typing. `403` `user_token_missing` is not raised: the fallback exists for that |
+| `GET /workspace/browse?path=` | `workspace.browse`: any visitor with a token | `WorkspaceListing` | the sub-folders and files of one workspace folder, read with the person's token (scope `workspace.workspace:read`). No `path` returns the roots (`My folder`, `Shared`). `400` for a path that does not start with `/Workspace/`, holds `..`, a control character or more than 512 characters; `404` `not_found`; `403` `no_access`; `503` `workspace_unavailable`. At most 200 entries, folders first, then by name (`truncated`). Writes nothing and records nothing |
+| `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500). Lines pass the same credential masking as `build_log_tail`. Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content) |
+| `GET /apps/{app}/environment` | `app.view_environment`: `CAN_MANAGE` on the app | `AppEnvironment` | what the app is started with: runtime versions, variables and packages (see schema). A value that belongs to a `secret` resource is never returned (`is_secret` is `true`, `value` is `null`) |
+| `GET /resources/types` | `resource.attach` on at least one app, or a platform admin | `ResourceTypeList` | the resource catalogue of [data model 4.7](../../../docs/product/v1-data-model.md#47-app_resources) with a label, the permission levels and the access modes of each type, so the UI holds no copy of it |
+| `GET /resources/suggestions?type=&q=&limit=` | the same | `ResourceSuggestionList` | objects of one type the person can see, read with their token: SQL warehouses, serving endpoints, secret scopes (and, for `q` of the form `scope/`, the keys of a scope; never values), MLflow experiments, jobs. A type with no safe list call answers `items: []` and `source: "not_supported"`. `limit` 1 to 50 (default 20); `400` `unknown_type` |
+| `GET /metrics?app=&from=&to=&step=` | as before | `MetricsResponse` | **changed**: `step` is `1m` (default), `5m`, `15m` or `1h`; rows are summed per step (counts and histograms added, `*_max` columns and the platform's memory peak maximised, the other platform gauges the last value of the step, `minute` the start of the step, aligned in UTC). The window may be up to 7 days provided it holds at most 1440 steps (so 24 h at `1m`, 3 days at `5m`, 7 days at `15m`); otherwise `400` `window_too_long` naming the smallest `step` that fits. The 10000-row cap and `truncated` are unchanged |
+| `GET /metrics/breakdown?from=&to=&step=&limit=` | `CAN_MANAGE` on the platform | `MetricsBreakdown` | the apps ranked by requests in the window, the top `limit` (1 to 20, default 8) each as a series of points, the rest summed as `other`; the same `step` and window rules as `GET /metrics` |
+
+New actions in `authz/actions.py`: `principal.search`, `workspace.browse`, `app.view_logs`, `app.view_environment`,
+`resource.suggest` (the last answers both resource routes). They are reads: no `Sec-Fetch-Site` rule beyond the
+usual, and no audit row except where a row says so.
+
+### Changed schemas
+
+- `Principal`, `GrantRequest`, `AppGrant`: `type` also takes `service_principal`. Its `name` is the service
+  principal's application id, a lower-case UUID. It holds `CAN_USE` only (`400` for `CAN_MANAGE`, as for `everyone`).
+  The edge matches it when the forwarded identity of the request equals that id (an App's service principal reaches a
+  child with its application id as the identity, measured 2026-11-03, [reference](../../../docs/reference/mcp-and-a2a.md)).
+  `DELETE /apps/{app}/grants/service_principal/{id}` removes it. Platform admins stay `user` or `group` only.
+- `ReleaseDetail`: new `failure_hint` (string or null). `reason` names how a started child ended when it did
+  (`the app exited with code 1 after 2.3 s`, `was stopped by signal SIGKILL`), the health wait ends when the process
+  exits instead of at the deadline, and `build_log_tail` holds the child's last 50 lines of output for a failed start.
+  `failure_hint` is one sentence the person can act on, for example that the memory budget is below what the runtime
+  needs (the address-space limit is twice the budget, and Node.js needs about 768 MB); `null` when none applies.
+
+### New schemas
+
+#### PrincipalList
+
+| Field | Type | Presence | Meaning |
+|---|---|---|---|
+| `items` | array<PrincipalSuggestion> | always | `everyone` first when it matches, then groups, users, service principals, each by name |
+| `truncated` | boolean | always | `true` when more than `limit` matched |
+| `sources` | object | always | for `users`, `groups` and `service_principals`: one of `caller_token`, `platform_token`, `unavailable` |
+
+`PrincipalSuggestion`: `type` (`user`, `group`, `service_principal`, `everyone`), `name` (what `GrantRequest.name` takes:
+a lower-case email, a group name, an application id, `*`), `display_name` (string or null), `detail` (string or null:
+the e-mail of a user whose display name is shown, the application id of a service principal).
+
+#### WorkspaceListing
+
+| Field | Type | Presence | Meaning |
+|---|---|---|---|
+| `path` | string or null | always | The folder listed; `null` for the roots |
+| `parent` | string or null | always | The folder above, `null` at a root |
+| `roots` | array<{label, path}> | always | Filled only when `path` is `null`, else `[]` |
+| `entries` | array<{name, path, kind}> | always | `kind` is `folder` or `file` |
+| `truncated` | boolean | always | |
+| `markers` | array<string> | always | Which of `app.yaml`, `databricks.yml`, `requirements.txt`, `package.json`, `pyproject.toml` the folder holds |
+| `looks_like_app` | boolean | always | `true` when `app.yaml` or `requirements.txt` or `package.json` is a marker |
+| `runtime_hint` | string or null | always | `python`, `node` or `null` |
+| `suggested_memory_mb` | integer or null | always | The smallest budget the hinted runtime needs (768 for `node`), else `null`; from the same constant the launcher's limit comes from |
+
+#### AppLogs
+
+| Field | Type | Presence | Meaning |
+|---|---|---|---|
+| `state` | string | always | The app's state as in `AppStateResponse`, or `never_started` |
+| `instance` | string or null | always | Changes at every start; the client clears its view when it changes |
+| `lines` | array<{seq, at, stream, text}> | always | Oldest first; `seq` rises by one; `stream` is `stdout`, `stderr` or `appmux` (a line appmux wrote about the app: started, exited with code) |
+| `next_after` | integer | always | The `seq` to send as `after` next time |
+| `dropped` | integer | always | Lines after `after` that the ring no longer holds |
+| `last_exit` | object or null | always | `code`, `signal`, `at`, `ran_for_s` of the last end of a process, or `null` |
+
+#### AppEnvironment
+
+| Field | Type | Presence | Meaning |
+|---|---|---|---|
+| `release` | integer or null | always | The active release the figures describe |
+| `runtime` | object | always | `kind` (`python`, `node`, `unknown`), `python_version`, `node_version` (strings or null) |
+| `variables` | array<{name, value, source, resource_key, is_secret}> | always | `source` is `config` (the release's env entries), `resource` (a `valueFrom`, shown by its key) or `platform` (set for every child: port, host, root path); `value` is `null` for a secret |
+| `packages` | array<{name, version, source}> | always | `source` is `release` (declared by `requirements.txt` or `package.json`), `wheel` (resolved for this release) or `platform` (provided by the platform's own environment) |
+
+#### ResourceTypeList and ResourceSuggestionList
+
+`ResourceTypeList.items`: `type`, `label`, `description`, `permissions` (the levels, first is the default),
+`access_as` (the modes the type allows, empty for a `secret`), `target_hint` (an example of a target, for the field's
+placeholder), `can_suggest` (boolean). `ResourceSuggestionList`: `items` of `target`, `label`, `detail` (string or
+null), `permissions`; `truncated`; `source` (`caller_token`, `unavailable`, `not_supported`); `note` (string or
+null, in words, for example why the list is empty).
+
+#### MetricsBreakdown
+
+| Field | Type | Presence | Meaning |
+|---|---|---|---|
+| `from`, `to` | time | always | The window applied |
+| `step` | string | always | `1m`, `5m`, `15m` or `1h` |
+| `series` | array<{app_slug, display_name, points}> | always | The top apps by requests; `points` are `{minute, requests, r4xx, r5xx, rss_mb_max, bytes_out, egress_dropped, lat_hist}` per step, oldest first, with no gaps filled |
+| `other` | array of points or null | always | The sum of the apps below the cut, `null` when none |
+
 ## Not in this contract
 
 A route to run a child's command, to read a secret value, to read the registry directly, or to change a child's `app.yaml`: none exists and none may be added without an ADR (constitution I; [design 8.3](../../../docs/product/v1-design.md#83-secrets-where-the-value-comes-from)).

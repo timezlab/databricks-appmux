@@ -446,6 +446,47 @@
 
 ---
 
+## Phase 15: Admin UI overhaul and the backend it needs (added 2026-11-03)
+
+**Purpose**: the owner's hand test as an app admin and an end user found eleven faults and asked for the Databricks Apps
+console's layout and flows. Design: [admin-ui-design.md](../../docs/product/admin-ui-design.md); contract:
+[the addendum](contracts/admin-api.md#addendum-routes-and-fields-for-the-admin-ui-overhaul-t187-onward);
+decisions: ADR 0019 (identity, theme, CSP-safe primitives) and ADR 0020 (service-principal grants). A task is ticked only
+when its tests pass; the lane that writes a route writes its tests first.
+
+### Backend (disjoint lanes B1 to B4)
+
+- [ ] T187 [B1] Write the tests first, then `GET /principals` (`src/appmux/admin/principals.py`, `src/appmux/identity/directory.py`): SCIM users, groups and service principals read with the person's token, then the platform token; the query allow-list; `everyone` row; per-directory `sources`; `principal.search` in `authz/actions.py` and the policy. Measure on the dev App which scopes the caller token needs and record them in `docs/reference/databricks-apps-platform.md`.
+- [ ] T188 [B1] The `service_principal` grant type end to end ([ADR 0020](../../docs/decisions/0020-let-a-service-principal-hold-an-app-grant.md)): data model 4.x check constraint and migration, `Principal`/`GrantRequest`/`AppGrant`, the edge and authorizer matching a forwarded application id, `CAN_USE` only, `DELETE /apps/{app}/grants/service_principal/{id}`, the examples and both schema sets, data model and design text.
+- [ ] T189 [B2] An output ring per app that survives restarts and failed starts, and `GET /apps/{app}/logs` with the masking of `build_log_tail`, the cursor and the throttled audit row; the `appmux`-stream lines for start, exit code and signal.
+- [ ] T190 [B2] Start-failure diagnostics: the health wait ends when the process exits; `reason` names the exit code or signal; `build_log_tail` gets the child's last 50 lines; `failure_hint` for a budget below the runtime's need (Node: 768 MB). Reproduce first with a Node child at 64 MB on the container, then fix the cause of the empty log tail, not only the message.
+- [ ] T191 [B2] `GET /apps/{app}/environment`: runtime versions, variables (config, resources by key, platform), packages (release, wheels, platform), secrets never returned.
+- [ ] T192 [B3] Wire TD-016 (1): `Service` gives `MetricsService` a real platform sample (cgroup memory current and limit, the edge's RSS, apps running and registered) and real child probes (RSS, pump stats), calls the restart, admission-rejection and registry-call counters, and counts a request that matches no app. Observe on the dev App that the `_platform` row and the children's memory appear; update TD-016.
+- [ ] T193 [B3] `step` on `GET /metrics`, windows up to 7 days at at most 1440 steps, and `GET /metrics/breakdown`; examples and both schema sets.
+- [ ] T194 [B4] `GET /workspace/browse` with `markers`, `looks_like_app`, `runtime_hint` and `suggested_memory_mb`, tested against a `MockTransport` and once on the dev App.
+- [ ] T195 [B4] `GET /resources/types` and `GET /resources/suggestions` for the types that have a safe list call; a type without one answers `not_supported`; tested against a `MockTransport` and once on the dev App.
+
+### Foundation (lane F0, before the page lanes)
+
+- [ ] T196 [F0] [ADR 0019](../../docs/decisions/0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md): tokens, radius scale, IBM Plex Sans and Mono self-hosted and measured under the reference CSP, the route strip and the lamp, `chrome-*` removed, the contrast test updated; every page still builds.
+- [ ] T197 [F0] The theme switch (Light, Dark, System): `data-theme` set by a same-origin script in the head, no inline script, no flash; the dark variant and the contrast test follow `data-theme` and the OS.
+- [ ] T198 [F0] CSP-safe shadcn primitives: Popover, Select (on Popover and Command), DropdownMenu (`modal={false}`), Command and a combobox, Tabs, Tooltip, Collapsible, ToggleGroup; a sample of each in `tests/csp/rendered-markup.test.tsx` and each opened in Chromium under the reference CSP in `e2e/csp.spec.ts` with no violation; the native select kept only where its comment says why.
+- [ ] T199 [F0] Motion: the spinner, the starting lamp, the skeleton, menus and the bar between tabs behave as the table in the design doc for both values of `prefers-reduced-motion`; the blanket 0.01 ms rule is removed; an e2e test with each `reducedMotion` value asserts the running animations.
+- [ ] T200 [F0] The shells: top bar with breadcrumb and app switcher, the sidebar (collapse, phone menu, one geometry for every bar), the inset panel, page header, skeleton parts, the `RouteStrip`, `Lamp`, `SectionPanel` and `CopyButton` components.
+
+### Pages (lanes F1 to F4, after F0, B1 to B4 for their routes)
+
+- [ ] T201 [F1] Launcher, the app shell and its Overview, Deployments (releases, row menu, failure reason and output), Logs and Environment sections; the node-at-64-MB case shows the reason and the hint.
+- [ ] T202 [F2] Authorization (the principal combobox, level select, service principals, identity delegation), Resources (the Databricks add flow with suggestions) and Requests sections.
+- [ ] T203 [F3] The Platform sidebar areas, the register and edit forms with the folder browser, the app's Security and Settings sections.
+- [ ] T204 [F4] Dashboard and Insights: the figures strip, the platform view with the same charts as an app, the breakdown by app, the ranges up to 7 days, skeletons.
+
+### Integration
+
+- [ ] T205 Whole-branch review by a fresh agent, the Python gate and the seven UI checks, the deploy to the dev App and a hand run of all eleven points with screenshots before and after, docs (`ARCHITECTURE.md`, `web/README.md`, design 10.1, data model, `docs/index.md`), ADRs 0019 and 0020 set to accepted or left proposed with the owner's choices named.
+
+---
+
 ## Dependencies and execution order
 
 ### Phase dependencies
