@@ -16,11 +16,28 @@ const SPARK_HEIGHT = 28;
 const APP_FIGURES = 6;
 const PLATFORM_FIGURES = 7;
 
-/** The cells sit in a grid that overhangs its frame by a pixel on each side, so only the hairlines between cells show. */
-const STRIP_FRAME = "overflow-hidden rounded-lg border bg-card";
-const STRIP_GRID =
-  "-m-px grid grid-cols-[repeat(auto-fill,minmax(min(100%,11rem),1fr))]";
-const STRIP_CELL = "flex min-w-0 flex-col gap-1 border-t border-l p-4";
+/**
+ * The cells sit in a grid that overhangs its frame by a pixel on each side, so
+ * only the hairlines between cells show, and a short last row still has a line
+ * above and beside it. The frame is a size container: the app's strip sits
+ * beside the sidebar (which folds away) and the platform's does not, so the
+ * columns follow the strip's own width, not the window's.
+ */
+const STRIP_FRAME = "@container overflow-hidden rounded-lg border bg-card";
+const STRIP_GRID = "-m-px grid";
+const STRIP_CELL = "flex min-w-0 flex-col gap-1 border-r border-b p-4";
+
+/**
+ * Column counts that fill whole rows: an app's 6 figures as 2 or 3 a row, or all
+ * 6 in one; the platform's 7 as 2 or 4 a row, or all 7 in one once each cell is
+ * about 10 rem wide (a count in the millions still fits).
+ */
+const APP_COLUMNS = "grid-cols-2 @xl:grid-cols-3 @5xl:grid-cols-6";
+const PLATFORM_COLUMNS = "grid-cols-2 @xl:grid-cols-4 @min-[68rem]:grid-cols-7";
+
+function columnsFor(count: number): string {
+  return count > APP_FIGURES ? PLATFORM_COLUMNS : APP_COLUMNS;
+}
 
 function Sparkline({ values }: { values: readonly (number | null)[] }) {
   const path = sparklinePath(values, SPARK_WIDTH, SPARK_HEIGHT);
@@ -72,7 +89,7 @@ function Change({ change }: { change: FigureChange }) {
 export function FiguresStrip({ figures }: { figures: readonly Figure[] }) {
   return (
     <div className={STRIP_FRAME}>
-      <dl className={STRIP_GRID}>
+      <dl className={cn(STRIP_GRID, columnsFor(figures.length))}>
         {figures.map((figure) => (
           <div key={figure.key} className={STRIP_CELL}>
             <dt className="text-sm text-muted-foreground">{figure.label}</dt>
@@ -89,7 +106,8 @@ export function FiguresStrip({ figures }: { figures: readonly Figure[] }) {
             {figure.detail === null ? null : (
               <dd className="text-xs text-muted-foreground">{figure.detail}</dd>
             )}
-            <dd>
+            {/* `mt-auto`: the sparklines and the changes of a row line up, however many lines the texts above take. */}
+            <dd className="mt-auto">
               <Sparkline values={figure.spark} />
               <span className="sr-only">{figure.sparkText}</span>
             </dd>
@@ -110,7 +128,7 @@ export function FiguresStripSkeleton({ isPlatform }: { isPlatform: boolean }) {
   const count = isPlatform ? PLATFORM_FIGURES : APP_FIGURES;
   return (
     <div className={STRIP_FRAME} aria-hidden="true" data-skeleton="figures">
-      <div className={STRIP_GRID}>
+      <div className={cn(STRIP_GRID, columnsFor(count))}>
         {Array.from({ length: count }, (_, index) => (
           // `*:min-w-0` lets the placeholder shrink with a narrow cell, as the figure it stands for does.
           <div key={index} className={cn(STRIP_CELL, "*:min-w-0")}>
