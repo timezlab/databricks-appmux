@@ -18,9 +18,9 @@ const buttonVariants = cva(
         // Danger at rest is an outline, and the filled red is kept for the
         // confirm step, so only the final click is the loud one.
         "destructive-outline":
-          "border-2 border-destructive bg-background text-destructive hover:bg-destructive hover:text-destructive-foreground",
+          "border-2 border-destructive bg-card text-destructive hover:bg-destructive hover:text-destructive-foreground",
         outline:
-          "border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
+          "border-input bg-card text-foreground hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
         ghost: "text-link hover:bg-accent hover:text-accent-foreground",
         link: "text-link underline underline-offset-4",
