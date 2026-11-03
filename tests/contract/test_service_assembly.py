@@ -60,6 +60,9 @@ from appmux.reconciler.build import StoreReleaseBuilder
 from appmux.reconciler.child_env import EnvironmentRefused
 from appmux.reconciler.children import ChildStartError
 from appmux.reconciler.route_table import RouteTable
+from appmux.reconciler.sandbox_adapter import SandboxRunningChild
+from appmux.registry.client import RegistryClient
+from appmux.registry.errors import RegistryError
 from appmux.registry.models import Release
 from appmux.sandbox.launcher import LAUNCH_SOCKET_NAME
 from appmux.secrets.resolver import MissingResourceKeys, SecretUnreadable, UnreadableSecret
@@ -107,6 +110,7 @@ def make_service(
     memory_limit_mb: Callable[[], int] = lambda: 8192,
     upstream: UpstreamClient | None = None,
     cleanup_sleep: Callable[[float], Awaitable[None]] | None = None,
+    metrics_root: Path | None = None,
 ) -> Service:
     return Service(
         settings=environment(),
@@ -124,6 +128,8 @@ def make_service(
         metrics_stop_budget_s=METRICS_STOP_BUDGET_S,
         work_dir=tmp_path,
         **({} if cleanup_sleep is None else {"cleanup_sleep": cleanup_sleep}),
+        # The tests' machine's own /sys and /proc are not the container's: an empty root by default.
+        metrics_root=metrics_root if metrics_root is not None else tmp_path / "no-container",
     )
 
 
@@ -511,6 +517,213 @@ async def test_the_final_flush_comes_before_the_clients_close(tmp_path: Path) ->
     await service.stop()
 
     assert stored_before_close == [1]
+
+
+# --- what the metrics sampler reads (T192) --------------------------------------------------------
+
+MB: Final = 1024 * 1024
+PAGE_SIZE: Final = os.sysconf("SC_PAGE_SIZE")
+
+
+def fake_container(root: Path, *, used_mb: int = 2100, limit_mb: int = 8192) -> Path:
+    """A cgroup v1 container (as Free Edition measured) and this process's statm, under ``root``."""
+    files = {
+        "sys/fs/cgroup/memory/memory.usage_in_bytes": f"{used_mb * MB}\n",
+        "sys/fs/cgroup/memory/memory.limit_in_bytes": f"{limit_mb * MB}\n",
+        "proc/self/statm": f"90000 {180 * MB // PAGE_SIZE} 3000 100 0 40000 0\n",
+    }
+    for relative, text in files.items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(text)
+    return root
+
+
+def fake_process(root: Path, pid: int, parent_pid: int, resident_mb: int) -> None:
+    directory = root / "proc" / str(pid)
+    directory.mkdir(parents=True)
+    (directory / "stat").write_text(f"{pid} (worker) S {parent_pid} {pid} {pid} 0 -1\n")
+    (directory / "statm").write_text(f"9999 {resident_mb * MB // PAGE_SIZE} 100 1 0 50 0\n")
+
+
+class SandboxStandIn:
+    """The part of ``SandboxHandle`` a running sandbox child reads for its metrics."""
+
+    def __init__(self, sandbox_pid: int | None) -> None:
+        self.sandbox_pid = sandbox_pid
+
+    async def wait_started(self, *, timeout_s: float) -> None:
+        return None
+
+    async def wait(self) -> Any:
+        raise AssertionError("not used")
+
+    async def stop(self, *, grace_s: float) -> Any:
+        raise AssertionError("not used")
+
+    async def read_stats(self, *, timeout_s: float) -> Any:
+        return None
+
+
+def sandbox_child(
+    root: Path, slug: str, instance: str, sandbox_pid: int | None
+) -> SandboxRunningChild:
+    scratch = root / "run" / slug / instance
+    return SandboxRunningChild(
+        SandboxStandIn(sandbox_pid),
+        socket_path=scratch / "relay.sock",
+        log_path=scratch / "child.log",
+    )
+
+
+def metrics_service(tmp_path: Path, registry: StubRegistry, root: Path) -> Service:
+    return make_service(tmp_path / "work", registry=registry, metrics_root=root)
+
+
+async def let_the_first_sample_run() -> None:
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+
+async def test_the_platform_sample_reads_the_container_and_counts_the_apps(tmp_path: Path) -> None:
+    registry = seeded_registry()
+    service = metrics_service(tmp_path, registry, fake_container(tmp_path / "root"))
+    await service.start_children(registry)
+    RecordingReconciler.instances[-1].app_count = 1
+
+    sample = service.platform_sample()
+
+    assert sample is not None
+    assert (sample.mem_used_mb, sample.mem_limit_mb, sample.edge_rss_mb) == (2100, 8192, 180)
+    assert sample.children_running == 1
+    assert sample.children_registered == len(registry.snapshot.apps)
+
+
+async def test_before_the_reconciler_runs_no_child_is_running(tmp_path: Path) -> None:
+    registry = seeded_registry()
+    service = metrics_service(tmp_path, registry, fake_container(tmp_path / "root"))
+
+    sample = service.platform_sample()
+
+    assert sample is not None
+    assert sample.children_running == 0
+    assert service.child_probes() == []
+
+
+async def test_a_platform_row_is_stored_when_the_container_states_its_memory(
+    tmp_path: Path,
+) -> None:
+    registry = seeded_registry()
+    service = metrics_service(tmp_path, registry, fake_container(tmp_path / "root"))
+    await service.start_metrics(registry)
+    await let_the_first_sample_run()
+
+    await service.stop()
+
+    rows = await registry.read_metrics(
+        app_slug="_platform",
+        start=datetime.now(UTC) - timedelta(days=1),
+        end=datetime.now(UTC) + timedelta(days=1),
+        limit=10,
+    )
+    assert [row.mem_used_mb for row in rows] == [2100]
+
+
+async def test_no_platform_row_is_stored_when_no_file_states_the_memory(tmp_path: Path) -> None:
+    registry = seeded_registry()
+    service = metrics_service(tmp_path, registry, tmp_path / "empty-root")
+    await service.start_metrics(registry)
+    service.metrics.record_request("sales", status=200, latency_ms=5.0)
+    await let_the_first_sample_run()
+
+    await service.stop()
+
+    assert service.platform_sample() is None
+    assert await stored_minutes(registry, "sales") == 1
+    rows = await registry.read_metrics(
+        app_slug="_platform",
+        start=datetime.now(UTC) - timedelta(days=1),
+        end=datetime.now(UTC) + timedelta(days=1),
+        limit=10,
+    )
+    assert rows == ()
+
+
+async def test_each_running_sandbox_is_probed_for_its_memory_and_its_pump(tmp_path: Path) -> None:
+    root = fake_container(tmp_path / "root")
+    fake_process(root, 500, 1, 20)  # the sandbox's root
+    fake_process(root, 501, 500, 190)  # the child
+    registry = seeded_registry()
+    service = metrics_service(tmp_path, registry, root)
+    await service.start_children(registry)
+    live = sandbox_child(tmp_path, "sales", "1-1", sandbox_pid=500)
+    incoming = sandbox_child(tmp_path, "sales", "2-2", sandbox_pid=None)
+    RecordingReconciler.instances[-1].children = [("sales", live), ("sales", incoming)]
+
+    probes = service.child_probes()
+
+    assert [(probe.slug, probe.instance) for probe in probes] == [
+        ("sales", "1-1"),
+        ("sales", "2-2"),
+    ]
+    assert [probe.rss_mb() for probe in probes] == [210, None]
+    assert await probes[0].pump_stats() is None
+
+
+async def test_the_reconciler_counts_into_the_same_aggregator_the_edge_feeds(
+    tmp_path: Path,
+) -> None:
+    registry = seeded_registry()
+    service = make_service(tmp_path, registry=registry)
+
+    await service.start_children(registry)
+
+    assert RecordingReconciler.instances[-1].kwargs["metrics"] is service.metrics
+
+
+async def test_the_registry_client_reports_its_calls_to_the_aggregator(tmp_path: Path) -> None:
+    async def no_database(parameters: Any) -> Any:
+        raise OSError("connection refused")
+
+    async def token() -> SecretStr:
+        return SecretStr(SYNC_TOKEN)
+
+    client = RegistryClient(
+        host="database.example.invalid",
+        port=5432,
+        database="appmux",
+        user="sp-client-id",
+        token_provider=token,
+        connection_factory=no_database,
+    )
+    service = Service(
+        settings=environment(),
+        registry=client,
+        workspace=Workspace().client,
+        service_principal_token=lambda: SYNC_TOKEN,
+        service_principal_token_async=_async_token,
+        routes=RouteTable(),
+        upstream=UpstreamClient(),
+        closer=Closer(),
+        is_self_check_passing=lambda: True,
+        container_ip=lambda: CONTAINER_IP,
+        stop_budget_s=STOP_BUDGET_S,
+        metrics_stop_budget_s=METRICS_STOP_BUDGET_S,
+        work_dir=tmp_path / "work",
+        metrics_root=fake_container(tmp_path / "root"),
+    )
+    service.metrics.observe_platform(
+        mem_used_mb=1, mem_limit_mb=1, children_running=0, children_registered=0, edge_rss_mb=1
+    )
+
+    with pytest.raises(RegistryError):
+        await client.fetch_rows("apps")
+
+    (platform,) = [
+        row
+        for row in service.metrics.drain(include_open_minute=True)
+        if row.app_slug == "_platform"
+    ]
+    assert platform.registry_errors == 1
 
 
 # --- the content store ----------------------------------------------------------------------

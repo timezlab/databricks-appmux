@@ -66,6 +66,9 @@ class RecordingReconciler:
         self.log = log if log is not None else []
         self.calls: list[tuple[str, Any]] = []
         self.stop_error: Exception | None = None
+        # What the metrics sampler reads; a test sets them.
+        self.children: list[tuple[str, Any]] = []
+        self.app_count = 0
         RecordingReconciler.instances.append(self)
 
     async def start(self) -> None:
@@ -91,6 +94,12 @@ class RecordingReconciler:
     def memory_ledger(self) -> MemoryLedger:
         self.calls.append(("memory_ledger", None))
         return RECORDED_LEDGER
+
+    def running_children(self) -> list[tuple[str, Any]]:
+        return list(self.children)
+
+    def running_app_count(self) -> int:
+        return self.app_count
 
     async def stop_all(self, within_s: float) -> None:
         self.calls.append(("stop_all", within_s))

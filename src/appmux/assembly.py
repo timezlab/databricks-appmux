@@ -16,7 +16,10 @@ The steps run in this order, each only after the registry loaded:
    failed self-check no route opens; the platform admin reads the result and restarts). It reads
    the container's memory limit once; a limit nobody states stops the start, because admission
    control would otherwise decide against a guess.
-4. ``start_metrics``: the per-minute counters start being written to the registry.
+4. ``start_metrics``: the per-minute counters start being written to the registry. The sampler
+   reads the container's cgroup and ``/proc`` (``metrics/sources.py``, under ``metrics_root``), the
+   reconciler's running children and the registry's app count; the reconciler and the registry
+   client count restarts, admission refusals and registry calls into the same aggregator.
 5. ``start_cleanup``: the daily clean-up of the content store starts; its first pass is an hour
    after the start and it never blocks the start-up.
 
@@ -52,7 +55,8 @@ from appmux.admin.identity import state_from_desired
 from appmux.admin.platform import EGRESS_GLOBAL_KEY
 from appmux.admin.resources import DatabricksAttachChecker
 from appmux.metrics.aggregate import MetricsAggregator
-from appmux.metrics.service import MetricsService
+from appmux.metrics.service import ChildProbe, MetricsService, PlatformSample
+from appmux.metrics.sources import ROOT, read_platform_sample, read_process_tree_rss_mb
 from appmux.packages.cleanup import run_cleanup_once
 from appmux.packages.overlay import OverlayBuilder, SandboxStepRunner, pip_index_environment
 from appmux.packages.store import ContentStore, WorkspaceHttpApi
@@ -70,11 +74,16 @@ from appmux.reconciler.clock import SystemClock
 from appmux.reconciler.health import UnixSocketHealthProbe
 from appmux.reconciler.reconciler import Reconciler
 from appmux.reconciler.route_table import RouteTable
-from appmux.reconciler.sandbox_adapter import RunDirKeeper, SandboxChildLauncher
+from appmux.reconciler.sandbox_adapter import (
+    RunDirKeeper,
+    SandboxChildLauncher,
+    SandboxRunningChild,
+)
 from appmux.reconciler.snapshot_source import SnapshotSource
 from appmux.reconciler.swap import ConnectionCloser
 from appmux.reconciler.update import UpdateService
 from appmux.reconciler.update_packages import UpdatePackages
+from appmux.registry.client import RegistryClient
 from appmux.sandbox.rules import EgressRule
 from appmux.secrets.credentials import ChildCredentials, CredentialsRefused
 from appmux.secrets.resolver import (
@@ -253,6 +262,7 @@ class Service:
         memory_limit_mb: Callable[[], int] | None = None,
         work_dir: Path = WORK_DIR,
         cleanup_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        metrics_root: Path = ROOT,
     ) -> None:
         self._settings = settings
         self._registry = registry
@@ -285,15 +295,18 @@ class Service:
             packages=UpdatePackages(store=WheelStore(self.content_store), workspace=workspace_api),
         )
         self.attach_checker = DatabricksAttachChecker(workspace)
-        # The edge counts requests into ``metrics``; the metrics service writes the finished
-        # minutes. Only the request counters are fed so far: the container and per-child figures
-        # have no source yet (TD-016), so those sources answer nothing and nothing is invented.
+        # The edge counts requests into ``metrics``; the metrics service samples the container and
+        # the children into it and writes the finished minutes. A figure no file states is left
+        # out, never invented (``metrics/sources.py``).
         self.metrics = MetricsAggregator()
+        self._metrics_root = metrics_root
+        if isinstance(registry, RegistryClient):
+            registry.observe_calls(self.metrics.record_registry_call)
         self._metrics_service = MetricsService(
             self.metrics,
             registry,
-            platform=lambda: None,
-            children=tuple,
+            platform=self.platform_sample,
+            children=self.child_probes,
             stop_budget_s=metrics_stop_budget_s,
         )
         self._is_metrics_started = False
@@ -387,6 +400,33 @@ class Service:
     def memory_ledger(self) -> MemoryLedger | None:
         """The slot's memory books, or ``None`` before the reconciler (and its limit) exist."""
         return None if self._reconciler is None else self._reconciler.memory_ledger()
+
+    # --- what the metrics sampler reads ---------------------------------------------------------
+
+    def platform_sample(self) -> PlatformSample | None:
+        """The ``_platform`` figures now, or ``None`` while the container states no memory."""
+        reconciler = self._reconciler
+        return read_platform_sample(
+            children_running=0 if reconciler is None else reconciler.running_app_count(),
+            children_registered=len(self._registry.snapshot.apps),
+            root=self._metrics_root,
+        )
+
+    def child_probes(self) -> list[ChildProbe]:
+        """One probe per running sandbox: its process tree's memory and its pump's counters."""
+        if self._reconciler is None:
+            return []
+        root = self._metrics_root
+        return [
+            ChildProbe(
+                slug=slug,
+                instance=child.instance,
+                pump_stats=child.pump_stats,
+                rss_mb=functools.partial(read_process_tree_rss_mb, child.sandbox_pid, root),
+            )
+            for slug, child in self._reconciler.running_children()
+            if isinstance(child, SandboxRunningChild)
+        ]
 
     async def stop(self) -> None:
         """``SIGTERM``: stop the children within the budget, then close the clients."""
@@ -484,4 +524,5 @@ class Service:
             clock=SystemClock(),
             memory_limit_mb=memory_limit_mb,
             memory_reserve_mb=lambda: memory_reserve_mb(registry.snapshot),
+            metrics=self.metrics,
         )
