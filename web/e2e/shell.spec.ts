@@ -103,6 +103,62 @@ test.describe("the app switcher", () => {
   }
 });
 
+/**
+ * What of `container` lies outside its box: every descendant that is drawn
+ * (a screen-reader-only text is a 1 px clipped box, and is left out), named by
+ * its tag and accessible text, with how far it reaches past either edge.
+ */
+async function spillsOf(container: Locator): Promise<string[]> {
+  return container.evaluate((root) => {
+    const box = root.getBoundingClientRect();
+    const spills: string[] = [];
+    for (const element of root.querySelectorAll("*")) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 1 || rect.height <= 1) continue;
+      const past = Math.max(rect.right - box.right, box.left - rect.left);
+      if (past > 0.5) {
+        const name =
+          element.getAttribute("aria-label") ??
+          element.textContent?.trim() ??
+          "";
+        spills.push(
+          `${element.tagName.toLowerCase()} "${name}" ${past.toFixed(1)} px`,
+        );
+      }
+    }
+    return spills;
+  });
+}
+
+test.describe("the sidebar column", () => {
+  test.use({ viewport: DESKTOP });
+
+  test("keeps everything inside its box, expanded and collapsed to icons", async ({
+    page,
+  }) => {
+    const watch = await watchPage(page);
+    await open(page, pageEntry("app-environment"));
+    const sections = page.getByRole("navigation", {
+      name: "Sales dashboard sections",
+    });
+    expect(await spillsOf(sections)).toEqual([]);
+
+    await sections
+      .getByRole("button", { name: "Collapse the sidebar" })
+      .click();
+    await expect(
+      sections.getByRole("button", { name: "Expand the sidebar" }),
+    ).toBeVisible();
+    expect(await spillsOf(sections)).toEqual([]);
+    // Icons only, and each section is still named for a screen reader.
+    await expect(
+      sections.getByRole("link", { name: /^Requests\b/ }),
+    ).toBeVisible();
+
+    expect(await problemsOf(watch)).toEqual(NO_PROBLEMS);
+  });
+});
+
 test.describe("the sidebar's phone menu", () => {
   test.describe(`${String(PHONE.width)}px`, () => {
     test.use({ viewport: PHONE });
