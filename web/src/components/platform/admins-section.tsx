@@ -140,24 +140,29 @@ export function AdminsSection({
           ]}
         />
 
-        <FormSummary errors={errors} />
-        <Field
-          label="Reason for the next change"
-          hint="Required for adding and for removing. Recorded in the audit log."
-          error={errors.reason}
-        >
-          {(control) => (
-            <Textarea
-              {...control}
-              value={reason}
-              onChange={(event) => {
-                setReason(event.target.value);
-              }}
-            />
-          )}
-        </Field>
+        <div className="flex max-w-140 flex-col gap-4">
+          <FormSummary errors={errors} />
+          <Field
+            label="Reason for the next change"
+            hint="Required for adding and for removing. Recorded in the audit log."
+            error={errors.reason}
+          >
+            {(control) => (
+              <Textarea
+                {...control}
+                value={reason}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                }}
+              />
+            )}
+          </Field>
+        </div>
 
-        <form className={FORM_STACK_CLASSES} onSubmit={handleAdd}>
+        <form
+          className={`${FORM_STACK_CLASSES} max-w-140 border-t pt-4`}
+          onSubmit={handleAdd}
+        >
           <h3>Add an admin</h3>
           <FieldGrid>
             <Field label="Type">

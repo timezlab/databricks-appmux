@@ -23,7 +23,6 @@ import type {
 import type { FormErrors } from "@/lib/platform/forms";
 import type { PollResult } from "@/lib/poll/schedule";
 import { inboxRequests } from "@/lib/request-views";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/button";
 import { ConfirmButton } from "@/components/confirm-button";
 import { DataTable } from "@/components/data-table";
@@ -31,10 +30,10 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorNotice } from "@/components/error-notice";
 import { Field } from "@/components/field";
 import { FormActions } from "@/components/form-layout";
-import { Loading } from "@/components/loading";
 import { Notice } from "@/components/notice";
 import { RelativeTime } from "@/components/relative-time";
 import { Section } from "@/components/section";
+import { SkeletonLines, SkeletonTable } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionResult } from "./action-result";
@@ -134,7 +133,16 @@ function InboxBody({
   ) => void;
 }) {
   if (requests.status === "loading") {
-    return <Loading label="Loading the inbox" />;
+    // The shape of one request: its heading and asker, then what it changes.
+    return (
+      <>
+        <p role="status" className="sr-only">
+          Loading the inbox
+        </p>
+        <SkeletonLines lines={2} />
+        <SkeletonTable rows={2} columns={4} />
+      </>
+    );
   }
   if (requests.status === "failed") {
     return (
@@ -241,147 +249,146 @@ function InboxCard({
   }
 
   return (
-    <Card asChild>
-      {/* What is asked on the left, the answer on the right where there is room, so three requests do not make a page of forms. */}
-      <article className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-6">
-        <div className="flex min-w-0 flex-col gap-4">
-          <h3 className="wrap-break-word">
-            Request #{item.id}: {item.kindLabel}, {item.appText}
-          </h3>
-          <p className="text-muted-foreground">
-            Asked by <span className="wrap-break-word">{item.requestedBy}</span>
-            , <RelativeTime value={item.requestedAt} />
+    // What is asked on the left, the answer on the right where there is room, so
+    // three requests do not make a page of forms. Ruled, not boxed: the panel is the only card.
+    <article className="grid gap-4 border-t pt-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-6">
+      <div className="flex min-w-0 flex-col gap-4">
+        <h3 className="wrap-break-word">
+          Request #{item.id}: {item.kindLabel}, {item.appText}
+        </h3>
+        <p className="text-muted-foreground">
+          Asked by <span className="wrap-break-word">{item.requestedBy}</span>
+          , <RelativeTime value={item.requestedAt} />
+        </p>
+        <div className="flex flex-col gap-1">
+          <p>
+            <strong>Their reason</strong>
           </p>
-          <div className="flex flex-col gap-1">
-            <p>
-              <strong>Their reason</strong>
+          {item.reason.split("\n").map((line, index) => (
+            <p key={`${index}:${line}`} className="wrap-break-word">
+              {line}
             </p>
-            {item.reason.split("\n").map((line, index) => (
-              <p key={`${index}:${line}`} className="wrap-break-word">
-                {line}
-              </p>
-            ))}
-          </div>
-
-          <DataTable<InboxChange>
-            caption={`What request #${item.id} changes`}
-            isCaptionHidden
-            rows={item.changes}
-            rowKey={(change) => change.field}
-            columns={[
-              {
-                key: "field",
-                header: "Field",
-                isRowHeader: true,
-                cell: (change) => <ChangeLabel change={change} />,
-              },
-              {
-                key: "current",
-                header: "Now",
-                cell: (change) =>
-                  change.current === null ? (
-                    <span className="text-muted-foreground">none yet</span>
-                  ) : (
-                    <span className="wrap-break-word">{change.current}</span>
-                  ),
-              },
-              {
-                key: "requested",
-                header: "Requested",
-                cell: (change) => (
-                  <span className="wrap-break-word">{change.requested}</span>
-                ),
-              },
-              {
-                key: "note",
-                header: "Note",
-                cell: (change) => change.note ?? "",
-              },
-            ]}
-          />
-
-          {item.warnings.length === 0 ? null : (
-            <Notice tone="warning" title="Before you answer">
-              <ul className="list-disc pl-5">
-                {item.warnings.map((warning) => (
-                  <li key={warning} className="wrap-break-word">
-                    {warning}
-                  </li>
-                ))}
-              </ul>
-            </Notice>
-          )}
+          ))}
         </div>
 
-        <div className="flex min-w-0 flex-col gap-4 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-          <FormSummary errors={errors} />
-          <Field
-            label="Reason"
-            hint={
-              item.requiresReason
-                ? "Required to approve this request, because it holds a gate field. Recorded in the audit log."
-                : "Optional. Recorded in the audit log."
-            }
-            error={errors.reason}
-          >
-            {(control) => (
-              <Textarea
-                {...control}
-                value={values.reason}
-                onChange={(event) => {
-                  setValues({ ...values, reason: event.target.value });
-                }}
-              />
-            )}
-          </Field>
-          <Field
-            label="Note to the asker"
-            hint="Optional. Shown to them with the answer."
-            error={errors.note}
-          >
-            {(control) => (
-              <Input
-                {...control}
-                type="text"
-                autoComplete="off"
-                value={values.note}
-                onChange={(event) => {
-                  setValues({ ...values, note: event.target.value });
-                }}
-              />
-            )}
-          </Field>
-          <FormActions
-            primary={
-              <Button
-                variant="primary"
-                isBusy={busyDecision === "approve"}
-                busyLabel="Approving"
-                disabled={isBusy && busyDecision !== "approve"}
-                onClick={() => {
-                  submit("approve");
-                }}
-              >
-                Approve
-              </Button>
-            }
-          >
-            {/* A denial is final for the asker (they must ask again), so it asks first, as Delete and Detach do. */}
-            <ConfirmButton
-              label="Deny"
-              variant="danger"
-              prompt={`Deny request #${item.id}? ${item.requestedBy} is told it was denied.`}
-              confirmLabel={`Yes, deny request #${item.id}`}
-              isBusy={busyDecision === "deny"}
-              busyLabel="Denying"
-              isDisabled={isBusy && busyDecision !== "deny"}
-              onConfirm={() => {
-                submit("deny");
+        <DataTable<InboxChange>
+          caption={`What request #${item.id} changes`}
+          isCaptionHidden
+          rows={item.changes}
+          rowKey={(change) => change.field}
+          columns={[
+            {
+              key: "field",
+              header: "Field",
+              isRowHeader: true,
+              cell: (change) => <ChangeLabel change={change} />,
+            },
+            {
+              key: "current",
+              header: "Now",
+              cell: (change) =>
+                change.current === null ? (
+                  <span className="text-muted-foreground">none yet</span>
+                ) : (
+                  <span className="wrap-break-word">{change.current}</span>
+                ),
+            },
+            {
+              key: "requested",
+              header: "Requested",
+              cell: (change) => (
+                <span className="wrap-break-word">{change.requested}</span>
+              ),
+            },
+            {
+              key: "note",
+              header: "Note",
+              cell: (change) => change.note ?? "",
+            },
+          ]}
+        />
+
+        {item.warnings.length === 0 ? null : (
+          <Notice tone="warning" title="Before you answer">
+            <ul className="list-disc pl-5">
+              {item.warnings.map((warning) => (
+                <li key={warning} className="wrap-break-word">
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          </Notice>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-4 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+        <FormSummary errors={errors} />
+        <Field
+          label="Reason"
+          hint={
+            item.requiresReason
+              ? "Required to approve this request, because it holds a gate field. Recorded in the audit log."
+              : "Optional. Recorded in the audit log."
+          }
+          error={errors.reason}
+        >
+          {(control) => (
+            <Textarea
+              {...control}
+              value={values.reason}
+              onChange={(event) => {
+                setValues({ ...values, reason: event.target.value });
               }}
             />
-          </FormActions>
-        </div>
-      </article>
-    </Card>
+          )}
+        </Field>
+        <Field
+          label="Note to the asker"
+          hint="Optional. Shown to them with the answer."
+          error={errors.note}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              type="text"
+              autoComplete="off"
+              value={values.note}
+              onChange={(event) => {
+                setValues({ ...values, note: event.target.value });
+              }}
+            />
+          )}
+        </Field>
+        <FormActions
+          primary={
+            <Button
+              variant="primary"
+              isBusy={busyDecision === "approve"}
+              busyLabel="Approving"
+              disabled={isBusy && busyDecision !== "approve"}
+              onClick={() => {
+                submit("approve");
+              }}
+            >
+              Approve
+            </Button>
+          }
+        >
+          {/* A denial is final for the asker (they must ask again), so it asks first, as Delete and Detach do. */}
+          <ConfirmButton
+            label="Deny"
+            variant="danger"
+            prompt={`Deny request #${item.id}? ${item.requestedBy} is told it was denied.`}
+            confirmLabel={`Yes, deny request #${item.id}`}
+            isBusy={busyDecision === "deny"}
+            busyLabel="Denying"
+            isDisabled={isBusy && busyDecision !== "deny"}
+            onConfirm={() => {
+              submit("deny");
+            }}
+          />
+        </FormActions>
+      </div>
+    </article>
   );
 }

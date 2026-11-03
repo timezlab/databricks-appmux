@@ -5,9 +5,10 @@ import type * as ApiModule from "@/lib/api";
 
 import { AppsSection } from "@/components/platform/apps-section";
 import { ApiError, AppList, RequestList, listApps } from "@/lib/api";
-import type { PlatformView, RequestRow } from "@/lib/api";
+import type { PlatformView } from "@/lib/api";
 import { carriedOutcome, carryOutcome } from "@/lib/app/settings";
 import { PLATFORM_APPS_PATH } from "@/lib/platform/sections";
+import type { PollResult } from "@/lib/poll/schedule";
 import { readExample } from "../../support/contract-examples";
 import { platformView, renderInPlatform } from "./shell-fixtures";
 
@@ -16,7 +17,11 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   listApps: vi.fn(),
 }));
 
-const EXAMPLE_REQUESTS = RequestList.parse(readExample("RequestList")).items;
+const READY_REQUESTS: PollResult<RequestList> = {
+  status: "ready",
+  data: RequestList.parse(readExample("RequestList")),
+  updatedAtMs: 0,
+};
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -25,7 +30,7 @@ beforeEach(() => {
 
 function setup(
   view: PlatformView = platformView(),
-  requests: readonly RequestRow[] | null = EXAMPLE_REQUESTS,
+  requests: PollResult<RequestList> = READY_REQUESTS,
 ) {
   const user = userEvent.setup();
   const page = renderInPlatform(
@@ -101,14 +106,37 @@ describe("AppsSection", () => {
     vi.mocked(listApps).mockRejectedValue(
       new ApiError(503, "unavailable", "starting up"),
     );
-    const { user } = setup(platformView(), null);
+    const { user } = setup();
     expect(
       await screen.findByText(/Could not read the apps' states/),
     ).toBeInTheDocument();
-    expect(rowOf("sales").getAllByText("Unknown")).toHaveLength(2);
+    expect(rowOf("sales").getAllByText("Unknown")).toHaveLength(1);
     const calls = vi.mocked(listApps).mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(vi.mocked(listApps).mock.calls.length).toBeGreaterThan(calls);
+  });
+
+  it("says the requests waiting are unknown when the request list cannot be read, and retries through the shell", async () => {
+    const { user, refresh } = setup(platformView(), {
+      status: "failed",
+      error: new ApiError(503, "unavailable", "starting up"),
+    });
+    expect(
+      screen.getByText(/Could not read the requests waiting/),
+    ).toBeInTheDocument();
+    expect(await rowOf("sales").findByText("Running")).toBeInTheDocument();
+    expect(rowOf("sales").getByText("Unknown")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the place of a state and a count while their lists load, instead of calling them unknown", () => {
+    vi.mocked(listApps).mockReturnValue(new Promise(() => undefined));
+    setup(platformView(), { status: "loading" });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading the apps' states and requests",
+    );
+    expect(screen.queryByText("Unknown")).toBeNull();
   });
 
   it("leads each row to the app's Settings and Security pages, where it is changed", () => {

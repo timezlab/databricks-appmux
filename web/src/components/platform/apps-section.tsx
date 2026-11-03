@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { listApps } from "@/lib/api";
-import type { PlatformView, RequestRow } from "@/lib/api";
+import type { PlatformView, RequestList } from "@/lib/api";
 import { appPagePath } from "@/lib/app/params";
 import { carriedOutcome, dropCarriedOutcome } from "@/lib/app/settings";
 import { formatMegabytes, pluralize } from "@/lib/format";
@@ -12,6 +12,7 @@ import { filterApps, platformAppRows } from "@/lib/platform/apps";
 import type { PlatformAppRow } from "@/lib/platform/apps";
 import { PLATFORM_APPS_PATH } from "@/lib/platform/sections";
 import { pollData } from "@/lib/poll/data";
+import type { PollResult } from "@/lib/poll/schedule";
 import { usePoll } from "@/hooks/use-poll";
 import { DataTable } from "@/components/data-table";
 import type { DataTableColumn } from "@/components/data-table";
@@ -23,6 +24,7 @@ import { RouteStrip } from "@/components/route-strip";
 import { Section } from "@/components/section";
 import { AppStateBadge } from "@/components/status-badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePlatformContext } from "./platform-context";
 
 /** The lamps follow the app list; a state changes in seconds, like the platform's own poll. */
@@ -48,57 +50,71 @@ function AppLinks({ slug }: { slug: string }) {
   );
 }
 
-const COLUMNS: readonly DataTableColumn<PlatformAppRow>[] = [
-  {
-    key: "app",
-    header: "App",
-    isRowHeader: true,
-    cell: (row) => (
-      <span className="flex flex-col items-start gap-1">
-        <span className="wrap-break-word">{row.displayName}</span>
-        <RouteStrip slug={row.slug} />
-      </span>
-    ),
-  },
-  {
-    key: "state",
-    header: "State",
-    cell: (row) =>
-      row.state === null ? (
-        <span className="text-muted-foreground">Unknown</span>
-      ) : (
-        <AppStateBadge state={row.state} />
+/** A figure not known: a placeholder while its list loads, else "Unknown" (the error says why). */
+function NotKnown({ isLoading }: { isLoading: boolean }) {
+  return isLoading ? (
+    <Skeleton aria-hidden="true" className="h-4 w-16" />
+  ) : (
+    <span className="text-muted-foreground">Unknown</span>
+  );
+}
+
+function appColumns(loading: {
+  isStateLoading: boolean;
+  isRequestsLoading: boolean;
+}): readonly DataTableColumn<PlatformAppRow>[] {
+  return [
+    {
+      key: "app",
+      header: "App",
+      isRowHeader: true,
+      cell: (row) => (
+        <span className="flex flex-col items-start gap-1">
+          <span className="wrap-break-word">{row.displayName}</span>
+          <RouteStrip slug={row.slug} />
+        </span>
       ),
-  },
-  {
-    key: "owner",
-    header: "Owner",
-    cell: (row) => <span className="wrap-break-word">{row.owner}</span>,
-  },
-  {
-    key: "memory",
-    header: "Memory budget",
-    align: "end",
-    cell: (row) => formatMegabytes(row.memoryBudgetMb),
-  },
-  {
-    key: "requests",
-    header: "Requests waiting",
-    align: "end",
-    cell: (row) =>
-      row.pendingRequests === null ? (
-        <span className="text-muted-foreground">Unknown</span>
-      ) : (
-        String(row.pendingRequests)
-      ),
-  },
-  {
-    key: "open",
-    header: "Change",
-    isLabelHiddenWhenStacked: true,
-    cell: (row) => <AppLinks slug={row.slug} />,
-  },
-];
+    },
+    {
+      key: "state",
+      header: "State",
+      cell: (row) =>
+        row.state === null ? (
+          <NotKnown isLoading={loading.isStateLoading} />
+        ) : (
+          <AppStateBadge state={row.state} />
+        ),
+    },
+    {
+      key: "owner",
+      header: "Owner",
+      cell: (row) => <span className="wrap-break-word">{row.owner}</span>,
+    },
+    {
+      key: "memory",
+      header: "Memory budget",
+      align: "end",
+      cell: (row) => formatMegabytes(row.memoryBudgetMb),
+    },
+    {
+      key: "requests",
+      header: "Requests waiting",
+      align: "end",
+      cell: (row) =>
+        row.pendingRequests === null ? (
+          <NotKnown isLoading={loading.isRequestsLoading} />
+        ) : (
+          String(row.pendingRequests)
+        ),
+    },
+    {
+      key: "open",
+      header: "Change",
+      isLabelHiddenWhenStacked: true,
+      cell: (row) => <AppLinks slug={row.slug} />,
+    },
+  ];
+}
 
 /**
  * Every registered app (design 10.1) as a table whose rows lead to the app's
@@ -112,10 +128,10 @@ export function AppsSection({
   requests,
 }: {
   view: PlatformView;
-  /** The request list the shell polls; `null` while it has not loaded. */
-  requests: readonly RequestRow[] | null;
+  /** The request list the shell polls, for the count each app has waiting. */
+  requests: PollResult<RequestList>;
 }) {
-  const { announce } = usePlatformContext();
+  const { announce, refresh } = usePlatformContext();
   const [query, setQuery] = useState("");
   const [arrival] = useState(() => carriedOutcome(PLATFORM_APPS_PATH));
   useEffect(() => {
@@ -129,8 +145,12 @@ export function AppsSection({
   const rows = platformAppRows(
     filterApps(view.apps, query),
     pollData(appList)?.items ?? null,
-    requests,
+    pollData(requests)?.items ?? null,
   );
+  const loading = {
+    isStateLoading: appList.status === "loading",
+    isRequestsLoading: requests.status === "loading",
+  };
 
   return (
     <Section title="Apps">
@@ -160,11 +180,23 @@ export function AppsSection({
             )}
           </Field>
         </div>
+        {loading.isStateLoading || loading.isRequestsLoading ? (
+          <p role="status" className="sr-only">
+            Loading the apps&apos; states and requests
+          </p>
+        ) : null}
         {appList.status === "failed" ? (
           <ErrorNotice
             error={appList.error}
             context="Could not read the apps' states"
             onRetry={appList.refresh}
+          />
+        ) : null}
+        {requests.status === "failed" ? (
+          <ErrorNotice
+            error={requests.error}
+            context="Could not read the requests waiting"
+            onRetry={refresh}
           />
         ) : null}
         <DataTable<PlatformAppRow>
@@ -184,7 +216,7 @@ export function AppsSection({
                 : "Clear the filter to see every app."}
             </EmptyState>
           }
-          columns={COLUMNS}
+          columns={appColumns(loading)}
         />
       </div>
     </Section>
