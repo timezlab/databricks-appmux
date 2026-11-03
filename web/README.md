@@ -59,6 +59,17 @@ A new sub-page is a route, an entry in `e2e/pages.ts` and a sidebar or tab item;
 the screenshots then cover it. The earlier `/app/releases/` and `/app/sharing/` are gone: a static
 export has no redirects, so an old link there gets the 404 page.
 
+Authorization, Resources and Requests are rebuilt (T202). Authorization has Permissions (the
+owner and the grants in one list; who to share with is typed into `PrincipalCombobox`, which
+suggests `everyone`, groups, users and service principals from `GET /principals` and always takes
+free text) and Identity (as the visitor, the shared service principal or the app's own, which is in
+effect, and the delegation request). Resources is a table with a Detach that asks first, and an
+inline Add panel in the console's order: the type from `GET /resources/types`, the object from
+`GET /resources/suggestions` (read with the visitor's token; a text field when the type has no
+list or Databricks gives none), then the permission, the access mode and the key. A request's
+Withdraw asks first. The e2e mock stands in for the directory and the object lists; neither has
+listed anything real yet.
+
 ## Writing a page
 
 - Pages live in `src/app/**/page.tsx`; a static export cannot prerender a slug
