@@ -780,8 +780,9 @@ class Reconciler:
             overlays=overlays,
             app_egress=tuple(attempt.app.egress),
         )
+        values = attempt.environment.values()
         writer = self._output.ring(row.app_slug).begin(
-            mask=_value_hider(attempt.environment.values())
+            mask=_value_hider(values), longest_hidden_chars=max(map(len, values), default=0)
         )
         output = attempt.output = _Output(writer, self._clock.monotonic())
         try:

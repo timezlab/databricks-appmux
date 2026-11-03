@@ -16,7 +16,9 @@ The reconciler reads a child's output as it comes (``read_output``) into the app
 once it is whole (or the child has ended), and a flood between two reads of more than
 ``MAX_OUTPUT_READ_BYTES``, or of more lines than the ring keeps (``OUTPUT_MAX_LINES``), keeps its
 end and says how many bytes it skipped. Each line read is masked in the event loop that serves
-every app, so these two caps are what bound the time one read can hold it.
+every app. These caps bound how much text one read hands over, and so the time it holds the loop,
+because masking takes time linear in that text: each credential shape runs in linear time
+(``registry.audit``), and a long line is masked only as far as its cut (``output.py``).
 
 A child whose environment names the shared service principal's token command also gets a *host*
 run directory, ``<scratch>/run``, bound read-write at ``/run/appmux`` instead of the tmpfs (the
@@ -72,8 +74,9 @@ RUN_DIR_STOP_GRACE_S: Final = 5.0
 LOG_READ_BYTES: Final = 16 * 1024
 # How long the metrics sampler waits for a pump's counters; under its own 3 s probe timeout.
 PUMP_STATS_TIMEOUT_S: Final = 2.0
-# The most of one output file read at once: the size of the app's output ring, so a flood between
-# two reads cannot hold the event loop longer than one ring's worth of text.
+# The most of one output file read at once: the size of the app's output ring. The masks take time
+# linear in the text they get, so a flood between two reads costs the loop one ring's worth of
+# masking, whatever its size.
 MAX_OUTPUT_READ_BYTES: Final = 256 * 1024
 # A line still without its newline past this size is returned as it is (the ring cuts it further).
 MAX_PARTIAL_LINE_BYTES: Final = 16 * 1024

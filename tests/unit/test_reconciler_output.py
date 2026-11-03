@@ -201,6 +201,20 @@ async def test_the_childs_environment_values_never_reach_the_ring() -> None:
     assert HIDDEN_VALUE not in (world.row(1).build_log_tail or "")
 
 
+async def test_a_long_environment_value_is_hidden_from_a_line_too_long_to_mask_whole() -> None:
+    # The ring masks a long line only as far as its cut, so it must know how long a value it hides
+    # can be: one longer than the room it keeps for a credential would otherwise be cut unmasked.
+    long_value = "long-secret-" + "0123456789" * 1000
+    world = pending_world(probe_answer="connection refused")
+    world.environments.environment = {"SERVICE_KEY": long_value}
+    world.launcher.log_of_next_child = "x" * 4000 + long_value + "y" * 30_000
+
+    await world.run()
+
+    assert all("long-secret" not in text for text in ring_texts(world))
+    assert any(text.startswith("x" * 4000 + "***") for text in ring_texts(world))
+
+
 async def test_the_values_to_hide_are_gathered_once_per_start_not_once_per_line() -> None:
     # Gathering them reads the length of every value; done per line, a flood of lines costs as
     # many passes over the environment, all in the shared event loop.
