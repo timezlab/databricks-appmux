@@ -19,6 +19,7 @@ import {
   parseSettingsForm,
   renameMessage,
   renameWarning,
+  renamedOutcome,
   settingsAccess,
 } from "@/lib/app/settings";
 
@@ -340,6 +341,41 @@ describe("carried outcomes", () => {
     assert.deepEqual(carriedOutcome(path), outcome);
     dropCarriedOutcome(path);
     assert.equal(carriedOutcome(path), null);
+  });
+});
+
+describe("renamedOutcome", () => {
+  const refusal = {
+    error: new Error("owner must be a member of the workspace"),
+    context: "The fields were saved; the owner was not changed",
+  };
+
+  it("names the new slug, with the rename's detail, when the owner was left alone", () => {
+    assert.deepEqual(renamedOutcome("sales", "revenue", null, null), {
+      title: "Renamed sales to revenue",
+      detail: renameMessage("sales", "revenue"),
+    });
+  });
+
+  it("names the new owner too when the owner change went through", () => {
+    assert.deepEqual(
+      renamedOutcome("sales", "revenue", "bob@example.com", null),
+      {
+        title: "Renamed sales to revenue; the owner is now bob@example.com",
+        detail: renameMessage("sales", "revenue"),
+      },
+    );
+  });
+
+  it("names only the rename, and carries the refusal, when the owner change was refused", () => {
+    assert.deepEqual(
+      renamedOutcome("sales", "revenue", "bob@example.com", refusal),
+      {
+        title: "Renamed sales to revenue",
+        detail: renameMessage("sales", "revenue"),
+        refusal,
+      },
+    );
   });
 });
 

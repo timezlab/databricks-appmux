@@ -216,8 +216,12 @@ are in `e2e/fixtures-f4.ts`.
     the bottom, not one button per row.
 - **Charts.** shadcn's chart component over Recharts, patched in
   `src/components/ui/chart.tsx` to emit no runtime `<style>`; series colours are the fixed
-  `--chart-1..8` tokens. Each of the breakdown's eight apps has its own colour and texture,
-  and only the first is plain (`tests/contract/chart-tones.test.ts`).
+  `--chart-1..8` tokens. Each of the breakdown's eight apps has its own colour and texture
+  (`TONE_TEXTURE`: plain, stripes rising `/`, stripes falling `\`, a crosshatch, dots), and
+  only the first is plain. No texture serves more than two tones, and the two that share one
+  stay CIEDE2000 10 apart for normal vision and under deuteranopia, protanopia and tritanopia
+  (Machado 2009) in both themes: `tests/contract/chart-tones.test.ts` reads the hex values
+  from `globals.css`.
 - **Links.** An `href` or `src` is a literal path on this origin, the result of
   `appLink(slug)` or `appPagePath(slug)`, or an entry of `TRUSTED_EXPRESSIONS` in
   `tests/contract/markup-rules.test.ts`. Never build one from API text. That test reads the

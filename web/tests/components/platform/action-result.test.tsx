@@ -51,7 +51,7 @@ describe("ActionResult", () => {
       status: "failed",
       error: new ApiError(
         409,
-        "conflict",
+        "changed_by_others",
         "The app was changed by someone else",
       ),
     });

@@ -12,7 +12,7 @@ export interface ErrorNoticeProps {
   error: unknown;
   /** What was being done ("Could not save the app"); shown before the heading. */
   context?: string;
-  /** Fetches the page's data again (`usePoll(...).refresh`). Offered after a 409, so the person sees the current state. */
+  /** Fetches the page's data again (`usePoll(...).refresh`). Offered after a 409 that says the page was stale, so the person sees the current state. */
   onReload?: () => void;
   /** Repeats the call that failed. Offered after a network, 503 or 5xx error; falls back to `onReload`. */
   onRetry?: () => void;
@@ -56,8 +56,9 @@ function actionButton(
 
 /**
  * An error as a notice that a screen reader announces at once. The server's
- * message is shown as text, never as markup. A 409 offers a reload; 401, 403,
- * 503 and the rest each read differently.
+ * message is shown as text, never as markup. A 409 that says the page was
+ * stale offers a reload, any other 409 only the server's reason; 401, 403, 503
+ * and the rest each read differently.
  */
 export function ErrorNotice({
   error,

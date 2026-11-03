@@ -1,4 +1,4 @@
-import type { ChartTone } from "@/lib/dashboard/model";
+import type { ChartTone, ToneTexture } from "@/lib/dashboard/model";
 import { seriesStyle } from "@/lib/dashboard/series-style";
 import type { MarkerShape } from "@/lib/dashboard/series-style";
 import { MARKER_RING } from "./chart-theme";
@@ -6,13 +6,58 @@ import { MARKER_RING } from "./chart-theme";
 /** Side of the repeating tile of a texture, in the chart's user units. */
 const TEXTURE_TILE = 6;
 const STRIPE_WIDTH = 3;
+/** The two cut lines of a crosshatch are thinner than a stripe, so as much colour shows. */
+const CROSSHATCH_LINE_WIDTH = 1.5;
 const DOT_RADIUS = 1.25;
+
+/** Stripes and the crosshatch are drawn upright in the tile, then the tile is turned. */
+const TILE_TURN: Record<Exclude<ToneTexture, "none">, string | undefined> = {
+  "rising-stripes": "rotate(45)",
+  "falling-stripes": "rotate(-45)",
+  crosshatch: "rotate(45)",
+  dots: undefined,
+};
 const MARKER_RADIUS = 4;
 const MARKER_RING_WIDTH = 2;
 
 /** The `id` of the pattern a bar of `tone` is filled with. */
 export function textureId(prefix: string, tone: ChartTone): string {
   return `${prefix}-${tone}`;
+}
+
+/** The marks a texture cuts out of its colour, in the background colour, drawn upright in one tile. */
+function TextureMarks({ texture }: { texture: Exclude<ToneTexture, "none"> }) {
+  switch (texture) {
+    case "rising-stripes":
+    case "falling-stripes":
+      return (
+        <rect width={STRIPE_WIDTH} height={TEXTURE_TILE} fill={MARKER_RING} />
+      );
+    case "crosshatch":
+      return (
+        <>
+          <rect
+            width={CROSSHATCH_LINE_WIDTH}
+            height={TEXTURE_TILE}
+            fill={MARKER_RING}
+          />
+          <rect
+            width={TEXTURE_TILE}
+            height={CROSSHATCH_LINE_WIDTH}
+            fill={MARKER_RING}
+          />
+        </>
+      );
+    case "dots":
+      return (
+        <circle
+          cx={TEXTURE_TILE / 2}
+          cy={TEXTURE_TILE / 2}
+          r={DOT_RADIUS}
+          fill={MARKER_RING}
+        />
+      );
+  }
 }
 
 /**
@@ -28,19 +73,10 @@ export function TexturePattern({ id, tone }: { id: string; tone: ChartTone }) {
       patternUnits="userSpaceOnUse"
       width={TEXTURE_TILE}
       height={TEXTURE_TILE}
-      patternTransform={texture === "stripes" ? "rotate(45)" : undefined}
+      patternTransform={TILE_TURN[texture]}
     >
       <rect width={TEXTURE_TILE} height={TEXTURE_TILE} fill={color} />
-      {texture === "stripes" ? (
-        <rect width={STRIPE_WIDTH} height={TEXTURE_TILE} fill={MARKER_RING} />
-      ) : (
-        <circle
-          cx={TEXTURE_TILE / 2}
-          cy={TEXTURE_TILE / 2}
-          r={DOT_RADIUS}
-          fill={MARKER_RING}
-        />
-      )}
+      <TextureMarks texture={texture} />
     </pattern>
   );
 }

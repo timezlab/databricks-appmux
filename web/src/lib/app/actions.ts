@@ -222,9 +222,10 @@ export function canViewSource(actor: Actor | null): Availability {
  * Every other 409 (`slug_taken`, `no_release`, `release_protected`, and the
  * `conflict` of an Update that already retried on fresh data) refuses the
  * write as it stands, and reading the app again would only bury that refusal
- * under a reload notice.
+ * under a reload notice. The error notice offers its Reload for these codes
+ * only, for the same reason (`describeError`, components/error-message.ts).
  */
-const RELOAD_CONFLICT_CODES: ReadonlySet<string> = new Set([
+export const RELOAD_CONFLICT_CODES: ReadonlySet<string> = new Set([
   "changed_by_others",
   "app_missing",
   "not_pending",

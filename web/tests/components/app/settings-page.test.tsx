@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppView } from "@/components/app/app-view";
@@ -40,15 +41,39 @@ function errorBody(status: number, code: string, message: string): Response {
   return jsonResponse(status, { error: { code, message } });
 }
 
-/** The four polls answer from the examples; the writes answer as the test says, and are recorded. */
-function serve(server: Server = {}): RecordedCall[] {
+async function answeredSlug(response: Response): Promise<unknown> {
+  const body: unknown = await response.clone().json();
+  return typeof body === "object" && body !== null && "slug" in body
+    ? body.slug
+    : null;
+}
+
+/**
+ * The four polls answer from the examples; the writes answer as the test says,
+ * and are recorded. As on the server, a PATCH that answers with another slug
+ * moves the app: the old slug answers 404 from then on, and those reads are
+ * recorded too.
+ */
+function serve(server: Server = {}): {
+  writes: RecordedCall[];
+  readsOfOldSlug: RecordedCall[];
+} {
   const writes: RecordedCall[] = [];
-  stubFetch((call) => {
+  const readsOfOldSlug: RecordedCall[] = [];
+  let isMoved = false;
+  stubFetch(async (call) => {
     const method = call.init.method ?? "GET";
     const path = call.url.replace(API_BASE_URL, "");
     if (method !== "GET") writes.push(call);
-    if (method === "PATCH" && path === "/apps/sales")
-      return (server.patch ?? (() => jsonResponse(200, exampleApp())))(call);
+    if (method === "PATCH" && path === "/apps/sales") {
+      const response = await (
+        server.patch ?? (() => jsonResponse(200, exampleApp()))
+      )(call);
+      if (response.ok && (await answeredSlug(response)) !== "sales") {
+        isMoved = true;
+      }
+      return response;
+    }
     if (method === "PUT" && path === "/apps/sales/owner")
       return (server.owner ?? (() => jsonResponse(200, exampleApp())))(call);
     if (method === "PUT" && path === "/apps/revenue/owner")
@@ -57,6 +82,10 @@ function serve(server: Server = {}): RecordedCall[] {
       return (server.remove ?? (() => new Response(null, { status: 204 })))(
         call,
       );
+    if (path === "/apps/sales" && isMoved) {
+      readsOfOldSlug.push(call);
+      return errorBody(404, "not_found", "app 'sales' not found");
+    }
     if (path === "/apps/sales")
       return jsonResponse(200, exampleApp(server.app));
     if (path === "/apps/revenue")
@@ -71,20 +100,76 @@ function serve(server: Server = {}): RecordedCall[] {
       return jsonResponse(200, server.requests ?? readExample("RequestList"));
     return errorBody(404, "not_found", "no such route in this test");
   });
-  return writes;
+  return { writes, readsOfOldSlug };
+}
+
+/** The settings page of one slug, keyed by it as the app's route renders it. */
+function settingsPageOf(slug: string): ReactElement {
+  return (
+    <AppView key={slug} slug={slug}>
+      <AppSettingsPage />
+    </AppView>
+  );
 }
 
 async function setup(server: Server = {}) {
-  const writes = serve(server);
+  const { writes, readsOfOldSlug } = serve(server);
   const user = userEvent.setup();
-  render(
-    <AppView slug="sales">
-      <AppSettingsPage />
-    </AppView>,
-  );
+  const { rerender } = render(settingsPageOf("sales"));
   await screen.findByRole("heading", { level: 2, name: "Settings" });
-  return { user, writes };
+  /** From now on `router.replace` puts the page it goes to on screen, as the app router does. */
+  function followTheRouter(): void {
+    router.replace.mockImplementation((path: string) => {
+      const slug = new URL(path, "https://appmux.test").searchParams.get(
+        "slug",
+      );
+      if (slug !== null) rerender(settingsPageOf(slug));
+    });
+  }
+  return { user, writes, readsOfOldSlug, followTheRouter };
 }
+
+/** An answer the test gives when it chooses, and the function that gives it. */
+function heldAnswer(): {
+  answer: Promise<Response>;
+  give: (response: Response) => void;
+} {
+  let give: (response: Response) => void = () => undefined;
+  const answer = new Promise<Response>((resolve) => {
+    give = resolve;
+  });
+  return { answer, give };
+}
+
+/** Types a new slug and a new owner, presses Save and confirms the move. */
+async function renameAndChangeOwner(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> {
+  const form = await settingsForm();
+  const slug = form.getByRole("textbox", { name: "Slug" });
+  await user.clear(slug);
+  await user.type(slug, "revenue");
+  const owner = form.getByRole("textbox", { name: "Owner" });
+  await user.clear(owner);
+  await user.type(owner, "bob@example.com");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await user.click(
+    screen.getByRole("button", { name: "Yes, move to /revenue/" }),
+  );
+}
+
+const RENAME_AND_OWNER_WRITES = [
+  {
+    method: "PATCH",
+    path: "/apps/sales",
+    body: { version: 3, slug: "revenue" },
+  },
+  {
+    method: "PUT",
+    path: "/apps/revenue/owner",
+    body: { version: 4, owner: "bob@example.com" },
+  },
+];
 
 /** The platform admin's form, once `/me` has said who is looking. */
 async function settingsForm() {
@@ -210,68 +295,134 @@ describe("AppSettingsPage, for a platform admin", () => {
     expect(outcome?.detail).toMatch(/URL prefix is saved as \/revenue\//);
   });
 
-  it("moves to the new slug before the owner change, and shows there that the owner was not changed", async () => {
-    // The owner change answers only once the new slug's page is on screen.
-    let answerOwner: (response: Response) => void = () => undefined;
-    const ownerAnswer = new Promise<Response>((resolve) => {
-      answerOwner = resolve;
-    });
+  it("moves to the new slug once the owner change has answered, and shows there that the owner was not changed", async () => {
+    const owner = heldAnswer();
     const { user, writes } = await setup({
       patch: () =>
         jsonResponse(200, exampleApp({ slug: "revenue", version: 4 })),
-      owner: () => ownerAnswer,
+      owner: () => owner.answer,
     });
-    const form = await settingsForm();
-    const slug = form.getByRole("textbox", { name: "Slug" });
-    await user.clear(slug);
-    await user.type(slug, "revenue");
-    const owner = form.getByRole("textbox", { name: "Owner" });
-    await user.clear(owner);
-    await user.type(owner, "bob@example.com");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
-    await user.click(
-      screen.getByRole("button", { name: "Yes, move to /revenue/" }),
-    );
+    await renameAndChangeOwner(user);
 
+    await vi.waitFor(() => {
+      expect(writes.map(describeCall)).toEqual(RENAME_AND_OWNER_WRITES);
+    });
+    // The page stays where its one write is held until the owner change answers.
+    expect(router.replace).not.toHaveBeenCalled();
+    owner.give(
+      errorBody(400, "bad_request", "owner must be a member of the workspace"),
+    );
     await vi.waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith(
         "/app/settings/?slug=revenue",
       );
     });
-    // The page left while the owner change had not answered: the old slug answers 404 from then on.
-    await vi.waitFor(() => {
-      expect(writes.map(describeCall)).toEqual([
-        {
-          method: "PATCH",
-          path: "/apps/sales",
-          body: { version: 3, slug: "revenue" },
-        },
-        {
-          method: "PUT",
-          path: "/apps/revenue/owner",
-          body: { version: 4, owner: "bob@example.com" },
-        },
-      ]);
-    });
+    expect(router.replace).toHaveBeenCalledTimes(1);
 
-    // The router lands on the new slug's page, and only then does the owner change fail.
+    // The router lands on the new slug's page, which shows what both writes did.
     cleanup();
-    render(
-      <AppView slug="revenue">
-        <AppSettingsPage />
-      </AppView>,
-    );
+    render(settingsPageOf("revenue"));
     expect(
       await screen.findAllByText("Renamed sales to revenue"),
     ).not.toHaveLength(0);
-    answerOwner(
-      errorBody(400, "bad_request", "owner must be a member of the workspace"),
-    );
     const alert = await screen.findByText(/the owner was not changed/);
     expect(alert.closest("[role=alert]")).not.toBeNull();
     expect(
       screen.getByText(/owner must be a member of the workspace/),
     ).toBeInTheDocument();
+  });
+
+  it("moves once both the rename and the owner change went through, with one notice that names the new owner", async () => {
+    const owner = heldAnswer();
+    const { user, writes, followTheRouter } = await setup({
+      patch: () =>
+        jsonResponse(200, exampleApp({ slug: "revenue", version: 4 })),
+      owner: () => owner.answer,
+    });
+    followTheRouter();
+    await renameAndChangeOwner(user);
+
+    await vi.waitFor(() => {
+      expect(writes.map(describeCall)).toEqual(RENAME_AND_OWNER_WRITES);
+    });
+    expect(router.replace).not.toHaveBeenCalled();
+    owner.give(
+      jsonResponse(
+        200,
+        exampleApp({ slug: "revenue", version: 5, owner: "bob@example.com" }),
+      ),
+    );
+
+    const title = "Renamed sales to revenue; the owner is now bob@example.com";
+    expect(await screen.findAllByText(title)).not.toHaveLength(0);
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith("/app/settings/?slug=revenue");
+    expect(
+      screen.queryByText(/the owner was not changed/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds every other write while the owner change that follows a rename runs", async () => {
+    const owner = heldAnswer();
+    const { user, writes, followTheRouter } = await setup({
+      patch: () =>
+        jsonResponse(200, exampleApp({ slug: "revenue", version: 4 })),
+      owner: () => owner.answer,
+    });
+    followTheRouter();
+    await renameAndChangeOwner(user);
+    await vi.waitFor(() => {
+      expect(writes.map(describeCall)).toEqual(RENAME_AND_OWNER_WRITES);
+    });
+
+    // Whichever slug's page is on screen now, its Delete must wait.
+    const open = await screen.findByRole("button", {
+      name: /^Delete [a-z0-9-]+\.\.\.$/,
+    });
+    const shownSlug = (open.textContent ?? "").replace(/^Delete |\.\.\.$/g, "");
+    await user.click(open);
+    const confirm = within(
+      screen.getByRole("form", { name: `Delete ${shownSlug}` }),
+    );
+    await user.type(
+      confirm.getByRole("textbox", { name: `Type ${shownSlug} to delete it` }),
+      shownSlug,
+    );
+    const remove = confirm.getByRole("button", { name: `Delete ${shownSlug}` });
+    expect(remove).toBeDisabled();
+    await user.click(remove);
+    expect(writes.map(describeCall)).toEqual(RENAME_AND_OWNER_WRITES);
+    owner.give(jsonResponse(200, exampleApp({ slug: "revenue", version: 5 })));
+    await vi.waitFor(() => {
+      expect(router.replace).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("keeps the app on screen when the old slug answers 404 before the page has moved", async () => {
+    const { user, readsOfOldSlug } = await setup({
+      patch: () => jsonResponse(200, exampleApp({ slug: "revenue" })),
+    });
+    const form = await settingsForm();
+    const slug = form.getByRole("textbox", { name: "Slug" });
+    await user.clear(slug);
+    await user.type(slug, "revenue");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(
+      screen.getByRole("button", { name: "Yes, move to /revenue/" }),
+    );
+
+    // The router here never takes the page away: the read after the write meets the 404.
+    await vi.waitFor(() => {
+      expect(readsOfOldSlug).not.toHaveLength(0);
+    });
+    await vi.waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Save changes" }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText("App not found")).not.toBeInTheDocument();
+    expect(screen.queryByText("There is no such app")).not.toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Settings" })).toBeInTheDocument();
   });
 
   it("changes the owner alone with PUT, and both with the version the PATCH answered", async () => {
@@ -339,7 +490,7 @@ describe("AppSettingsPage, for a platform admin", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the server's refusal of a taken slug and keeps what was typed", async () => {
+  it("shows the server's refusal of a taken slug, offers no reload, and keeps what was typed", async () => {
     const { user } = await setup({
       patch: () =>
         errorBody(409, "slug_taken", "slug 'reports' is already taken"),
@@ -353,9 +504,17 @@ describe("AppSettingsPage, for a platform admin", () => {
       screen.getByRole("button", { name: "Yes, move to /reports/" }),
     );
 
+    const reason = await screen.findByText(/slug 'reports' is already taken/);
+    const alert = reason.closest<HTMLElement>("[role=alert]");
+    expect(alert).not.toBeNull();
+    expect(alert).toHaveTextContent(
+      "The settings were not saved: Not possible in the current state",
+    );
+    // A reload cannot free the slug: the way out is another slug.
+    expect(alert).not.toHaveTextContent(/Reload/);
     expect(
-      await screen.findByText(/slug 'reports' is already taken/),
-    ).toBeInTheDocument();
+      within(alert ?? reason).queryByRole("button"),
+    ).not.toBeInTheDocument();
     expect(slug).toHaveValue("reports");
     expect(router.replace).not.toHaveBeenCalled();
     expect(screen.queryByText(RELOAD_NOTICE_TEXT)).not.toBeInTheDocument();

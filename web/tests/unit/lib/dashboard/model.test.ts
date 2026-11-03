@@ -1004,7 +1004,7 @@ describe("TONE_TEXTURE", () => {
     assert.equal(new Set(textures).size, requests.tones.length);
     // The plain tone is the one with no pattern; the other two have one each.
     assert.equal(TONE_TEXTURE.primary, "none");
-    assert.deepEqual(textures, ["none", "stripes", "dots"]);
+    assert.deepEqual(textures, ["none", "rising-stripes", "dots"]);
   });
 
   it("is the same for the legend, which reads the tones of the legend items", () => {
