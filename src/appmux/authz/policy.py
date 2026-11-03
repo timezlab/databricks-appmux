@@ -10,7 +10,8 @@ Rules that hold everywhere:
 * The default is deny. An unknown action, an actor without an email, and an action on an app that
   is not in the data are denied. Platform-level actions (``Requirement.PLATFORM_CAN_MANAGE``) never
   read the app, so a platform admin is allowed them whatever slug is passed; the caller answers
-  ``404`` for a slug that does not exist after authorizing.
+  ``404`` for a slug that does not exist after authorizing. ``Requirement.ANY_APP_CAN_MANAGE``
+  (``principal.search``) does not read the app either: ``CAN_MANAGE`` on any one app is enough.
 * ``groups`` is ``None`` when the lookup failed and nothing usable is cached. Then no group grant
   and no group entry of ``platform_admins`` matches: only the owner, a user grant, an ``everyone``
   grant and a ``user`` entry of ``platform_admins`` can. The same holds while the ``user
@@ -253,6 +254,8 @@ def _decide(
 
     if requirement is Requirement.PLATFORM_CAN_MANAGE:
         return _platform_decision(email, data, groups)
+    if requirement is Requirement.ANY_APP_CAN_MANAGE:
+        return _any_app_decision(email, data, groups)
     if requirement is Requirement.APP_CAN_MANAGE_OR_NO_APP and app is None:
         return Decision(True, Reason.ANY_VISITOR, None)
 
@@ -275,6 +278,17 @@ def _platform_decision(email: str, data: AuthzData, groups: frozenset[str] | Non
     if is_platform_admin(email, data, groups):
         return Decision(True, Reason.PLATFORM_ADMIN, Permission.CAN_MANAGE)
     return Decision(False, Reason.NOT_PLATFORM_ADMIN, None)
+
+
+def _any_app_decision(email: str, data: AuthzData, groups: frozenset[str] | None) -> Decision:
+    """CAN_MANAGE on at least one app; the app passed in is not read (``principal.search``)."""
+    if is_platform_admin(email, data, groups):
+        return Decision(True, Reason.PLATFORM_ADMIN, Permission.CAN_MANAGE)
+    for slug in sorted(data.apps):  # sorted, so the reason reported does not depend on dict order
+        level, source = effective_permission(email, data.apps[slug], data, groups)
+        if level is Permission.CAN_MANAGE and source is not None:
+            return Decision(True, source, Permission.CAN_MANAGE)
+    return Decision(False, Reason.NO_ACCESS, None)
 
 
 def _view_as_user_decision(

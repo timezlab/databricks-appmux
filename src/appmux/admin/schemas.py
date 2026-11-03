@@ -43,6 +43,7 @@ from pydantic import (
     model_validator,
 )
 
+from appmux.identity.directory import QUERY_MAX_LENGTH, QUERY_PATTERN
 from appmux.registry.models import (
     APPLICATION_ID_PATTERN,
     LATENCY_BUCKET_COUNT,
@@ -964,3 +965,60 @@ class MetricsResponse(_Body):
     to: UtcTime
     truncated: bool
     items: list[MetricsRow]
+
+
+# --- GET /principals (contracts/admin-api.md, addendum; T187) ------------------------------
+
+PRINCIPAL_SEARCH_DEFAULT_LIMIT: Final = 10
+PRINCIPAL_SEARCH_MAX_LIMIT: Final = 50
+_LIMIT_MAX_DIGITS: Final = 3
+_EVERY_GRANT_TYPE: Final[tuple[GrantType, ...]] = ("user", "group", "service_principal", "everyone")
+# ``not_read``: the type was not asked for, or the query was empty, so the directory was not read.
+DirectorySourceName = Literal["caller_token", "platform_token", "unavailable", "not_read"]
+
+
+class PrincipalSearchQuery(_RequestBody):
+    """The query of ``GET /principals``; ``q`` goes into a SCIM filter (``identity.directory``)."""
+
+    q: Annotated[str, Field(max_length=QUERY_MAX_LENGTH, pattern=QUERY_PATTERN)] = ""
+    types: list[GrantType] = Field(default_factory=lambda: list(_EVERY_GRANT_TYPE), min_length=1)
+    limit: int = Field(default=PRINCIPAL_SEARCH_DEFAULT_LIMIT, ge=1, le=PRINCIPAL_SEARCH_MAX_LIMIT)
+
+    @classmethod
+    def from_query(cls, params: Mapping[str, str]) -> Self:
+        """Read the percent-decoded parameters: ``types`` is a comma list, ``limit`` digits only.
+
+        A ``limit`` that is not plain digits stays text, which the strict model refuses, so
+        ``1e1``, ``1.5`` or `` 5`` is not read as a number. Other parameters are ignored.
+        """
+        data: dict[str, object] = {}
+        if "q" in params:
+            data["q"] = params["q"]
+        if "types" in params:
+            data["types"] = params["types"].split(",")
+        if "limit" in params:
+            raw = params["limit"]
+            is_digits = raw.isascii() and raw.isdecimal() and len(raw) <= _LIMIT_MAX_DIGITS
+            data["limit"] = int(raw) if is_digits else raw
+        return cls.model_validate(data)
+
+
+class PrincipalSources(_Body):
+    users: DirectorySourceName
+    groups: DirectorySourceName
+    service_principals: DirectorySourceName
+
+
+class PrincipalSuggestion(_Body):
+    """One suggestion; ``name`` is what ``GrantRequest.name`` takes for its ``type``."""
+
+    type: GrantType
+    name: str
+    display_name: str | None
+    detail: str | None
+
+
+class PrincipalList(_Body):
+    items: list[PrincipalSuggestion]
+    truncated: bool
+    sources: PrincipalSources

@@ -9,6 +9,7 @@ unknown path) when it is not given:
   page;
 * ``attach_checker`` -> the requirements and the attach and detach routes;
 * ``source_store`` -> the read-only source viewer;
+* ``principal_directory`` -> ``GET /principals``;
 * ``open_mode_cookies`` -> ``POST /apps/{app}/open-mode`` writes the cookie *and* the pipeline reads
   that same cookie to decide whether a child receives an admin's token (one key, one instance);
 * ``bootstrap_admins`` is read once and shared: a one-shot iterable still reaches the authorizer
@@ -46,6 +47,7 @@ from stub_registry import StubRegistry
 from appmux.edge.app import create_edge_app
 from appmux.edge.open_mode import OpenModeCookies
 from appmux.identity.actor import Actor
+from appmux.identity.directory import DirectoryAnswer, DirectoryKind
 from appmux.reconciler.ports import ChangeWriter, UpdateResult
 from appmux.reconciler.route_table import Route, RouteTable
 from appmux.registry.protocol import Change
@@ -218,6 +220,39 @@ async def test_without_a_snapshot_store_the_edge_has_no_source_viewer() -> None:
     app = create_edge_app(registry=registry_with_release_seven(), group_source=FakeGroups())
 
     reply = await get(app, "/apps/sales/releases/7/source", DANA)
+
+    assert reply.status == 404
+
+
+# --- the principal directory -------------------------------------------------------------------
+
+
+class NeverCalledDirectory:
+    """A principal directory for tests that only look at which routes exist."""
+
+    async def search(
+        self, kind: DirectoryKind, query: str, *, count: int, caller_token: SecretStr | None
+    ) -> DirectoryAnswer:
+        raise AssertionError("an empty query must not read the directory")
+
+
+async def test_the_principal_route_is_served_when_a_directory_is_given() -> None:
+    app = create_edge_app(
+        registry=seeded_registry(),
+        group_source=FakeGroups(),
+        principal_directory=NeverCalledDirectory(),
+    )
+
+    reply = await get(app, "/principals", ALICE)
+
+    assert reply.status == 200
+    assert [item["type"] for item in reply.json()["items"]] == ["everyone"]
+
+
+async def test_without_a_directory_the_edge_has_no_principal_route() -> None:
+    app = create_edge_app(registry=seeded_registry(), group_source=FakeGroups())
+
+    reply = await get(app, "/principals", ALICE)
 
     assert reply.status == 404
 

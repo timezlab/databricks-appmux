@@ -794,7 +794,7 @@ rest of the contract. A lane that finds a detail below wrong changes this sectio
 
 | Route | Needs | Response | Returns / does |
 |---|---|---|---|
-| `GET /principals?q=&types=&limit=` | `principal.search`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `PrincipalList` | suggestions for the Sharing form. `q` is at most 64 characters of `A-Z a-z 0-9 space . _ @ + -` (anything else is `400`, because the text goes into a SCIM filter); `types` is a comma list of `user`, `group`, `service_principal`, `everyone` (default all); `limit` 1 to 50 (default 10). An empty `q` returns only the `everyone` row. Each directory is read with the person's token first and the platform's service-principal token when that is refused; a directory that neither can read is named `unavailable` in `sources` and the UI keeps free typing. `403` `user_token_missing` is not raised: the fallback exists for that |
+| `GET /principals?q=&types=&limit=` | `principal.search`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `PrincipalList` | suggestions for the Sharing form. `q` is at most 64 characters of `A-Z a-z 0-9 space . _ @ + -` (anything else is `400`, because the text goes into a SCIM filter); `types` is a comma list of `user`, `group`, `service_principal`, `everyone` (default all); `limit` 1 to 50 (default 10); a parameter sent twice is `400`, and the message names the parameter, never the value. An empty `q` reads no directory and returns only the `everyone` row. Each directory is read with the person's token first and the platform's service-principal token when that is refused; a directory that neither can read is named `unavailable` in `sources` and the UI keeps free typing. `403` `user_token_missing` is not raised: the fallback exists for that |
 | `GET /workspace/browse?path=` | `workspace.browse`: any visitor with a token | `WorkspaceListing` | the sub-folders and files of one workspace folder, read with the person's token (scope `workspace.workspace:read`). No `path` returns the roots (`My folder`, `Shared`). `400` for a path that does not start with `/Workspace/`, holds `..`, a control character or more than 512 characters; `404` `not_found`; `403` `no_access`; `503` `workspace_unavailable`. At most 200 entries, folders first, then by name (`truncated`). Writes nothing and records nothing |
 | `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500). Lines pass the same credential masking as `build_log_tail`. Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content) |
 | `GET /apps/{app}/environment` | `app.view_environment`: `CAN_MANAGE` on the app | `AppEnvironment` | what the app is started with: runtime versions, variables and packages (see schema). A value that belongs to a `secret` resource is never returned (`is_secret` is `true`, `value` is `null`) |
@@ -829,13 +829,16 @@ usual, and no audit row except where a row says so.
 
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
-| `items` | array<PrincipalSuggestion> | always | `everyone` first when it matches, then groups, users, service principals, each by name |
-| `truncated` | boolean | always | `true` when more than `limit` matched |
-| `sources` | object | always | for `users`, `groups` and `service_principals`: one of `caller_token`, `platform_token`, `unavailable` |
+| `items` | array<PrincipalSuggestion> | always | `everyone` first when it matches (an empty `q`, or a `q` that starts the word `everyone`, in any case), then groups, users, service principals, each by the name shown (`display_name`, else `name`), case-folded; at most `limit` |
+| `truncated` | boolean | always | `true` when more than `limit` matched (each directory is asked for `limit + 1` entries, and Databricks picks which) |
+| `sources` | object | always | for `users`, `groups` and `service_principals`: one of `caller_token`, `platform_token`, `unavailable`, or `not_read` when that type was not asked for or `q` was empty |
 
 `PrincipalSuggestion`: `type` (`user`, `group`, `service_principal`, `everyone`), `name` (what `GrantRequest.name` takes:
-a lower-case email, a group name, an application id, `*`), `display_name` (string or null), `detail` (string or null:
-the e-mail of a user whose display name is shown, the application id of a service principal).
+a lower-case email, a group name, an application id, `*`), `display_name` (string or null: a user's or service
+principal's display name, `Everyone` for `everyone`, null for a group, whose name is its display name), `detail` (string
+or null: the e-mail of a user whose display name is shown, the application id of a service principal). A directory
+entry whose name `GrantRequest` would refuse (a user name that is not an e-mail, a blank group name or `*`, a service
+principal without a UUID application id) is left out.
 
 #### WorkspaceListing
 

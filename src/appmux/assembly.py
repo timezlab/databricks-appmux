@@ -51,6 +51,7 @@ from pydantic import SecretStr
 from appmux.admin.identity import state_from_desired
 from appmux.admin.platform import EGRESS_GLOBAL_KEY
 from appmux.admin.resources import DatabricksAttachChecker
+from appmux.identity.directory import DirectoryLookup
 from appmux.metrics.aggregate import MetricsAggregator
 from appmux.metrics.service import MetricsService
 from appmux.packages.cleanup import run_cleanup_once
@@ -285,6 +286,10 @@ class Service:
             packages=UpdatePackages(store=WheelStore(self.content_store), workspace=workspace_api),
         )
         self.attach_checker = DatabricksAttachChecker(workspace)
+        # The Sharing form's suggestions (GET /principals): the person's token, then the platform's.
+        self.principal_directory = DirectoryLookup(
+            workspace, platform_token=service_principal_token_async
+        )
         # The edge counts requests into ``metrics``; the metrics service writes the finished
         # minutes. Only the request counters are fed so far: the container and per-child figures
         # have no source yet (TD-016), so those sources answer nothing and nothing is invented.

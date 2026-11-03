@@ -47,6 +47,8 @@ class Action(StrEnum):
     RESOURCE_ATTACH = "resource.attach"
     RESOURCE_DETACH = "resource.detach"
     GRANT_APP = "grant.app"
+    # The directory the Sharing form suggests from (no app named: any app the person manages).
+    PRINCIPAL_SEARCH = "principal.search"
     # Requests to a platform admin.
     REQUEST_CREATE = "request.create"
     REQUEST_WITHDRAW = "request.withdraw"
@@ -75,6 +77,8 @@ class Requirement(StrEnum):
     # The request kinds: CAN_MANAGE on the app named, or any visitor when no app is named
     # (a `register` request has no app yet).
     APP_CAN_MANAGE_OR_NO_APP = "app_can_manage_or_no_app"
+    # CAN_MANAGE on at least one app, whatever app is named (a platform admin has it on all).
+    ANY_APP_CAN_MANAGE = "any_app_can_manage"
 
 
 ACTION_REQUIREMENTS: Final[Mapping[Action, Requirement]] = MappingProxyType(
@@ -103,6 +107,7 @@ ACTION_REQUIREMENTS: Final[Mapping[Action, Requirement]] = MappingProxyType(
         Action.RESOURCE_ATTACH: Requirement.APP_CAN_MANAGE,
         Action.RESOURCE_DETACH: Requirement.APP_CAN_MANAGE,
         Action.GRANT_APP: Requirement.APP_CAN_MANAGE,
+        Action.PRINCIPAL_SEARCH: Requirement.ANY_APP_CAN_MANAGE,
         Action.REQUEST_CREATE: Requirement.APP_CAN_MANAGE_OR_NO_APP,
         Action.REQUEST_WITHDRAW: Requirement.APP_CAN_MANAGE_OR_NO_APP,
         Action.REQUEST_DECIDE: Requirement.PLATFORM_CAN_MANAGE,
