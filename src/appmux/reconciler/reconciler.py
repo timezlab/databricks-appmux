@@ -84,7 +84,12 @@ from appmux.reconciler.children import (
 )
 from appmux.reconciler.clock import Clock
 from appmux.reconciler.health import HealthProbe, HealthResult, wait_until_healthy
-from appmux.reconciler.output import OutputBook, OutputRing, OutputWriter
+from appmux.reconciler.output import (
+    OutputBook,
+    OutputRing,
+    OutputWriter,
+    without_control_characters,
+)
 from appmux.reconciler.rename import under_new_slug
 from appmux.reconciler.restart import CrashReport, RestartBudget
 from appmux.reconciler.route_table import RouteTable
@@ -1093,10 +1098,12 @@ def _health_failure(
 def _value_hider(values: Iterable[str]) -> Callable[[str], str]:
     """What replaces each long-enough value of the child's environment by ``***`` in a text.
 
-    The values are gathered once: the hider runs on every line of a child's output.
+    The values are gathered once: the hider runs on every line of a child's output. Each value is
+    looked for as it is and as the output ring keeps it, without its control characters.
     """
+    forms = {form for v in values for form in (v, without_control_characters(v))}
     hidden = sorted(
-        {v for v in values if len(v) >= MIN_REDACTED_VALUE_CHARS}, key=len, reverse=True
+        {form for form in forms if len(form) >= MIN_REDACTED_VALUE_CHARS}, key=len, reverse=True
     )
 
     def hide(text: str) -> str:

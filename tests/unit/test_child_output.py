@@ -196,6 +196,47 @@ def test_a_nul_and_a_carriage_return_are_dropped_and_a_long_line_is_cut() -> Non
     assert second.text.endswith("(line cut)")
 
 
+@pytest.mark.parametrize(
+    ("printed", "kept"),
+    [
+        pytest.param(
+            "\x1b[31mred\x1b[0m, a bell\x07 and a backspace\x08",
+            "[31mred[0m, a bell and a backspace",
+            id="C0",
+        ),
+        pytest.param("del\x7fete", "delete", id="DEL"),
+        pytest.param("next\x85line, \x9b31m", "nextline, 31m", id="C1"),
+    ],
+)
+def test_a_control_character_a_terminal_acts_on_is_dropped(printed: str, kept: str) -> None:
+    # A browser draws these as nothing, so the line reads the same; text selected and copied from
+    # Logs then cannot drive the terminal it is pasted into (review T205 R7).
+    output = ring()
+    output.begin().add("stdout", printed)
+
+    assert shown_line(output) == kept
+
+
+def test_a_tab_and_a_carriage_return_inside_a_line_are_kept() -> None:
+    # A progress bar redraws itself with a carriage return; only a trailing one goes.
+    output = ring()
+    writer = output.begin()
+    writer.add("stdout", "name\tvalue")
+    writer.add("stdout", "10%\r50%\r100%\r")
+
+    assert texts(output.read(after=0, limit=10).lines) == ["name\tvalue", "10%\r50%\r100%"]
+
+
+def test_a_token_broken_by_a_control_character_is_still_masked() -> None:
+    # The masks see the line as it is kept: a control character dropped after them would join a
+    # token they did not recognise.
+    output = ring()
+    output.begin().add("stdout", f"key {TOKEN[:12]}\x1b{TOKEN[12:]}")
+
+    assert TOKEN[8:] not in shown_line(output)
+    assert shown_line(output).startswith("key ")
+
+
 def hiding(value: str) -> Callable[[str], str]:
     return lambda text: text.replace(value, "***")
 
