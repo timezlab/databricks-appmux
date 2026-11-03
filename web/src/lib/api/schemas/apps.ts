@@ -20,7 +20,8 @@ export const RegisterAppRequest = z.strictObject({
   slug: Slug,
   display_name: NotBlank,
   source_path: WorkspacePath,
-  memory_budget_mb: MemoryBudgetMb,
+  // Left out (or null), the app gets the platform's default budget.
+  memory_budget_mb: MemoryBudgetMb.nullish(),
   owner: LowerCaseEmail,
 });
 

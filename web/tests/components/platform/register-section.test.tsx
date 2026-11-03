@@ -201,7 +201,9 @@ describe("RegisterSection", () => {
     const budget = screen.getByRole("textbox", { name: /^Memory budget/ });
     expect(budget).toHaveValue("");
     expect(budget).toHaveAttribute("placeholder", "768");
-    expect(budget).toHaveAccessibleDescription(/blank.*platform default.*768 MB/i);
+    expect(budget).toHaveAccessibleDescription(
+      /blank.*platform default.*768 MB/i,
+    );
     expect(budget).not.toBeRequired();
   });
 

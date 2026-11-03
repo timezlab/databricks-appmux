@@ -175,6 +175,11 @@ export interface InboxContext {
   isSharedSpAllowed: boolean;
   /** `PlatformView.memory.free_mb`; negative when the slot is over-committed. */
   freeMemoryMb: number;
+  /**
+   * `PlatformView.settings.default_memory_budget_mb`: the budget approving a
+   * registration gives the new app. A registration does not ask for one.
+   */
+  defaultMemoryBudgetMb: number;
 }
 
 function formatValue(field: string, value: unknown): string {
@@ -219,7 +224,12 @@ function noteFor(
       : null;
   }
   if (field === "source_path") return "Decides what code runs in the slot.";
-  if (field === "memory_budget_mb") return freeMemoryNote(context.freeMemoryMb);
+  if (field === "memory_budget_mb") {
+    const free = freeMemoryNote(context.freeMemoryMb);
+    return kind === "register"
+      ? `The platform default; the asker does not choose it. ${free}`
+      : free;
+  }
   if (isDelegationField(field)) return DELEGATION_INFO[field].grantEffect;
   return null;
 }
@@ -228,7 +238,12 @@ function buildChanges(row: RequestRow, context: InboxContext): InboxChange[] {
   const changes: InboxChange[] = [];
 
   for (const field of KIND_FIELDS[row.kind]) {
-    const asked = ownValue(row.payload, field);
+    // Approving a registration gives the new app the platform default; a budget
+    // an older request still carries is ignored, so it is not shown.
+    const asked =
+      row.kind === "register" && field === "memory_budget_mb"
+        ? { has: true, value: context.defaultMemoryBudgetMb }
+        : ownValue(row.payload, field);
     // A settings or delegation request leaves unasked fields out (null); a registration always shows all four.
     if (row.kind !== "register" && (asked.value ?? null) === null) continue;
     const now = ownValue(row.current, field);
@@ -306,7 +321,10 @@ function buildWarnings(row: RequestRow, context: InboxContext): string[] {
     }
   }
 
-  const budget = row.payload.memory_budget_mb;
+  const budget =
+    row.kind === "register"
+      ? context.defaultMemoryBudgetMb
+      : row.payload.memory_budget_mb;
   if (typeof budget === "number") {
     const currentBudget = row.current?.memory_budget_mb;
     const needed =

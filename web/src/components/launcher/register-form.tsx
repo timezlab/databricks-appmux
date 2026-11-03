@@ -7,8 +7,6 @@ import { createRequest } from "@/lib/api";
 import type { RequestRow } from "@/lib/api";
 import {
   EMPTY_REGISTER_FORM,
-  MEMORY_BUDGET_MAX_MB,
-  MEMORY_BUDGET_MIN_MB,
   REASON_MAX_LENGTH,
   submitRegisterForm,
   withoutFieldError,
@@ -207,34 +205,15 @@ export function RegisterForm({
                 setField("sourcePath", value);
               }}
               canBrowse={canBrowseWorkspace}
-              onUseMemory={(memoryMb) => {
-                setField("memoryBudgetMb", String(memoryMb));
-              }}
-            />
-          )}
-        </Field>
-
-        <Field
-          label="Memory budget (MB)"
-          hint={`A whole number from ${MEMORY_BUDGET_MIN_MB} to ${MEMORY_BUDGET_MAX_MB}.`}
-          error={errors.memoryBudgetMb}
-          isRequired
-        >
-          {(control) => (
-            <Input
-              {...control}
-              name="memory_budget_mb"
-              type="text"
-              inputMode="numeric"
-              value={values.memoryBudgetMb}
-              autoComplete="off"
-              onChange={(event) => {
-                setField("memoryBudgetMb", event.target.value);
-              }}
             />
           )}
         </Field>
       </FieldGrid>
+
+      <p className="text-muted-foreground">
+        The platform admin sets the memory budget of a new app. Once the app
+        exists, its admin can ask for more in Settings.
+      </p>
 
       <Field
         label="Reason"

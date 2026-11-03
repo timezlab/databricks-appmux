@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 
 import { registerApp } from "@/lib/api";
 import type { PlatformView } from "@/lib/api";
+import { formatMegabytes } from "@/lib/format";
 import { EMPTY_REGISTER_FORM, parseRegisterForm } from "@/lib/platform/apps";
 import type { RegisterFormValues } from "@/lib/platform/apps";
 import { Button } from "@/components/button";
@@ -34,6 +35,7 @@ export function RegisterSection({ view }: { view: PlatformView }) {
   // Messages stay hidden until the first Register, then follow the typing.
   const [hasTried, setHasTried] = useState(false);
   const action = useWriteAction();
+  const defaultMemoryBudgetMb = view.settings.default_memory_budget_mb;
 
   const parsed = parseRegisterForm(
     values,
@@ -60,13 +62,10 @@ export function RegisterSection({ view }: { view: PlatformView }) {
 
   return (
     <Section title="Register an app">
-      <form
-        className={FORM_STACK_CLASSES}
-        onSubmit={handleSubmit}
-      >
+      <form className={FORM_STACK_CLASSES} onSubmit={handleSubmit}>
         <p className="text-muted-foreground">
           Registers the app now, as you. Someone else asking for an app goes
-          through the inbox instead.
+          through the inbox instead, and gets the default memory budget.
         </p>
         <FormSummary errors={errors} />
         <FieldGrid>
@@ -127,8 +126,7 @@ export function RegisterSection({ view }: { view: PlatformView }) {
           </Field>
           <Field
             label="Memory budget (MB)"
-            hint="Whole megabytes."
-            isRequired
+            hint={`Whole megabytes. Leave blank to use the platform default (${formatMegabytes(defaultMemoryBudgetMb)}).`}
             error={errors.memory_budget_mb}
           >
             {(control) => (
@@ -137,6 +135,7 @@ export function RegisterSection({ view }: { view: PlatformView }) {
                 type="text"
                 inputMode="numeric"
                 autoComplete="off"
+                placeholder={String(defaultMemoryBudgetMb)}
                 value={values.memory_budget_mb}
                 onChange={(event) => {
                   setValues({

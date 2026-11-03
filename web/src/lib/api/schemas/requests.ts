@@ -3,7 +3,12 @@ import { z } from "./zod.ts";
 import { RequestKind, RequestStatus } from "./enums.ts";
 import { PLATFORM_FIELDS, Reason, Slug, Time } from "./primitives.ts";
 
-const RegisterPayload = z.strictObject(PLATFORM_FIELDS);
+// No memory budget: a new app starts with the platform's default (`default_memory_budget_mb`).
+const RegisterPayload = z.strictObject({
+  slug: PLATFORM_FIELDS.slug,
+  display_name: PLATFORM_FIELDS.display_name,
+  source_path: PLATFORM_FIELDS.source_path,
+});
 
 const DelegationPayload = z
   .strictObject({
