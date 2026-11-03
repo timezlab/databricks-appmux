@@ -7,6 +7,7 @@ import {
   LOG_ENTRIES_KEPT_MAX,
   describeLastExit,
   filterLogEntries,
+  gapText,
   isScrolledToBottom,
   logCopyText,
   logLineTime,
@@ -163,6 +164,15 @@ describe("filterLogEntries", () => {
   });
 });
 
+describe("gapText", () => {
+  // The server dropped lines before the ones on screen; the page never had them.
+  it("says how many earlier lines are not shown, in the singular for one", () => {
+    assert.equal(gapText(1), "1 earlier line is not shown");
+    assert.equal(gapText(8), "8 earlier lines are not shown");
+    assert.equal(gapText(1200), "1,200 earlier lines are not shown");
+  });
+});
+
 describe("logCopyText", () => {
   it("writes one line per entry with its time and stream, and the marker in words", () => {
     const view = mergeLogPage(
@@ -175,7 +185,7 @@ describe("logCopyText", () => {
     );
     assert.equal(
       logCopyText(view.entries),
-      "1 line was not kept\n2026-10-30T09:14:03Z stderr Traceback (most recent call last):",
+      "1 earlier line is not shown\n2026-10-30T09:14:03Z stderr Traceback (most recent call last):",
     );
   });
 });
