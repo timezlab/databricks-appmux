@@ -48,6 +48,9 @@ HEALTH_DEADLINE_MAX_S: Final = 600
 # How long one poll waits for an answer. Short, because the next poll is a second away anyway.
 PROBE_TIMEOUT_S: Final = 2.0
 
+# How every reason of a health check that ran out of time begins (``start_failure`` reads it).
+HEALTH_TIMEOUT_PREFIX: Final = "health check did not pass within "
+
 _REFUSED: Final = "connection refused"
 _TIMED_OUT: Final = "timed out"
 _CLOSED: Final = "connection closed before an answer"
@@ -75,7 +78,7 @@ class HealthResult:
 
 
 def failure_reason(deadline_s: int, last_error: str) -> str:
-    return f"health check did not pass within {deadline_s} s (last error: {last_error})"
+    return f"{HEALTH_TIMEOUT_PREFIX}{deadline_s} s (last error: {last_error})"
 
 
 async def wait_until_healthy(

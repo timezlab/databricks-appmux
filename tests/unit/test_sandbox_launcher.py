@@ -618,6 +618,9 @@ FAKE_STAGE1 = textwrap.dedent(
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
     if mode == "exits-first":
         sys.exit(5)
+    if mode == "stderr-exits-first":
+        print("Error: Cannot find module 'express'", file=sys.stderr, flush=True)
+        sys.exit(5)
     if mode == "never-connects":
         time.sleep(60)
 
@@ -638,6 +641,11 @@ FAKE_STAGE1 = textwrap.dedent(
     if mode == "exit-7":
         time.sleep(0.3)
         sys.exit(7)
+    if mode == "v8-out-of-memory":
+        # What node does under a too-small RLIMIT_AS: a fatal error on stderr, then a trap.
+        print("# Fatal process out of memory: Failed to reserve virtual memory for CodeRange",
+              file=sys.stderr, flush=True)
+        os.kill(os.getpid(), signal.SIGTRAP)
     time.sleep(60)
     """
 )
@@ -831,6 +839,45 @@ def test_the_childs_output_goes_to_its_log_and_its_secrets_never_to_argv(tmp_pat
         "SECRET_TOKEN",
     ]  # it did arrive, in the spec
     assert "s3cret-value" not in " ".join(report["argv"])  # ... but not on the command line
+
+
+def test_the_childs_stderr_reaches_its_log_and_a_death_by_signal_is_reported(
+    tmp_path: Path,
+) -> None:
+    # Regression (T190): a node child that died at start left an empty tail. The child's stderr
+    # must reach the log, and the signal that ended it must be in the event.
+    run = make_supervisor(tmp_path, mode="v8-out-of-memory")
+    run.start()
+
+    exited = run.wait_for("exited")
+    run.finish()
+
+    assert exited["signal"] == signal.SIGTRAP
+    log = (tmp_path / "child.log").read_text()
+    assert "hello from the child" in log
+    assert "Failed to reserve virtual memory for CodeRange" in log
+
+
+def test_with_a_stderr_path_the_two_streams_go_to_two_files(tmp_path: Path) -> None:
+    run = make_supervisor(tmp_path, mode="v8-out-of-memory", stderr_path=tmp_path / "child.err")
+    run.start()
+    run.wait_for("exited")
+    run.finish()
+
+    assert (tmp_path / "child.log").read_text() == "hello from the child\n"
+    assert "Failed to reserve virtual memory" in (tmp_path / "child.err").read_text()
+
+
+def test_an_early_exit_quotes_the_end_of_both_streams(tmp_path: Path) -> None:
+    run = make_supervisor(tmp_path, mode="stderr-exits-first", stderr_path=tmp_path / "child.err")
+    run.start()
+
+    failed = run.wait_for("failed")
+
+    assert "status 5" in failed["reason"]
+    assert "hello from the child" in failed["reason"]
+    assert "Cannot find module 'express'" in failed["reason"]
+    assert run.finish() == 1
 
 
 def test_a_failed_step_is_reported_with_its_reason_and_nothing_is_left_running(

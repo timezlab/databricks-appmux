@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Literal, Protocol
 
 from appmux.sandbox.rules import EgressRule
 
@@ -37,9 +37,20 @@ class ChildStartError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class ChildExit:
-    """How a child ended, in words fit for a release's ``status_reason``."""
+    """How a child ended, in words fit for a release's ``status_reason``.
+
+    ``code`` (the exit status) or ``signal`` (the name of the signal that ended it, ``SIGKILL``) is
+    set when the end was a plain exit; both stay ``None`` when something else ended it first (the
+    run-directory watchdog, say), and ``description`` then says what.
+    """
 
     description: str
+    code: int | None = None
+    signal: str | None = None
+
+
+# Where a line of a child's output came from; ``appmux`` is a line appmux wrote about the child.
+OutputStream = Literal["stdout", "stderr", "appmux"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,8 +95,12 @@ class RunningChild(Protocol):
         """Ask the child to stop, kill it after ``grace_s``, and return how it ended."""
         ...
 
-    def log_tail(self) -> str:
-        """The end of the child's own output; may hold anything the child printed."""
+    def read_output(self, *, final: bool = False) -> list[tuple[OutputStream, str]]:
+        """The complete lines the child wrote since the last call, oldest first, with their stream.
+
+        ``final`` (the child has ended) also returns a last line that has no newline. A line may
+        hold anything the child printed, credentials included; the caller masks it.
+        """
         ...
 
 

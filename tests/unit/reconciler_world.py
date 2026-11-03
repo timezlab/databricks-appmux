@@ -64,6 +64,7 @@ class World:
         probe_answer: Any = 200,
         watch_interval_s: float | None = None,
         probe: Any = None,
+        output_poll_s: float | None = None,
     ) -> None:
         self.registry = stub_registry_class()()
         self.clock = FakeClock()
@@ -87,6 +88,7 @@ class World:
             memory_limit_mb=memory_limit_mb,
             memory_reserve_mb=lambda: reserve_mb,
             watch_interval_s=watch_interval_s,
+            output_poll_s=output_poll_s,
         )
 
     def _log_status_writes(self) -> None:

@@ -16,6 +16,7 @@ from appmux.registry.releases import (
     LOG_TAIL_LINES,
     MAX_LOG_TAIL_CHARS,
     MAX_REASON_CHARS,
+    START_LOG_TAIL_LINES,
     activation_changes,
     clean_log_tail,
     clean_reason,
@@ -233,3 +234,38 @@ def test_a_log_tail_is_cut_to_its_character_limit_from_the_front() -> None:
 
 def test_an_empty_log_tail_is_stored_as_nothing() -> None:
     assert clean_log_tail("  \n") is None
+
+
+def test_the_tail_of_a_failed_start_keeps_fifty_lines() -> None:
+    # Contract addendum: a failed start keeps the child's last 50 lines; a build keeps 40.
+    lines = [f"line {number}" for number in range(100)]
+
+    tail = clean_log_tail("\n".join(lines), lines=START_LOG_TAIL_LINES)
+
+    assert START_LOG_TAIL_LINES == 50
+    assert tail is not None
+    assert tail.splitlines()[0] == "line 50"
+
+
+async def test_a_failed_step_keeps_as_many_lines_as_it_is_given() -> None:
+    registry = registry_with_app()
+    seed_release(registry, "sales", 1, "starting")
+    release = registry.snapshot.release("sales", 1)  # type: ignore[attr-defined]
+    log = "\n".join(f"line {number}" for number in range(100))
+
+    change = release_status_change(
+        release, "failed", reason="x", log_tail=log, log_tail_lines=START_LOG_TAIL_LINES
+    )
+
+    assert len(change.values["build_log_tail"].splitlines()) == START_LOG_TAIL_LINES
+
+
+def test_a_credential_shape_in_a_log_tail_is_masked_before_it_is_stored() -> None:
+    token = "dapi" + "0a1b2c3d" * 4  # built at run time: no credential-shaped literal here
+
+    tail = clean_log_tail(f"connecting with {token}\nDATABRICKS_CLIENT_SECRET=abc123def")
+
+    assert tail is not None
+    assert token not in tail
+    assert "abc123def" not in tail
+    assert tail.splitlines() == ["connecting with ***", "DATABRICKS_CLIENT_SECRET=***"]
