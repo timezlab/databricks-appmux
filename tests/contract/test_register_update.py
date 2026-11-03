@@ -486,6 +486,32 @@ async def test_a_platform_admin_the_owner_and_a_can_manage_holder_read_the_app_p
     assert harness.is_untouched()
 
 
+async def test_the_app_page_lists_a_service_principal_grant() -> None:
+    # T188, ADR 0020: an App's service principal is named by its application id (a made-up one).
+    application_id = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
+    registry = seeded_registry()
+    registry.seed(
+        "app_grants",
+        {
+            "app_slug": "sales",
+            "principal_type": "service_principal",
+            "principal": application_id,
+            "permission": "CAN_USE",
+            "granted_by": CAROL,
+            "granted_at": NOW,
+        },
+    )
+    harness = Harness(registry)
+
+    reply = await harness.request("GET", "/apps/sales", CAROL)
+
+    assert reply.status == 200
+    detail = AppDetail.model_validate_json(reply.body)
+    assert ("service_principal", application_id, "CAN_USE") in [
+        (g.type, g.name, g.permission) for g in detail.grants
+    ]
+
+
 async def test_a_person_who_can_only_use_the_app_gets_403_on_its_page() -> None:
     harness = Harness()
 

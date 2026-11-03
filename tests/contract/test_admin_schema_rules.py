@@ -79,9 +79,57 @@ def test_a_user_is_a_lower_case_email(name: str) -> None:
     refused(schemas.GrantRequest, grant(type="user", name=name), "lower case")
 
 
-def test_a_grant_type_is_one_of_three() -> None:
+def test_a_grant_type_is_one_of_four() -> None:
     with pytest.raises(ValidationError):
         schemas.GrantRequest.model_validate(grant(type="team", name="x"))
+
+
+SALES_BOT = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
+
+
+def test_a_service_principal_is_named_by_its_application_id_and_is_can_use() -> None:
+    accepted(schemas.GrantRequest, grant(type="service_principal", name=SALES_BOT))
+
+
+def test_a_service_principal_is_never_can_manage() -> None:
+    refused(
+        schemas.GrantRequest,
+        grant(type="service_principal", name=SALES_BOT, permission="CAN_MANAGE"),
+        "a service principal is CAN_USE only",
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "sales-bot",
+        SALES_BOT.upper(),
+        SALES_BOT.replace("-", ""),
+        "{" + SALES_BOT + "}",
+        SALES_BOT + "\n",
+        " " + SALES_BOT,
+        SALES_BOT[:-1] + "g",
+        "*",
+        "",
+    ],
+    ids=[
+        "a-name",
+        "upper-case",
+        "no-dashes",
+        "braces",
+        "newline",
+        "space",
+        "not-hex",
+        "star",
+        "empty",
+    ],
+)
+def test_a_service_principal_name_that_is_not_a_lower_case_uuid_is_refused(name: str) -> None:
+    refused(
+        schemas.GrantRequest,
+        grant(type="service_principal", name=name),
+        "application id",
+    )
 
 
 @pytest.mark.parametrize(

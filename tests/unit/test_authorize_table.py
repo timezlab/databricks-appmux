@@ -36,6 +36,8 @@ from appmux.settings import PlatformAdmin
 
 SALES = "sales"
 DOCS = "docs"
+# An App's service principal reaches appmux with its application id as X-Forwarded-Email.
+SALES_BOT = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab"
 
 
 class Kind(StrEnum):
@@ -48,6 +50,7 @@ class Kind(StrEnum):
     GROUP_MANAGER = "group_manager"
     GROUP_UNKNOWN = "group_unknown"
     PLATFORM_ADMIN = "platform_admin"
+    SERVICE_PRINCIPAL = "service_principal"
 
 
 def make_data(*, user_authorization: bool = True) -> AuthzData:
@@ -60,6 +63,7 @@ def make_data(*, user_authorization: bool = True) -> AuthzData:
             Grant("user", "carol@example.com", Permission.CAN_MANAGE),
             Grant("group", "sales-team", Permission.CAN_USE),
             Grant("group", "sales-admins", Permission.CAN_MANAGE),
+            Grant("service_principal", SALES_BOT, Permission.CAN_USE),
         ),
     )
     docs = AppAccess(
@@ -94,6 +98,8 @@ WHO: dict[Kind, Who] = {
     Kind.GROUP_MANAGER: Who("heidi@example.com", SALES, frozenset({"sales-admins"})),
     Kind.GROUP_UNKNOWN: Who("bob@example.com", SALES, None),
     Kind.PLATFORM_ADMIN: Who("dana@example.com", SALES, frozenset()),
+    # The group lookup is the visitor's own SCIM `Me`; a service principal has no group to match.
+    Kind.SERVICE_PRINCIPAL: Who(SALES_BOT, SALES, None),
 }
 
 NOBODY: frozenset[Kind] = frozenset()
@@ -108,6 +114,7 @@ CAN_OPEN = frozenset(
         Kind.GROUP_MEMBER,
         Kind.GROUP_MANAGER,
         Kind.PLATFORM_ADMIN,
+        Kind.SERVICE_PRINCIPAL,
     }
 )
 # Kinds that hold CAN_MANAGE on their app: a CAN_MANAGE user or group grant, the owner, and a
@@ -397,6 +404,62 @@ def test_everyone_is_can_use_at_most_even_if_the_stored_row_says_more() -> None:
     actor = Actor(email="anyone@example.com")
     assert authorize(actor, Action.APP_OPEN, "x", data, groups=frozenset()).allowed
     assert not authorize(actor, Action.RELEASE_ACTIVATE, "x", data, groups=frozenset()).allowed
+
+
+# --- A service principal's grant (ADR 0020) ---------------------------------------------------
+
+
+def test_a_service_principal_grant_matches_the_forwarded_application_id_in_any_case() -> None:
+    data = make_data()
+    for identity in (SALES_BOT, SALES_BOT.upper()):
+        result = authorize(Actor(email=identity), Action.APP_OPEN, SALES, data, groups=None)
+        assert result == Decision(True, Reason.SERVICE_PRINCIPAL_GRANT, Permission.CAN_USE)
+
+
+def test_a_service_principal_grant_does_not_match_another_application_id() -> None:
+    other = "0e9d8c7b-6a5f-4e3d-9c2b-1a0f9e8d7c6b"
+    result = authorize(Actor(email=other), Action.APP_OPEN, SALES, make_data(), groups=None)
+    assert result == Decision(False, Reason.NO_ACCESS, None)
+
+
+def test_a_service_principal_grant_needs_no_groups_and_no_user_authorization() -> None:
+    data = make_data(user_authorization=False)
+    result = authorize(Actor(email=SALES_BOT), Action.APP_OPEN, SALES, data, groups=None)
+    assert result.allowed
+
+
+def test_a_service_principal_is_can_use_at_most_even_if_the_stored_row_says_more() -> None:
+    # As for everyone: the shared-SP token can write app_grants, so a forged row must not widen.
+    app = AppAccess(
+        slug="x",
+        owner="o@example.com",
+        grants=(Grant("service_principal", SALES_BOT, Permission.CAN_MANAGE),),
+    )
+    data = AuthzData(apps={"x": app}, platform_admins=(), user_authorization=True)
+    actor = Actor(email=SALES_BOT)
+    assert authorize(actor, Action.APP_OPEN, "x", data, groups=None) == Decision(
+        True, Reason.SERVICE_PRINCIPAL_GRANT, Permission.CAN_USE
+    )
+    assert not authorize(actor, Action.APP_VIEW, "x", data, groups=None).allowed
+
+
+def test_a_service_principal_cannot_be_granted_can_manage() -> None:
+    manage = GrantChange("service_principal", SALES_BOT, Permission.CAN_MANAGE)
+    assert check_grant_change("alice@example.com", manage) is Reason.SERVICE_PRINCIPAL_CAN_USE_ONLY
+    for allowed in (
+        GrantChange("service_principal", SALES_BOT, Permission.CAN_USE),
+        GrantChange("service_principal", SALES_BOT, None),
+    ):
+        assert check_grant_change("alice@example.com", allowed) is None
+    result = authorize(
+        Actor(email="alice@example.com"),
+        Action.GRANT_APP,
+        SALES,
+        make_data(),
+        groups=frozenset(),
+        change=manage,
+    )
+    assert result == Decision(False, Reason.SERVICE_PRINCIPAL_CAN_USE_ONLY, Permission.CAN_MANAGE)
 
 
 def test_matching_is_case_insensitive_for_emails_and_group_names() -> None:
