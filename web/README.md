@@ -215,7 +215,8 @@ are in `e2e/fixtures-f4.ts`.
     the bottom, not one button per row.
 - **Charts.** shadcn's chart component over Recharts, patched in
   `src/components/ui/chart.tsx` to emit no runtime `<style>`; series colours are the fixed
-  `--chart-1..6` tokens.
+  `--chart-1..8` tokens. Each of the breakdown's eight apps has its own colour and texture,
+  and only the first is plain (`tests/contract/chart-tones.test.ts`).
 - **Links.** An `href` or `src` is a literal path on this origin, the result of
   `appLink(slug)` or `appPagePath(slug)`, or an entry of `TRUSTED_EXPRESSIONS` in
   `tests/contract/markup-rules.test.ts`. Never build one from API text. That test reads the

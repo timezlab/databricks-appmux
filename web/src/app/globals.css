@@ -161,6 +161,8 @@
   --chart-4: #7e22ce;
   --chart-5: #946200;
   --chart-6: #be185d;
+  --chart-7: #0e7490;
+  --chart-8: #4d7c0f;
 }
 
 /* The Light choice: the colours above, and light native controls on a dark OS. */
@@ -222,6 +224,8 @@
   --chart-4: #c79bff;
   --chart-5: #e5b94a;
   --chart-6: #ff8fb8;
+  --chart-7: #4cc9e0;
+  --chart-8: #a8d45a;
 }
 
 /* System (or no choice) on a dark OS: the values of the block above. CSS
@@ -277,6 +281,8 @@
     --chart-4: #c79bff;
     --chart-5: #e5b94a;
     --chart-6: #ff8fb8;
+    --chart-7: #4cc9e0;
+    --chart-8: #a8d45a;
   }
 }
 
@@ -331,6 +337,8 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
   --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
 }
 
 /* ------------------------------------------------------------------ base

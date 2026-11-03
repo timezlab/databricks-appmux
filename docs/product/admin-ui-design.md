@@ -55,7 +55,7 @@ thresholds, in both schemes: 4.5:1 for text, 3:1 for control edges, bars and the
 | danger | `destructive`, `destructive-hover`, `destructive-foreground` | `#b3261e`, `#8f1d17`, `#ffffff` | `#ff8077`, `#ffa099`, `#2a0705` | destructive actions only |
 | strip | `strip`, `strip-foreground`, `strip-border` | `#f1e8c6`, `#3a3010`, `#cdbf8a` | `#2d2812`, `#ede0a8`, `#5a4e22` | the route strip only |
 | lamps | `tone-*` | unchanged | unchanged | the lamp dots, notices |
-| charts | `chart-1..6` | unchanged | unchanged | chart series |
+| charts | `chart-1..8` | `chart-1..6` unchanged; `chart-7` `#0e7490`, `chart-8` `#4d7c0f` | `chart-1..6` unchanged; `chart-7` `#4cc9e0`, `chart-8` `#a8d45a` | chart series; one hue per app of the breakdown |
 
 The `chrome-*` tokens (the dark header band) and `brand` are removed; the header is the page colour with one hairline
 under it. Radius is a scale, not one value: `rounded-strip` 3 px (the strip), `rounded-control` 8 px (buttons,

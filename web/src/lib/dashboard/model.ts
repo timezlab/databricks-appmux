@@ -71,12 +71,13 @@ export type ChartTone =
 /**
  * The pattern laid over a mark (and its legend swatch) besides its colour. The
  * tones differ little in lightness, so a person who cannot tell the hues apart
- * still tells a plain segment from a striped one from a dotted one. The app
- * tones alternate plain and striped, so two neighbours in a stack always differ
- * in pattern; the six tokens fail the colour-blind check between some
- * neighbours (`--chart-2` and `--chart-3` in dark mode), and the pattern is
- * what tells those apart. Apps 7 and 8 reuse the first two hues (7 dotted, 8
- * plain), and the grey of `other`, close in lightness to some hues, is dotted.
+ * still tells a plain segment from a striped one from a dotted one. Each app
+ * has a hue of its own (`--chart-1..8`), and only the first app is plain: two
+ * plain apps would differ by hue alone (tests/contract/chart-tones.test.ts).
+ * The others alternate striped and dotted, so two neighbours in a stack always
+ * differ in pattern; some neighbouring tokens fail the colour-blind check
+ * (`--chart-2` and `--chart-3` in dark mode), and the pattern is what tells
+ * those apart. The grey of `other`, on top of the striped eighth app, is dotted.
  */
 export type ToneTexture = "none" | "stripes" | "dots";
 
@@ -86,12 +87,12 @@ export const TONE_TEXTURE: Record<ChartTone, ToneTexture> = {
   danger: "dots",
   "series-1": "none",
   "series-2": "stripes",
-  "series-3": "none",
+  "series-3": "dots",
   "series-4": "stripes",
-  "series-5": "none",
+  "series-5": "dots",
   "series-6": "stripes",
   "series-7": "dots",
-  "series-8": "none",
+  "series-8": "stripes",
   other: "dots",
 };
 
