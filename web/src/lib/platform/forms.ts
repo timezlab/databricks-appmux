@@ -81,3 +81,13 @@ export function formFailure(message: string): {
 } {
   return { ok: false, errors: { [FORM_ERROR_KEY]: message } };
 }
+
+/** The memory budget's own message when `parseWholeNumber` refused the text. */
+export function memoryProblem(text: string): string {
+  return text.trim() === "" ? "is required" : "must be a whole number of MB";
+}
+
+/** The page's own check of a slug that another app already has; the server says the same in its 409. */
+export function slugTaken(slug: string): string {
+  return `slug '${slug}' is already taken`;
+}

@@ -10,11 +10,11 @@ import {
   appFieldsKey,
   appOwnerKey,
   parseAppFieldsForm,
-  renameOutcome,
+  renameMessage,
   parseOwnerForm,
-} from "@/lib/platform/apps";
+} from "@/lib/app/settings";
 import type { ActionOutcome } from "@/lib/platform/action";
-import type { AppFieldsValues } from "@/lib/platform/apps";
+import type { AppFieldsValues } from "@/lib/app/settings";
 import { Card } from "@/components/ui/card";
 import { AppLink } from "@/components/app-link";
 import { Button } from "@/components/button";
@@ -138,7 +138,11 @@ function AppFieldsForm({
       if (detail.slug === app.slug) {
         return { tone: "success", title: `Saved ${detail.slug}` };
       }
-      const outcome = renameOutcome(app.slug, detail.slug);
+      const outcome: ActionOutcome = {
+        tone: "success",
+        title: `Renamed ${app.slug} to ${detail.slug}`,
+        detail: renameMessage(app.slug, detail.slug),
+      };
       // This form is replaced when the renamed app arrives; the list shows the outcome.
       onRenamed(app.slug, detail.slug, outcome);
       return outcome;
