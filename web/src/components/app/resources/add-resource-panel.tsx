@@ -22,6 +22,7 @@ import {
   typeDraftTarget,
 } from "@/lib/app/resources";
 import type {
+  AccessModeChoice,
   AttachDraft,
   AttachField,
   ResourceCatalogue,
@@ -89,7 +90,6 @@ export function AddResourcePanel({
   const entry = findResourceType(catalogue, draft.type);
   const takenKeys = app.resources.map((resource) => resource.key);
   const modes = entry === null ? [] : accessModeChoices(app, entry);
-  const authorizationPath = appPagePath(app.slug, "authorization");
 
   // The panel opens from a button press: the keyboard goes to its first field.
   useEffect(() => {
@@ -312,10 +312,7 @@ export function AddResourcePanel({
                     </Select>
                   )}
                 </Field>
-                <AccessModeHelp
-                  modes={modes}
-                  authorizationPath={authorizationPath}
-                />
+                <AccessModeHelp modes={modes} slug={app.slug} />
               </div>
             )}
 
@@ -367,13 +364,14 @@ export function AddResourcePanel({
 /** The modes that cannot be chosen, each with its reason and the way to get it when there is one. */
 function AccessModeHelp({
   modes,
-  authorizationPath,
+  slug,
 }: {
-  modes: ReturnType<typeof accessModeChoices>;
-  authorizationPath: string | null;
+  modes: readonly AccessModeChoice[];
+  slug: string;
 }) {
   const unavailable = modes.filter((mode) => !mode.isAvailable);
   if (unavailable.length === 0) return null;
+  const authorizationPath = appPagePath(slug, "authorization");
   return (
     <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
       {unavailable.map((mode) => (

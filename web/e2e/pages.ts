@@ -281,6 +281,43 @@ export const PAGES: readonly PageEntry[] = [
     dataText: "Requests per minute",
     apiCall: `${API_PREFIX}/metrics`,
   },
+  // Authorization and Resources mid-task (lane F2): a name typed into Who
+  // with the directory's suggestions open; the Add resource panel with a type
+  // and an object chosen.
+  {
+    name: "app-authorization-suggestions",
+    path: `${BASE_PATH}/app/authorization/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: "carol@example.com",
+    apiCall: APP_API_CALL,
+    act: async (page) => {
+      await page.getByRole("combobox", { name: /^Who/ }).click();
+      await page.getByPlaceholder(/Type a name/).fill("erin");
+      await page
+        .getByRole("option", { name: /Erin Ng/ })
+        .waitFor({ timeout: READY_TIMEOUT_MS });
+    },
+  },
+  {
+    name: "app-resources-add",
+    path: `${BASE_PATH}/app/resources/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: "forecast-model",
+    apiCall: APP_API_CALL,
+    act: async (page) => {
+      await page.getByRole("button", { name: "Add resource" }).click();
+      await page.getByRole("combobox", { name: /^Type/ }).click();
+      await page.getByRole("option", { name: /^SQL warehouse/ }).click();
+      const object = page.getByRole("combobox", { name: /^SQL warehouse/ });
+      await object.click();
+      await page.getByRole("option", { name: "Shared Serverless" }).click();
+      await page
+        .getByRole("button", { name: "Clear Shared Serverless" })
+        .waitFor({ timeout: READY_TIMEOUT_MS });
+    },
+  },
 ];
 
 /** A path no page of the export answers: the edge serves the export's 404 page for it. */
