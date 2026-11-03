@@ -195,12 +195,11 @@ export function principalRows(
   ];
 }
 
-const DIRECTORY_NAMES: ReadonlyArray<[keyof PrincipalList["sources"], string]> =
-  [
-    ["users", "users"],
-    ["groups", "groups"],
-    ["service_principals", "service principals"],
-  ];
+const DIRECTORY_NAMES: readonly [keyof PrincipalList["sources"], string][] = [
+  ["users", "users"],
+  ["groups", "groups"],
+  ["service_principals", "service principals"],
+];
 
 function joinWords(words: readonly string[]): string {
   if (words.length <= 1) return words.join("");
