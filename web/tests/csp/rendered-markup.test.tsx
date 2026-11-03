@@ -452,8 +452,6 @@ const UI_SAMPLES: Record<string, () => ReactElement> = {
       </UiButton>
     </>
   ),
-  // A chart is drawn only after the browser has taken over; the server HTML is
-  // the placeholder (and the tooltip card, which is plain text).
   "collapsible.tsx": () => (
     <>
       <Collapsible>
@@ -499,6 +497,8 @@ const UI_SAMPLES: Record<string, () => ReactElement> = {
   ),
   "toggle-group.tsx": () => <ToggleGroupSample />,
   "tooltip.tsx": () => <TooltipSample />,
+  // A chart is drawn only after the browser has taken over; the server HTML is
+  // the placeholder (and the tooltip card, which is plain text).
   "chart.tsx": () => (
     <>
       <ChartContainer
