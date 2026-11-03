@@ -102,6 +102,10 @@ export function ResourceObjectField({
     text: "",
   });
   const [lastList, setLastList] = useState<ResourceSuggestionList | null>(null);
+  // The highlighted row (Enter picks it). Held here so an answer that arrives
+  // after the typing moves it to the first object: on its own, the list would
+  // keep the Use row it highlighted while it was the only row.
+  const [highlighted, setHighlighted] = useState("");
   const searchRef = useRef<DebouncedSearch | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const noteId = useId();
@@ -140,7 +144,11 @@ export function ResourceObjectField({
       run: (query, signal) => suggestResources({ type, q: query }, { signal }),
       onOutcome: (outcome) => {
         setState(outcome);
-        if (outcome.status === "done") setLastList(outcome.result);
+        if (outcome.status === "done") {
+          setLastList(outcome.result);
+          const [first] = outcome.result.items;
+          if (first !== undefined) setHighlighted(`object:${first.target}`);
+        }
       },
     });
     searchRef.current = search;
@@ -284,6 +292,8 @@ export function ResourceObjectField({
             label={`Choose the ${entry.label}`}
             shouldFilter={false}
             loop
+            value={highlighted}
+            onValueChange={setHighlighted}
           >
             <CommandInput
               placeholder={

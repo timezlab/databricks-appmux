@@ -155,6 +155,38 @@ describe("AddResourcePanel", () => {
     });
   });
 
+  it("highlights the first object once the answer arrives, even when the text was typed before it", async () => {
+    stubCalls({
+      // Nothing to show before a name is typed; the search finds two.
+      suggest: (url) =>
+        url.searchParams.has("q")
+          ? jsonResponse(200, SUGGESTED)
+          : jsonResponse(200, {
+              items: [],
+              truncated: false,
+              source: "caller_token",
+              note: null,
+            }),
+    });
+    const { user } = renderPanel();
+    await chooseType(user, /^SQL warehouse/);
+    const object = screen.getByRole("combobox", { name: /^SQL warehouse/ });
+    await waitFor(() => {
+      expect(object).toBeEnabled();
+    });
+
+    await user.click(object);
+    await user.paste("re");
+    const first = await screen.findByRole("option", { name: "Reporting" });
+    await waitFor(() => {
+      expect(first).toHaveAttribute("aria-selected", "true");
+    });
+    expect(screen.getByRole("option", { name: "Use “re”" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
   it("turns off an access mode the app does not have, with the reason, and says how to ask for one", async () => {
     stubCalls();
     const { user } = renderPanel();
