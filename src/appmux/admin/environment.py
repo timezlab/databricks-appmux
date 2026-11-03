@@ -6,20 +6,23 @@ the person. What it shows:
 
 * ``runtime``: the release's runtime, the platform's Python (every child runs the parent's) and
   the platform's Node.js (``node --version``, run once per process without a shell);
-* ``variables``: the layering of ``sandbox/environment.py`` read back. The ``env`` entries of the
-  release's ``app.yaml``, then those of its config, each with its value, or, for a ``valueFrom``,
-  its resource key and the resource's target (a ``secret`` shows no value at all); then the
-  variables appmux sets for every child (``appmux_variables``), which win over both. The
-  credential variables of the app's Databricks mode (design 8.5) are left out: their values are
-  credentials and their names depend on a secret's state;
+* ``variables``: the layering of ``sandbox/environment.py`` read back, without its credential
+  layer. The ``env`` entries of the release's ``app.yaml``, then those of its config, each with
+  its value, or, for a ``valueFrom``, its resource key and the resource's target (a ``secret``
+  shows no value at all); then the variables appmux sets for every child (``appmux_variables``),
+  which win over both. The credential variables of the app's Databricks mode (design 8.5) are
+  left out: their values are credentials and their names depend on a secret's state. At start
+  they also replace an ``env`` entry of the same name, so such an entry is shown here with its
+  own value although the child gets the credential in its place;
 * ``packages``: what the release declares in its built directory (``requirements.txt``, the
   ``dependencies`` and ``devDependencies`` of ``package.json``), each in declaration order, the
   wheels it recorded, and, for a Python app, the distributions of the platform's environment.
 
-A declared line that is not a plain requirement (a URL, a path, an option, another file) is left
-out without being echoed, because a URL can hold a credential. A release that this container has
-not built (an app not started since appmux started) has no directory, so it lists no declared
-package. Nothing is audited: this is a read of what an app admin can already see on the release.
+A declared line or dependency that is not a plain requirement or version (a URL, a git or path
+specifier, an option, another file, an npm alias or workspace) is left out without being echoed,
+because a URL can hold a credential. A release that this container has not built (an app not
+started since appmux started) has no directory, so it lists no declared package. Nothing is
+audited: this is a read of what an app admin can already see on the release.
 """
 
 from __future__ import annotations
@@ -68,6 +71,9 @@ _PACKAGE_JSON_SECTIONS: Final = ("dependencies", "devDependencies")
 # `pip` ends a comment at a '#' that starts the line or follows whitespace.
 _INLINE_COMMENT: Final = re.compile(r"(^|\s)#.*$")
 _NODE_VERSION: Final = re.compile(r"v(\d+\.\d+\.\d+[0-9A-Za-z.+-]*)")
+# A semver range (``^1.2.0``, ``>=1 <2 || 3.x``, ``*``) or a dist-tag (``latest``); npm reads a
+# specifier that starts with a dot as a directory.
+_PLAIN_NPM_VERSION: Final = re.compile(r"(?!\.)[0-9A-Za-z.+*^~<>=| _-]*")
 
 NodeVersionSource = Callable[[], Awaitable[str | None]]
 RuntimeKind = Literal["python", "node", "unknown"]
@@ -166,6 +172,12 @@ class EnvironmentRoutes:
     def _variables(
         self, release: Release, resources: Sequence[AppResource]
     ) -> list[EnvironmentVariable]:
+        """The child's variables by layer, except the credentials of the app's mode.
+
+        The identity is built without credentials on purpose: listing them would name variables
+        whose values are credentials, and their names depend on a secret's state. So an ``env``
+        entry that one of them replaces at start is shown here with its own value.
+        """
         by_key = {resource.key: resource for resource in resources}
         rows: dict[str, EnvironmentVariable] = {}
         # Later wins, as in ``build_child_environment``: app.yaml, the release's config, appmux.
@@ -296,6 +308,8 @@ def _package_json_rows(text: str) -> list[EnvironmentPackage]:
         if not isinstance(dependencies, dict):
             continue
         for name, version in dependencies.items():
+            if isinstance(version, str) and not _is_plain_npm_version(version):
+                continue  # a URL, git, path, alias or workspace specifier; never echoed
             rows.append(
                 EnvironmentPackage(
                     name=name,
@@ -304,6 +318,16 @@ def _package_json_rows(text: str) -> list[EnvironmentPackage]:
                 )
             )
     return rows
+
+
+def _is_plain_npm_version(specifier: str) -> bool:
+    """Whether ``specifier`` is a version, a range or a dist-tag, which npm resolves by name.
+
+    An allow-list, so a specifier shape not named here is left out rather than shown: every other
+    kind (``git+https://``, ``file:``, ``link:``, ``workspace:``, ``npm:`` aliases, ``org/repo``,
+    ``../path``) has a ``:``, a ``/``, a ``#``, an ``@`` or a leading ``.``, which this refuses.
+    """
+    return _PLAIN_NPM_VERSION.fullmatch(specifier) is not None
 
 
 def _wheel_package(filename: str) -> EnvironmentPackage:

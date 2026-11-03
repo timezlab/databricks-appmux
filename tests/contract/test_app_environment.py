@@ -43,10 +43,33 @@ httpx[http2] \\
 -r more.txt
 private @ https://token-in-url@example.com/private.whl
 """
+URL_CREDENTIAL: Final = "deploy:pass-in-the-url"
+# What npm or pnpm fetches from somewhere rather than resolves from a version: left out, name and
+# all, as a URL or path line of requirements.txt is.
+NOT_A_VERSION: Final = {
+    "lib-by-git": f"git+https://{URL_CREDENTIAL}@git.example.com/org/lib.git",
+    "lib-by-ssh": "git+ssh://git@git.example.com:org/lib.git#v1.0.0",
+    "lib-by-url": "https://downloads.example.com/lib-1.0.0.tgz",
+    "lib-by-github": "github:org/lib",
+    "lib-by-shorthand": "org/lib#main",
+    "lib-by-file": "file:../shared",
+    "lib-by-link": "link:../linked",
+    "lib-by-workspace": "workspace:*",
+    "lib-by-alias": "npm:other-lib@^1.0.0",
+    "lib-by-path": "../vendor/lib",
+    "lib-by-dot": "./vendor/lib",
+    "lib-by-home": "~/vendor/lib",
+    "lib-by-root": "/srv/vendor/lib",
+}
 PACKAGE_JSON: Final = {
     "name": "front",
-    "dependencies": {"next": "^15.0.0", "react": "19.0.0"},
-    "devDependencies": {"typescript": "~5.6.0"},
+    "dependencies": {"next": "^15.0.0", "react": "19.0.0", **NOT_A_VERSION},
+    "devDependencies": {
+        "typescript": "~5.6.0",
+        "eslint": ">=8.0.0 <10 || 10.x",
+        "prettier": "latest",
+        "vitest": "*",
+    },
 }
 
 
@@ -231,6 +254,9 @@ def test_the_packages_are_the_releases_the_wheels_and_the_platforms(env: Environ
         ("next", "^15.0.0"),
         ("react", "19.0.0"),
         ("typescript", "~5.6.0"),
+        ("eslint", ">=8.0.0 <10 || 10.x"),
+        ("prettier", "latest"),
+        ("vitest", "*"),
     ]
     assert [(p.name, p.version) for p in packages if p.source == "wheel"] == [
         ("acme-tools", "1.2.0")
@@ -238,6 +264,8 @@ def test_the_packages_are_the_releases_the_wheels_and_the_platforms(env: Environ
     platform_rows = {p.name: p.version for p in packages if p.source == "platform"}
     assert platform_rows["pydantic"] == metadata.version("pydantic")
     for leaked in ("hunter2", "token-in-url", "private", "more.txt"):
+        assert leaked not in reply.text
+    for leaked in ("lib-by-", "pass-in-the-url", "git.example.com", "downloads.", "../"):
         assert leaked not in reply.text
 
 
