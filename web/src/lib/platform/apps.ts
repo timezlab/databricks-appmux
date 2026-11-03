@@ -10,7 +10,13 @@
  * later.
  */
 import { RegisterAppRequest } from "@/lib/api/schemas";
-import type { PlatformApp } from "@/lib/api/schemas";
+import type {
+  AppState,
+  AppSummary,
+  PlatformApp,
+  RequestRow,
+} from "@/lib/api/schemas";
+import { pendingChangeRequestCount } from "@/lib/app/sections";
 import {
   formErrors,
   memoryProblem,
@@ -18,6 +24,44 @@ import {
   slugTaken,
 } from "./forms";
 import type { FormParse } from "./forms";
+
+// --------------------------------------------------------------------- rows
+
+/** One row of the Apps area: the platform's fields, with what the app list and the requests add. */
+export interface PlatformAppRow {
+  slug: string;
+  displayName: string;
+  owner: string;
+  memoryBudgetMb: number;
+  /** `null` while the app list has not loaded, or before it holds an app just registered. */
+  state: AppState | null;
+  /** Settings and delegation requests waiting for an answer; `null` while the requests are unknown. */
+  pendingRequests: number | null;
+}
+
+/**
+ * The rows of the Apps area, in the platform's order. `GET /platform` has no
+ * state, so it comes from the app list (`GET /apps`), matched by slug; the
+ * count is the one the app's own sidebar shows on Requests.
+ */
+export function platformAppRows(
+  apps: readonly PlatformApp[],
+  summaries: readonly AppSummary[] | null,
+  requests: readonly RequestRow[] | null,
+): PlatformAppRow[] {
+  const stateOf = new Map(
+    (summaries ?? []).map((summary) => [summary.slug, summary.state]),
+  );
+  return apps.map((app) => ({
+    slug: app.slug,
+    displayName: app.display_name,
+    owner: app.owner,
+    memoryBudgetMb: app.memory_budget_mb,
+    state: stateOf.get(app.slug) ?? null,
+    pendingRequests:
+      requests === null ? null : pendingChangeRequestCount(requests, app.slug),
+  }));
+}
 
 // ------------------------------------------------------------------- filter
 

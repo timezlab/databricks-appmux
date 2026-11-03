@@ -7,9 +7,8 @@ import { REASON_NOT_MANAGER, REASON_UNKNOWN_ACTOR } from "@/lib/app/actions";
 import {
   NODE_MEMORY_MIN_MB,
   appFieldsFormValues,
-  appFieldsKey,
-  appOwnerKey,
   appSettingsFormValues,
+  appSettingsKey,
   carriedOutcome,
   carryOutcome,
   dropCarriedOutcome,
@@ -153,22 +152,21 @@ describe("parseOwnerForm", () => {
   });
 });
 
-describe("form keys", () => {
-  it("change when a field the form shows changes, and not when only the version moves", () => {
+describe("appSettingsKey", () => {
+  it("changes when a field the form shows changes, and not when only the version moves", () => {
     const before = app();
-    assert.equal(appFieldsKey(before), appFieldsKey(app({ version: 9 })));
+    assert.equal(appSettingsKey(before), appSettingsKey(app({ version: 9 })));
     assert.notEqual(
-      appFieldsKey(before),
-      appFieldsKey(app({ display_name: "x" })),
+      appSettingsKey(before),
+      appSettingsKey(app({ display_name: "x" })),
     );
     assert.notEqual(
-      appFieldsKey(before),
-      appFieldsKey(app({ memory_budget_mb: 256 })),
+      appSettingsKey(before),
+      appSettingsKey(app({ memory_budget_mb: 256 })),
     );
-    assert.equal(appOwnerKey(before), appOwnerKey(app({ version: 9 })));
     assert.notEqual(
-      appOwnerKey(before),
-      appOwnerKey(app({ owner: "bob@example.com" })),
+      appSettingsKey(before),
+      appSettingsKey(app({ owner: "bob@example.com" })),
     );
   });
 });

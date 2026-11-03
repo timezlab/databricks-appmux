@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
-import type { PlatformApp } from "@/lib/api/schemas";
+import type { AppSummary, PlatformApp, RequestRow } from "@/lib/api/schemas";
 import {
   EMPTY_REGISTER_FORM,
   filterApps,
   parseRegisterForm,
+  platformAppRows,
 } from "@/lib/platform/apps";
 
 function app(overrides: Partial<PlatformApp> = {}): PlatformApp {
@@ -161,5 +162,84 @@ describe("parseRegisterForm", () => {
         slug: "slug 'sales' is already taken",
       });
     }
+  });
+});
+
+describe("platformAppRows", () => {
+  function summary(slug: string, state: AppSummary["state"]): AppSummary {
+    return {
+      slug,
+      display_name: slug,
+      state,
+      permission: "CAN_MANAGE",
+      open_modes: ["as_user"],
+    };
+  }
+
+  function request(
+    slug: string,
+    kind: RequestRow["kind"],
+    status: RequestRow["status"],
+  ): RequestRow {
+    return {
+      request_id: 1,
+      app_slug: slug,
+      kind,
+      payload: {},
+      reason: "the dashboard moved",
+      requested_by: "alice@example.com",
+      requested_at: "2026-10-30T09:35:00Z",
+      status,
+      closed_by: null,
+      closed_at: null,
+      closed_note: null,
+      current: null,
+      requires_reason: false,
+      app_version: null,
+    };
+  }
+
+  it("keeps the platform's order and fields, with each app's state from the app list", () => {
+    const rows = platformAppRows(
+      APPS,
+      [summary("reports", "stopped"), summary("sales", "running")],
+      [],
+    );
+    assert.deepEqual(
+      rows.map((row) => [row.slug, row.state, row.memoryBudgetMb]),
+      [
+        ["sales", "running", 512],
+        ["reports", "stopped", 512],
+        ["hr-tools", null, 512],
+      ],
+    );
+    assert.equal(rows[0]?.displayName, "Sales dashboard");
+  });
+
+  it("has no state while the app list has not loaded", () => {
+    assert.deepEqual(
+      platformAppRows(APPS, null, []).map((row) => row.state),
+      [null, null, null],
+    );
+  });
+
+  it("counts each app's pending settings and delegation requests, not its register request or closed ones", () => {
+    const rows = platformAppRows(APPS, null, [
+      request("sales", "settings", "pending"),
+      request("sales", "delegation", "pending"),
+      request("sales", "settings", "denied"),
+      request("reports", "register", "pending"),
+    ]);
+    assert.deepEqual(
+      rows.map((row) => row.pendingRequests),
+      [2, 0, 0],
+    );
+  });
+
+  it("counts nothing while the requests are unknown", () => {
+    assert.deepEqual(
+      platformAppRows(APPS, null, null).map((row) => row.pendingRequests),
+      [null, null, null],
+    );
   });
 });

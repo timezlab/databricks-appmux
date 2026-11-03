@@ -1,6 +1,7 @@
 "use client";
 
 import { SETTING_GROUPS } from "@/lib/platform/sections";
+import { pollData } from "@/lib/poll/data";
 import { JumpLinks } from "@/components/jump-links";
 import { AdminsSection } from "./admins-section";
 import { AppsSection } from "./apps-section";
@@ -31,11 +32,13 @@ export function PlatformOverviewPage() {
   );
 }
 
+/** The apps, the memory each one's budget takes in the slot, and registering one. */
 export function PlatformAppsPage() {
-  const { view } = usePlatformData();
+  const { view, requests } = usePlatformData();
   return (
     <>
-      <AppsSection view={view} />
+      <AppsSection view={view} requests={pollData(requests)?.items ?? null} />
+      <MemorySection view={view} />
       <RegisterSection view={view} />
     </>
   );

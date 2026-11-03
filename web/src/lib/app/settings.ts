@@ -56,20 +56,6 @@ export function appFieldsFormValues(app: AppFieldsSource): AppFieldsValues {
 }
 
 /**
- * What a form is keyed by in React: the values it starts from. The version is
- * left out on purpose. A write of another kind (a delegation, the egress rules)
- * moves the version, and a form being typed into must not be reset by that; the
- * submit reads the latest version from the polled app.
- */
-export function appFieldsKey(app: AppFieldsSource): string {
-  return JSON.stringify(Object.values(appFieldsFormValues(app)));
-}
-
-export function appOwnerKey(app: AppFieldsSource): string {
-  return JSON.stringify([app.slug, app.owner]);
-}
-
-/**
  * The body of `PATCH /apps/{app}`: only the fields that differ from `app`,
  * with `app.version`. `otherSlugs` are the slugs of every other app.
  */
@@ -150,7 +136,12 @@ export function appSettingsFormValues(app: AppFieldsSource): AppSettingsValues {
   return { ...appFieldsFormValues(app), owner: app.owner };
 }
 
-/** As `appFieldsKey`, for the whole form: the values it starts from, not the version. */
+/**
+ * What the form is keyed by in React: the values it starts from. The version is
+ * left out on purpose. A write of another kind (a delegation, the egress rules)
+ * moves the version, and a form being typed into must not be reset by that; the
+ * submit reads the latest version from the polled app.
+ */
 export function appSettingsKey(app: AppFieldsSource): string {
   return JSON.stringify(Object.values(appSettingsFormValues(app)));
 }
