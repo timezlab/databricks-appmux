@@ -1,13 +1,10 @@
 "use client";
 
-import { SectionPlaceholder } from "../section-placeholder";
+import { useAppPageContext } from "../app-context";
+import { EnvironmentPanel } from "../environment/environment-panel";
 
-/** `/app/environment/`: the app's runtime, variables and packages. */
+/** `/app/environment/`: the runtime, variables and packages the app starts with. */
 export function AppEnvironmentPage() {
-  return (
-    <SectionPlaceholder
-      title="Environment"
-      description="The app's runtime, its variables and where each comes from, and its packages will show here."
-    />
-  );
+  const { app } = useAppPageContext();
+  return <EnvironmentPanel slug={app.slug} />;
 }

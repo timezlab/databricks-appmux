@@ -233,10 +233,35 @@ describe("the rows", () => {
     assert.deepEqual(slugsOf(rows), ["a", "b"]);
   });
 
+  it("put what needs attention first: crashed, starting, stopped, then running, each by name", () => {
+    const rows = launcherAppRows([
+      summary({ slug: "a-run", display_name: "Alpha", state: "running" }),
+      summary({ slug: "z-stop", display_name: "Zulu", state: "stopped" }),
+      summary({ slug: "b-stop", display_name: "Bravo", state: "stopped" }),
+      summary({ slug: "m-start", display_name: "Mike", state: "starting" }),
+      summary({ slug: "y-crash", display_name: "Yankee", state: "crashed" }),
+    ]);
+    assert.deepEqual(slugsOf(rows), [
+      "y-crash",
+      "m-start",
+      "b-stop",
+      "z-stop",
+      "a-run",
+    ]);
+  });
+
   it("carry the name and the state as sent; the name stays text", () => {
     const row = onlyRow({ display_name: "<img src=x onerror=alert(1)>" });
     assert.equal(row.displayName, "<img src=x onerror=alert(1)>");
     assert.equal(row.state, "running");
+  });
+
+  it("say the person's level on each app in words", () => {
+    assert.equal(onlyRow({ permission: "CAN_USE" }).levelLabel, "Can use");
+    assert.equal(
+      onlyRow({ permission: "CAN_MANAGE" }).levelLabel,
+      "Can manage",
+    );
   });
 
   it("read the contract's AppList example", () => {
@@ -244,8 +269,9 @@ describe("the rows", () => {
     assert.deepEqual(
       rows.map((row) => [row.slug, row.open.kind, row.manageHref]),
       [
-        ["sales", "choose-mode", "/app/?slug=sales"],
+        // Stopped, so it comes first.
         ["docs", "unavailable", "/app/?slug=docs"],
+        ["sales", "choose-mode", "/app/?slug=sales"],
         ["reports", "open", "/app/?slug=reports"],
       ],
     );

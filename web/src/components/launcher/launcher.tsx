@@ -150,6 +150,10 @@ export function Launcher() {
         apps={apps}
         isPlatformAdmin={meData?.is_platform_admin ?? null}
         onReload={apps.refresh}
+        onRequestApp={() => {
+          setActionMessage(null);
+          setIsFormOpen(true);
+        }}
       />
 
       {shouldShowOwnRequests(ownSection) ? (

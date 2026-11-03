@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import {
   SOURCE_AUDIT_NOTICE,
   previewFile,
@@ -168,6 +170,13 @@ export function SourceViewerPanel({
 }: SourceViewerPanelProps) {
   const { state } = viewer;
   const { releaseNo } = state;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Opened from a row menu, which closes: the keyboard goes to the panel it opened.
+  useEffect(() => {
+    if (releaseNo !== null) headingRef.current?.focus();
+  }, [releaseNo]);
+
   if (releaseNo === null) return null;
 
   return (
@@ -177,7 +186,13 @@ export function SourceViewerPanel({
         aria-label={`Source of release ${releaseNo} of ${slug}`}
       >
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <h3 className="wrap-break-word">Source of release {releaseNo}</h3>
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            className="rounded-sm wrap-break-word focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            Source of release {releaseNo}
+          </h3>
           <div className="flex flex-wrap items-center gap-2">
             {state.filePath === null ? null : (
               <Button size="small" onClick={viewer.closeFile}>

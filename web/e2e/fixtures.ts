@@ -14,6 +14,12 @@
  * UI's own schemas.
  */
 
+import {
+  F1B_SCENARIOS,
+  f1bScenarioAnswer,
+  isF1bScenario,
+} from "./fixtures-f1b.ts";
+
 export const SCENARIO_HEADER = "x-e2e-scenario";
 
 export const SCENARIOS = [
@@ -23,6 +29,7 @@ export const SCENARIOS = [
   "memory-warning",
   "memory-danger",
   "settings-one-fails",
+  ...F1B_SCENARIOS,
 ] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 
@@ -229,6 +236,9 @@ export function scenarioAnswer(
     );
   }
   const route = `${method} ${pattern}`;
+  if (isF1bScenario(scenario)) {
+    return f1bScenarioAnswer(scenario, route, params, readExample);
+  }
   switch (scenario) {
     case "visitor":
       if (route === "GET /me") {

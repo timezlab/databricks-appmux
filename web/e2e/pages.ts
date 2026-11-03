@@ -6,6 +6,7 @@
 import type { Page } from "@playwright/test";
 
 import type { Scenario } from "./fixtures.ts";
+import { NEW_LOG_LINE_TEXT, NODE_FAILURE_HINT } from "./fixtures-f1b.ts";
 import { API_PREFIX, BASE_PATH } from "./server.ts";
 
 export interface PageEntry {
@@ -67,6 +68,40 @@ async function typeThreeSettingsAndSave(page: Page): Promise<void> {
     .waitFor({ timeout: READY_TIMEOUT_MS });
 }
 
+/** Waits for the failed target's output (open from the start), then opens its row menu (a portalled, non-modal menu). */
+async function openFailedReleaseMenu(page: Page): Promise<void> {
+  await page
+    .getByRole("region", { name: "Output of release 8" })
+    .waitFor({ timeout: READY_TIMEOUT_MS });
+  await page.getByRole("button", { name: "Actions for release 8" }).click();
+  await page
+    .getByRole("menuitem", { name: /Activate/ })
+    .waitFor({ timeout: READY_TIMEOUT_MS });
+}
+
+/** The child prints its first lines: the next poll (every 2 s) brings them. */
+async function receiveNewLogLines(page: Page): Promise<void> {
+  await page.setExtraHTTPHeaders({ "X-E2E-Scenario": "logs-new-lines" });
+  await page
+    .getByText(NEW_LOG_LINE_TEXT, { exact: true })
+    .waitFor({ timeout: READY_TIMEOUT_MS });
+}
+
+async function openPackagesTab(page: Page): Promise<void> {
+  await page.getByRole("tab", { name: /^Packages/ }).click();
+  await page
+    .getByRole("tabpanel", { name: /^Packages/ })
+    .getByText("databricks-sdk")
+    .waitFor({ timeout: READY_TIMEOUT_MS });
+}
+
+async function showEnvironmentJson(page: Page): Promise<void> {
+  await page.getByRole("radio", { name: "JSON" }).click();
+  await page
+    .getByRole("region", { name: "Environment as JSON" })
+    .waitFor({ timeout: READY_TIMEOUT_MS });
+}
+
 /**
  * Every page of the export. The sub-pages of the app and of the platform are
  * routes of their own with their own inline scripts, so each is loaded, checked
@@ -113,7 +148,7 @@ export const PAGES: readonly PageEntry[] = [
     path: `${BASE_PATH}/app/logs/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
     heading: "Sales dashboard",
-    dataText: PLACEHOLDER_TEXT,
+    dataText: "Traceback (most recent call last):",
     apiCall: APP_API_CALL,
   },
   {
@@ -129,7 +164,7 @@ export const PAGES: readonly PageEntry[] = [
     path: `${BASE_PATH}/app/environment/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
     heading: "Sales dashboard",
-    dataText: PLACEHOLDER_TEXT,
+    dataText: "APPMUX_BASE_PATH",
     apiCall: APP_API_CALL,
   },
   {
@@ -317,6 +352,77 @@ export const PAGES: readonly PageEntry[] = [
         .getByRole("button", { name: "Clear Shared Serverless" })
         .waitFor({ timeout: READY_TIMEOUT_MS });
     },
+  },
+  // The launcher and the app's Overview, Deployments, Logs and Environment in
+  // the worlds of fixtures-f1b.ts.
+  {
+    name: "launcher-no-apps",
+    path: `${BASE_PATH}/`,
+    status: 200,
+    heading: "Apps",
+    dataText: "No apps for you yet",
+    apiCall: `${API_PREFIX}/apps`,
+    scenario: "no-apps",
+  },
+  {
+    name: "app-overview-node-failed",
+    path: `${BASE_PATH}/app/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: NODE_FAILURE_HINT,
+    apiCall: APP_API_CALL,
+    scenario: "node-release-failed",
+  },
+  {
+    name: "app-deployments-menu",
+    path: `${BASE_PATH}/app/deployments/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: NODE_FAILURE_HINT,
+    apiCall: APP_API_CALL,
+    scenario: "node-release-failed",
+    act: openFailedReleaseMenu,
+  },
+  {
+    name: "app-logs-new-lines",
+    path: `${BASE_PATH}/app/logs/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    // The toolbar's words: shown once the first poll has answered, with or without lines.
+    dataText: "Updates every 2 seconds",
+    apiCall: APP_API_CALL,
+    scenario: "logs-waiting",
+    act: receiveNewLogLines,
+  },
+  {
+    name: "app-logs-never-started",
+    path: `${BASE_PATH}/app/logs/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: "No output yet",
+    apiCall: APP_API_CALL,
+    scenario: "logs-never-started",
+  },
+  {
+    name: "app-environment-packages",
+    path: `${BASE_PATH}/app/environment/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    // The runtime block stays above both tabs; this world has no Node.js.
+    dataText: "Not detected",
+    apiCall: APP_API_CALL,
+    scenario: "environment-secret",
+    act: openPackagesTab,
+  },
+  {
+    name: "app-environment-json",
+    path: `${BASE_PATH}/app/environment/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: "OPENAI_API_KEY",
+    apiCall: APP_API_CALL,
+    scenario: "environment-secret",
+    act: showEnvironmentJson,
   },
 ];
 

@@ -215,6 +215,40 @@ describe("statusNotices", () => {
     );
     assert.equal(notice?.tone, "warning");
     assert.match(notice?.title ?? "", /1 requirement is missing/);
+    assert.deepEqual(notice?.action, {
+      kind: "section",
+      section: "resources",
+      label: "Attach resources",
+    });
+  });
+
+  it("gives every notice the action that answers it", () => {
+    const crashedAndStale = appWith({
+      state: "crashed",
+      restart_to_apply: true,
+      releases: [release(7, { status: "active", is_target: true })],
+    });
+    assert.deepEqual(
+      statusNotices(crashedAndStale).map((notice) => notice.action),
+      [
+        { kind: "section", section: "logs", label: "Read the logs" },
+        { kind: "control", control: "restart" },
+      ],
+    );
+    assert.deepEqual(
+      statusNotices(appWith({ releases: [], state: "stopped" }))[0]?.action,
+      { kind: "control", control: "update" },
+    );
+  });
+
+  it("points a failed target at its release in Deployments, and names the release so its hint can be read", () => {
+    const [notice] = statusNotices(EXAMPLE_APP);
+    assert.deepEqual(notice?.action, {
+      kind: "section",
+      section: "deployments",
+      label: "See release 8",
+    });
+    assert.equal(notice?.releaseNo, 8);
   });
 });
 

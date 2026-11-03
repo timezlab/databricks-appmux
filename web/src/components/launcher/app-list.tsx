@@ -1,5 +1,6 @@
 "use client";
 
+import { LoaderCircleIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -24,7 +25,7 @@ import { appsEmptyCopy } from "@/lib/launcher/page";
 import { pluralize } from "@/lib/format";
 import type { PollResult } from "@/lib/poll/schedule";
 import { AppLink } from "@/components/app-link";
-import { Button } from "@/components/button";
+import { Button, uiButtonLook } from "@/components/button";
 import { ConfirmButton } from "@/components/confirm-button";
 import { DataTable } from "@/components/data-table";
 import type { DataTableColumn } from "@/components/data-table";
@@ -32,9 +33,10 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorNotice } from "@/components/error-notice";
 import { Field } from "@/components/field";
 import { LiveRegion } from "@/components/live-region";
-import { Loading } from "@/components/loading";
 import { RouteStrip } from "@/components/route-strip";
+import { SkeletonTable } from "@/components/skeletons";
 import { AppStateBadge } from "@/components/status-badge";
+import { Button as UiButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const OPEN_DEPENDENCIES: OpenDependencies = {
@@ -49,24 +51,50 @@ interface OpeningApp {
   mode: OpenMode;
 }
 
+/** Where a platform admin registers an app: the Platform's Apps page. */
+const PLATFORM_REGISTER_HREF = "/platform/apps/";
+
 export interface AppsSectionProps {
   apps: PollResult<AppList>;
   /** `null` while `GET /me` has not answered. */
   isPlatformAdmin: boolean | null;
   /** Fetches the list again: offered after a failure. */
   onReload: () => void;
+  /** Opens the launcher's request form: the next step for a person with no app. */
+  onRequestApp: () => void;
+}
+
+/** The list's place while it loads: the words and spinner, announced, over rows of the table's shape. */
+function AppsLoading() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        className="flex items-center gap-2 text-sm text-muted-foreground"
+        role="status"
+      >
+        <LoaderCircleIcon
+          className="size-4 shrink-0 animate-spinner"
+          aria-hidden="true"
+        />
+        <span>Loading apps…</span>
+      </div>
+      <SkeletonTable rows={4} columns={4} />
+    </div>
+  );
 }
 
 /**
- * The apps the visitor may open, as one compact table: the name with its slug
- * under it, the state, and the way to open the app. A search box appears once
- * the list is long enough to need one; a "What is the difference?" disclosure
- * appears only for a person who is offered both ways to open an app.
+ * The apps the visitor may open, as one compact table: the name with its
+ * route under it, the state, the person's level, and the way to open the app;
+ * what needs attention comes first. A search box appears once the list is
+ * long enough to need one; a "What is the difference?" disclosure appears
+ * only for a person who is offered both ways to open an app.
  */
 export function AppsSection({
   apps,
   isPlatformAdmin,
   onReload,
+  onRequestApp,
 }: AppsSectionProps) {
   const [query, setQuery] = useState("");
   const [opening, setOpening] = useState<OpeningApp | null>(null);
@@ -75,7 +103,7 @@ export function AppsSection({
     error: unknown;
   } | null>(null);
 
-  if (apps.status === "loading") return <Loading label="Loading apps" />;
+  if (apps.status === "loading") return <AppsLoading />;
   if (apps.status === "failed") {
     return (
       <ErrorNotice
@@ -121,6 +149,13 @@ export function AppsSection({
       cell: (row) => <AppStateBadge state={row.state} />,
     },
     {
+      key: "level",
+      header: "Your level",
+      cell: (row) => (
+        <span className="whitespace-nowrap">{row.levelLabel}</span>
+      ),
+    },
+    {
       key: "actions",
       header: "Actions",
       isLabelHiddenWhenStacked: true,
@@ -137,9 +172,22 @@ export function AppsSection({
   ];
 
   const copy = appsEmptyCopy(isPlatformAdmin);
+  // While it is not known who the person is, no next step is offered rather than the wrong one.
+  const nextStep =
+    isPlatformAdmin === true ? (
+      <UiButton asChild {...uiButtonLook("primary", "small")}>
+        <Link href={PLATFORM_REGISTER_HREF}>Register an app</Link>
+      </UiButton>
+    ) : isPlatformAdmin === false ? (
+      <Button variant="primary" size="small" onClick={onRequestApp}>
+        Request an app
+      </Button>
+    ) : undefined;
   const emptyState =
     rows.length === 0 ? (
-      <EmptyState title={copy.title}>{copy.body}</EmptyState>
+      <EmptyState title={copy.title} action={nextStep}>
+        {copy.body}
+      </EmptyState>
     ) : (
       <EmptyState
         title="No app matches the search"
