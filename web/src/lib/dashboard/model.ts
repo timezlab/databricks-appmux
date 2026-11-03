@@ -119,6 +119,12 @@ interface ChartBase {
   legend: LegendItem[];
   /** The time (or bucket) label of each column, parallel to the data. */
   labels: string[];
+  /**
+   * Per column, whether the window cuts its bucket short (`BucketSlot.isPartial`),
+   * parallel to the data. Such a column holds fewer minutes, so the chart draws
+   * it fainter and its tip and table row say "(partial)".
+   */
+  partial: boolean[];
   /** The hover text of each column, parallel to the data. A value is never only in a tooltip: the table has it. */
   tips: string[];
   /** The most labels under the axis. */
@@ -509,6 +515,11 @@ export function timeLabels(frame: BucketFrame): string[] {
   return frame.buckets.map((bucket) => clockLabel(bucket.startMs, withDate));
 }
 
+/** Per column, whether the window cuts its bucket short. */
+export function partialColumns(frame: BucketFrame): boolean[] {
+  return frame.buckets.map((bucket) => bucket.isPartial);
+}
+
 /** The start of a bucket as written in a tooltip; a bucket the window cuts says so. */
 export function bucketTime(bucket: BucketSlot, frame: BucketFrame): string {
   const start = formatAbsoluteTime(
@@ -564,6 +575,7 @@ function requestsChart(context: ChartContext): ColumnChartSpec {
     legend,
     tones: legend.map((item) => item.tone),
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket, index) => {
       const segments = columns[index];
       const time = bucketTime(bucket, context);
@@ -629,6 +641,8 @@ function latencyChart(context: ChartContext): ColumnChartSpec {
     legend: [],
     tones: ["primary"],
     labels: histogram.map((_, index) => latencyBucketLabel(index)),
+    // The columns are response times, not buckets of time: none is cut.
+    partial: histogram.map(() => false),
     tips: histogram.map(
       (count, index) =>
         `${latencyRangeText(index)}: ${pluralize(count, "request")} (${shareText(count, total)})`,
@@ -696,6 +710,7 @@ function memoryChart(context: ChartContext): LineChartSpec {
       " The table below the chart has every value.",
     legend,
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket, index) => {
       const value = values[index];
       const time = bucketTime(bucket, context);
@@ -743,6 +758,7 @@ function egressChart(context: ChartContext): ColumnChartSpec {
     legend: [],
     tones: ["warning"],
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket) => {
       const time = bucketTime(bucket, context);
       return bucket.hasData
@@ -809,6 +825,7 @@ function appsRunningChart(context: ChartContext): LineChartSpec {
       " The table below the chart has every value.",
     legend,
     labels: timeLabels(context),
+    partial: partialColumns(context),
     tips: buckets.map((bucket, index) => {
       const value = values[index];
       const time = bucketTime(bucket, context);

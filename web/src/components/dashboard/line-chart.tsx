@@ -24,6 +24,7 @@ import {
   LINE_VALUE_KEY,
   lineAxis,
   lineRows,
+  markOpacity,
 } from "@/lib/dashboard/chart-data";
 import type { LineChartSpec } from "@/lib/dashboard/model";
 import { seriesStyle } from "@/lib/dashboard/series-style";
@@ -44,10 +45,20 @@ const LINE_STROKE_WIDTH = 2;
 const LIMIT_LABEL_OFFSET = 8;
 
 /** The marker of a point, or nothing for a point Recharts could not place. */
-function markerAt(dot: DotItemDotProps, style: SeriesStyle): ReactNode {
+function markerAt(
+  dot: DotItemDotProps,
+  style: SeriesStyle,
+  fillOpacity?: number,
+): ReactNode {
   if (dot.cx === undefined || dot.cy === undefined) return null;
   return (
-    <Marker shape={style.marker} x={dot.cx} y={dot.cy} color={style.color} />
+    <Marker
+      shape={style.marker}
+      x={dot.cx}
+      y={dot.cy}
+      color={style.color}
+      fillOpacity={fillOpacity}
+    />
   );
 }
 
@@ -55,7 +66,9 @@ function markerAt(dot: DotItemDotProps, style: SeriesStyle): ReactNode {
  * A line over time, with an optional level (the memory limit) as a dashed line
  * of its own. A minute with no data breaks the line; it is never a zero. Only
  * the newest point (and a point with no neighbour) gets a marker, so a long line
- * is not a string of beads; the limit has one at its right end.
+ * is not a string of beads; the limit has one at its right end. A bucket the
+ * window cuts short gets a fainter marker, so its lower peak does not read as
+ * a fall.
  */
 export function LineChart({ spec }: { spec: LineChartSpec }) {
   const rows = lineRows(spec);
@@ -132,7 +145,9 @@ export function LineChart({ spec }: { spec: LineChartSpec }) {
           strokeDasharray={lineStyle.dash}
           connectNulls={false}
           dot={(dot) =>
-            valueMarkers.has(dot.index) ? markerAt(dot, lineStyle) : null
+            valueMarkers.has(dot.index) || spec.partial[dot.index] === true
+              ? markerAt(dot, lineStyle, markOpacity(spec.partial, dot.index))
+              : null
           }
           activeDot={false}
           isAnimationActive={false}

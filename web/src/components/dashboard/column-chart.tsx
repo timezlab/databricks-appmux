@@ -20,6 +20,7 @@ import {
   columnAxis,
   columnRows,
   gapRuns,
+  markOpacity,
   segmentKey,
 } from "@/lib/dashboard/chart-data";
 import type { ColumnChartSpec } from "@/lib/dashboard/model";
@@ -51,11 +52,13 @@ const STACK_GAP = 2;
  * from its base when it is). Recharts' own `minPointSize` is documented as
  * unreliable in a stack, and a segment that vanishes would hide exactly the
  * errors this chart is there to show. `gap` is taken from the segment's bottom,
- * so the top of the stack still stands at the column's total.
+ * so the top of the stack still stands at the column's total. `opacity` is the
+ * `fill-opacity` of a partial bucket's column (`markOpacity`), or none.
  */
 function segmentRect(
   { x, y, width, height, fill }: BarShapeProps,
   gap: number,
+  opacity: number | undefined,
 ) {
   if (x === undefined || y === undefined || width === undefined) return null;
   // Height 0 is a segment with no value (`columnRows` makes zero and no data `null`).
@@ -69,28 +72,27 @@ function segmentRect(
       width={width}
       height={shownHeight}
       fill={fill}
+      fillOpacity={opacity}
     />
   );
-}
-
-function baseSegment(props: BarShapeProps) {
-  return segmentRect(props, 0);
-}
-
-function segmentAboveBase(props: BarShapeProps) {
-  return segmentRect(props, STACK_GAP);
 }
 
 /**
  * Stacked or single columns: one `Bar` per segment of `spec.tones`, bottom
  * first, over the shared category axis (the column's index, written as its
- * time label). Stretches of minutes with no data are shaded.
+ * time label). Stretches of minutes with no data are shaded, and a bucket the
+ * window cuts short is drawn fainter.
  */
 export function ColumnChart({ spec }: { spec: ColumnChartSpec }) {
   const rows = columnRows(spec);
   const scale = columnAxis(spec);
   const idPrefix = `texture-${spec.id}`;
   const topSegment = spec.tones.length - 1;
+  // The base segment stands on the axis; the ones above it give up a gap.
+  const baseSegment = (props: BarShapeProps) =>
+    segmentRect(props, 0, markOpacity(spec.partial, props.index));
+  const segmentAboveBase = (props: BarShapeProps) =>
+    segmentRect(props, STACK_GAP, markOpacity(spec.partial, props.index));
   return (
     <ChartContainer
       label={spec.title}

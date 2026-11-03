@@ -137,7 +137,9 @@ figure with a sparkline and the change against the previous window (shown only w
 holds rows for at least 90% of its minutes, `PREVIOUS_WINDOW_MIN_COVERAGE`); the same requests and
 response-time charts on both. The dashboard adds the breakdown by app (`GET /metrics/breakdown`,
 the 8 busiest apps plus "Other apps"). Each chart frame has its own loading, empty and failed
-state; charts read the colour scheme through `useColorScheme`. The platform view asks
+state; charts read the colour scheme through `useColorScheme`. A bucket the window cuts short is
+drawn at `PARTIAL_MARK_OPACITY` (the `fill-opacity` attribute, never a style), the caption under
+the axis says what a fainter column or point is, and its tip and table row say "(partial)". The platform view asks
 `GET /metrics?app=_platform`, not `GET /metrics` without an app, whose answer mixes every app's
 rows. The e2e worlds `breakdown-live` and `metrics-week` (a busy hour and a week of eleven apps)
 are in `e2e/fixtures-f4.ts`.

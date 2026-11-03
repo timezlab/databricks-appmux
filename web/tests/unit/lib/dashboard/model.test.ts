@@ -84,6 +84,11 @@ function lineChart(model: SeriesModel, id: string): LineChartSpec {
   return chart;
 }
 
+/** The positions of the columns a chart draws as partial. */
+function partialColumns(partial: readonly boolean[]): number[] {
+  return partial.flatMap((isPartial, index) => (isPartial ? [index] : []));
+}
+
 function figure(model: SeriesModel, key: FigureKey) {
   const found = model.figures.find((candidate) => candidate.key === key);
   assert.ok(found !== undefined, key);
@@ -665,6 +670,11 @@ describe("long windows", () => {
     );
     assert.doesNotMatch(requests.tips[1] ?? "", /partial/);
     assert.doesNotMatch(requests.tips[36] ?? "", /partial/);
+    // The picture marks the same column: drawn fainter, and only it.
+    for (const chart of [requests, lineChart(model, "memory")]) {
+      assert.deepEqual(partialColumns(chart.partial), [0], chart.id);
+    }
+    assert.ok(columnChart(model, "latency").partial.every((cut) => !cut));
   });
 
   it("marks a bucket that the end of the window cuts as partial too", () => {
@@ -679,6 +689,7 @@ describe("long windows", () => {
     assert.equal(requests.columns.length, 37);
     assert.doesNotMatch(requests.tips[0] ?? "", /partial/);
     assert.match(requests.tips[36] ?? "", /^2026-10-30 09:12 UTC \(partial\)/);
+    assert.deepEqual(partialColumns(requests.partial), [36]);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   NO_DATA_TEXT,
   REQUEST_LABELS_MAX_TICKS,
   bucketTime,
+  partialColumns,
   rowTime,
   timeLabels,
   totalsCaption,
@@ -274,6 +275,7 @@ function stackedChart(
     legend,
     tones: entries.map((entry) => entry.tone),
     labels: timeLabels(frame),
+    partial: partialColumns(frame),
     // Top of the stack first, as the column reads; an app with nothing in the bucket is left out.
     tips: frame.buckets.map((slot, index) => {
       const time = bucketTime(slot, frame);

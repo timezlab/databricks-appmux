@@ -1,5 +1,6 @@
 import { DataTable } from "@/components/data-table";
 import type { DataTableColumn } from "@/components/data-table";
+import { axisCaption } from "@/lib/dashboard/chart-data";
 import type { ChartSpec, ChartTable } from "@/lib/dashboard/model";
 import { ChartLegend } from "./chart-legend";
 import { ColumnChart } from "./column-chart";
@@ -44,7 +45,7 @@ export function ChartFigure({ spec }: { spec: ChartSpec }) {
             )}
           </div>
           <p className="text-center text-xs text-muted-foreground">
-            {spec.xCaption}
+            {axisCaption(spec)}
           </p>
           <details className="text-sm">
             <summary className="w-fit cursor-pointer font-medium">

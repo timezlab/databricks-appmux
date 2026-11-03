@@ -267,6 +267,9 @@ describe("steps against the window", () => {
     const requests = chart(model, "requests-by-app");
     assert.deepEqual(requests.columns, [[10], [10], null]);
     assert.match(requests.tips[0] ?? "", /^2026-10-30 09:05 UTC \(partial\)/);
+    // The picture draws the cut columns fainter: that one, and the newest,
+    // 09:30 to 09:45, which the window ends at 09:40.
+    assert.deepEqual(requests.partial, [true, false, true]);
     assert.equal(model.apps[0]?.cells[0], "20");
   });
 });
