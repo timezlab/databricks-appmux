@@ -38,7 +38,7 @@ import { readdirSync } from "node:fs";
 import path from "node:path";
 import { render, screen } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -208,9 +208,8 @@ function watchCspWrites(): CspWriteWatch {
       ].filter((name) => name.toLowerCase() === "style");
       return [
         ...styleAttributeWrites.map(() => "setAttribute('style')"),
-        ...(document.querySelector("style") === null
-          ? []
-          : ["a <style> element"]),
+        // A `<style>` element (or a script, handler or javascript: URL)
+        // anywhere in the document; style attributes are the writes above.
         ...cspViolations(document.documentElement.outerHTML).filter(
           (reason) => reason !== "a style attribute",
         ),
@@ -244,23 +243,24 @@ describe("the guard itself", () => {
 
   it("the write watch catches a style attribute and a <style> element, not a CSSOM write", () => {
     const watch = watchCspWrites();
+    const element = document.createElement("p");
+    const sheet = document.createElement("style");
     try {
-      const element = document.createElement("p");
       document.body.append(element);
       element.style.color = "red";
       element.style.setProperty("--x", "1px");
       expect(watch.refusedWrites()).toEqual([]);
 
       element.setAttribute("style", "color: red");
-      const sheet = document.createElement("style");
       document.head.append(sheet);
       expect(watch.refusedWrites()).toEqual([
         "setAttribute('style')",
         "a <style> element",
       ]);
+    } finally {
+      // A sheet left behind would fail every later check in this file.
       element.remove();
       sheet.remove();
-    } finally {
       watch.restore();
     }
   });
@@ -913,6 +913,31 @@ describe("shadcn primitives (src/components/ui)", () => {
         assert.deepEqual(watch.refusedWrites(), [], file);
       } finally {
         watch.restore();
+      }
+    });
+  }
+
+  // A primitive that renders other markup once the browser has taken over
+  // (`useIsClient`) must still hydrate the prerendered HTML as it is.
+  for (const [file, sample] of Object.entries(UI_SAMPLES)) {
+    it(`${file} hydrates its server HTML without a mismatch`, () => {
+      const container = document.createElement("div");
+      container.innerHTML = renderToString(sample());
+      document.body.append(container);
+      const recoverableErrors: unknown[] = [];
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      try {
+        render(sample(), {
+          container,
+          hydrate: true,
+          onRecoverableError: (error) => recoverableErrors.push(error),
+        });
+        assert.deepEqual(recoverableErrors, [], file);
+        assert.deepEqual(consoleError.mock.calls, [], file);
+      } finally {
+        consoleError.mockRestore();
       }
     });
   }
