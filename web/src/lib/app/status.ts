@@ -5,6 +5,7 @@
  */
 import type { AppDetail, ReleaseSummary } from "@/lib/api";
 import { isReleaseInProgress } from "./actions";
+import type { AppSection } from "./params";
 import { pluralize } from "@/lib/format";
 import { releaseStatusPresentation } from "@/lib/status-presentation";
 import type { Tone } from "@/lib/status-presentation";
@@ -65,12 +66,23 @@ export function reconcileSelection(
 
 // ----------------------------------------------------------------- notices
 
+/**
+ * What the person can do about a notice, drawn beside it: go to the section
+ * where it is fixed, or press one of the app's buttons right there.
+ */
+export type NoticeAction =
+  | { kind: "section"; section: AppSection; label: string }
+  | { kind: "control"; control: "restart" | "update" };
+
 export interface StatusNotice {
   /** Stable, for the React key and for tests. */
   id: string;
   tone: Tone;
   title: string;
   detail: string | null;
+  action: NoticeAction;
+  /** The release the notice is about, when it is about one. */
+  releaseNo: number | null;
 }
 
 /** Most urgent first. A healthy, current app has none. */
@@ -85,6 +97,8 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
       title: "The app crashed",
       detail:
         "It stopped after repeated crashes and its route answers 503. Restart it once the cause is fixed, or activate a different release.",
+      action: { kind: "section", section: "logs", label: "Read the logs" },
+      releaseNo: null,
     });
   }
 
@@ -95,6 +109,8 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
       title: "Restart to apply the resource changes",
       detail:
         "Resources changed since the app last started; the running process still has the old ones.",
+      action: { kind: "control", control: "restart" },
+      releaseNo: null,
     });
   }
 
@@ -110,6 +126,12 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
       tone: "warning",
       title: `Release ${failedTarget.release_no} failed`,
       detail: `${reason}. ${serving}`,
+      action: {
+        kind: "section",
+        section: "deployments",
+        label: `See release ${String(failedTarget.release_no)}`,
+      },
+      releaseNo: failedTarget.release_no,
     });
   }
 
@@ -124,6 +146,12 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
         active === null
           ? "The route opens once its health check passes."
           : `Release ${active.release_no} keeps serving until the new release is healthy.`,
+      action: {
+        kind: "section",
+        section: "deployments",
+        label: "Follow it in Deployments",
+      },
+      releaseNo: inProgress.release_no,
     });
   }
 
@@ -134,6 +162,8 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
       title: "There is no release yet",
       detail:
         "Press Update to fetch the source folder and build the first release.",
+      action: { kind: "control", control: "update" },
+      releaseNo: null,
     });
   }
 
@@ -146,7 +176,13 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
       id: "requirements-missing",
       tone: "warning",
       title: `${noun} ${missingCount === 1 ? "is" : "are"} missing`,
-      detail: "Attach a resource for each one in the Requirements panel.",
+      detail: "Attach a resource for each one under Requirements in Resources.",
+      action: {
+        kind: "section",
+        section: "resources",
+        label: "Attach resources",
+      },
+      releaseNo: null,
     });
   }
 

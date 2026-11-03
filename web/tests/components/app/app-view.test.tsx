@@ -60,7 +60,7 @@ describe("AppView", () => {
       await screen.findByRole("heading", { level: 1, name: "Sales dashboard" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: "Status" }),
+      screen.getByRole("heading", { level: 2, name: "Overview" }),
     ).toBeInTheDocument();
     const sidebar = screen.getByRole("navigation", {
       name: "Sales dashboard sections",
@@ -110,7 +110,7 @@ describe("AppView", () => {
       await screen.findByRole("heading", { level: 2, name: "Deployments" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { level: 2, name: "Status" }),
+      screen.queryByRole("heading", { level: 2, name: "Overview" }),
     ).not.toBeInTheDocument();
   });
 
