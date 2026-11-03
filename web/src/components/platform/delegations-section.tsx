@@ -104,7 +104,8 @@ export function DelegationsSection({ view }: { view: PlatformView }) {
                       </Button>
                     )}
                     {cell.blockedReason === null ? null : (
-                      <span className="text-muted-foreground">
+                      // The reason names a setting key, one long word, that must still wrap in a phone's stacked row.
+                      <span className="min-w-0 text-muted-foreground wrap-anywhere">
                         {cell.blockedReason}
                       </span>
                     )}
