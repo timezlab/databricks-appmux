@@ -195,6 +195,9 @@ export function ReleaseSection({
     {
       key: "state",
       header: "State",
+      // On a phone the state spans the block: the lamp names it in words, and a
+      // failed release's hint and output need the width a labelled line leaves out.
+      isLabelHiddenWhenStacked: true,
       cell: (release) => (
         <div className="flex min-w-0 flex-col gap-1">
           <div>
