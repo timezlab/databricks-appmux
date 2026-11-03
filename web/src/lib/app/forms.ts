@@ -93,3 +93,85 @@ export function errorsFromZod(
     }),
   );
 }
+
+// ------------------------------------------------------- suggestion search
+
+/**
+ * How long a field waits after the last keystroke before it asks the server
+ * for suggestions: long enough that a word typed at speed is one call, short
+ * enough that the list follows the typing.
+ */
+export const SUGGESTION_DELAY_MS = 250;
+
+export type SearchOutcome<Result> =
+  | { status: "loading"; text: string }
+  | { status: "done"; text: string; result: Result }
+  | { status: "failed"; text: string; error: unknown };
+
+export interface DebouncedSearch {
+  /** Searches for `text` after the delay; a newer call replaces a waiting one and aborts one in flight. */
+  search: (text: string) => void;
+  /** Stops a waiting or running search; nothing is reported after it (for unmount and close). */
+  cancel: () => void;
+}
+
+export interface DebouncedSearchOptions<Result> {
+  delayMs: number;
+  /** The call; it must give up when `signal` aborts. */
+  run: (text: string, signal: AbortSignal) => Promise<Result>;
+  onOutcome: (outcome: SearchOutcome<Result>) => void;
+}
+
+/**
+ * The suggestion fields' search (the principal field, the resource object
+ * field): it debounces the keystrokes and keeps only the latest call, so an
+ * answer that arrives late for an older text can never replace a newer list.
+ * Plain timers and an `AbortController`, with no React in it, so the timing is
+ * tested with fake timers.
+ */
+export function createDebouncedSearch<Result>({
+  delayMs,
+  run,
+  onOutcome,
+}: DebouncedSearchOptions<Result>): DebouncedSearch {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let inFlight: AbortController | null = null;
+
+  function cancel(): void {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    inFlight?.abort();
+    inFlight = null;
+  }
+
+  function start(text: string): void {
+    timer = null;
+    const controller = new AbortController();
+    inFlight = controller;
+    run(text, controller.signal).then(
+      (result) => {
+        if (controller.signal.aborted) return;
+        inFlight = null;
+        onOutcome({ status: "done", text, result });
+      },
+      (error: unknown) => {
+        // An aborted call was replaced or cancelled on purpose; whatever it
+        // rejects with (an AbortError) is not a failure to show.
+        if (controller.signal.aborted) return;
+        inFlight = null;
+        onOutcome({ status: "failed", text, error });
+      },
+    );
+  }
+
+  return {
+    search(text) {
+      cancel();
+      onOutcome({ status: "loading", text });
+      timer = setTimeout(() => {
+        start(text);
+      }, delayMs);
+    },
+    cancel,
+  };
+}

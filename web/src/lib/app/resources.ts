@@ -1,10 +1,11 @@
 /**
  * The app's resources and requirements (design 8.2, data model 4.7). The
- * catalogue of resource types lives in code, as it does on the server; a type
- * the server adds later is shown by its raw name until this list learns it.
- * The attach form checks what the contract can check from the page's data and
- * leaves the attach check itself (the attacher's own token reaching the
- * target) to the server.
+ * catalogue of resource types is data from `GET /resources/types`; the page
+ * holds no copy of it, so a type the server adds shows up without a change
+ * here, and one the page cannot match is shown by its raw name. The Add form
+ * checks what the contract can check from the page's data and leaves the
+ * attach check itself (the attacher's own token reaching the target) to the
+ * server.
  */
 import { AttachResourceRequest, ResourceKey } from "@/lib/api";
 import type {
@@ -13,6 +14,8 @@ import type {
   BundleResource,
   Requirement,
   RequirementsResponse,
+  ResourceSuggestion,
+  ResourceTypeEntry,
   ResourceView,
 } from "@/lib/api";
 import { FORM_ERROR_KEY, errorsFromZod, formFailure } from "./forms";
@@ -20,115 +23,52 @@ import type { FormErrors, FormResult } from "./forms";
 
 // ---------------------------------------------------------------- catalogue
 
-export interface ResourceTypeInfo {
-  /** The value of `type` on the wire. */
-  type: string;
-  label: string;
-  /** What the target is called in the form ("Warehouse id"). */
-  targetLabel: string;
-  /** Permission levels of the type, in the order the form lists them. */
-  levels: readonly string[];
-  /** False only for a secret, which appmux reads itself at start. */
-  hasAccessAs: boolean;
-}
+export type ResourceCatalogue = readonly ResourceTypeEntry[];
 
-function typeInfo(
+export function findResourceType(
+  catalogue: ResourceCatalogue | null,
   type: string,
-  label: string,
-  targetLabel: string,
-  levels: readonly string[],
-): ResourceTypeInfo {
-  return { type, label, targetLabel, levels, hasAccessAs: type !== "secret" };
+): ResourceTypeEntry | null {
+  return catalogue?.find((entry) => entry.type === type) ?? null;
 }
 
-// Data model 4.7. The order is the order of the form's type list.
-export const RESOURCE_TYPES: readonly ResourceTypeInfo[] = [
-  typeInfo("sql_warehouse", "SQL warehouse", "Warehouse id", [
-    "CAN_USE",
-    "CAN_MANAGE",
-  ]),
-  typeInfo("secret", "Secret", "Secret reference (scope/key)", ["READ"]),
-  typeInfo("mlflow_experiment", "MLflow experiment", "Experiment id", [
-    "CAN_READ",
-    "CAN_EDIT",
-    "CAN_MANAGE",
-  ]),
-  typeInfo("serving_endpoint", "Model serving endpoint", "Endpoint name", [
-    "CAN_VIEW",
-    "CAN_QUERY",
-    "CAN_MANAGE",
-  ]),
-  typeInfo("lakebase_database", "Lakebase database", "Endpoint path or host", [
-    "CAN_CONNECT_AND_CREATE",
-  ]),
-  typeInfo("job", "Lakeflow job", "Job id", [
-    "CAN_VIEW",
-    "CAN_MANAGE_RUN",
-    "CAN_MANAGE",
-  ]),
-  typeInfo("uc_table", "Unity Catalog table", "Table (catalog.schema.table)", [
-    "SELECT",
-    "MODIFY",
-  ]),
-  typeInfo(
-    "uc_volume",
-    "Unity Catalog volume",
-    "Volume path (/Volumes/catalog/schema/volume)",
-    ["READ_VOLUME", "WRITE_VOLUME"],
-  ),
-  typeInfo(
-    "uc_function",
-    "Unity Catalog function",
-    "Function (catalog.schema.function)",
-    ["EXECUTE"],
-  ),
-  typeInfo("uc_connection", "Unity Catalog connection", "Connection name", [
-    "USE_CONNECTION",
-  ]),
-  typeInfo("genie_space", "Genie space", "Space id", [
-    "CAN_VIEW",
-    "CAN_RUN",
-    "CAN_EDIT",
-    "CAN_MANAGE",
-  ]),
-  typeInfo(
-    "vector_search_index",
-    "AI Search index",
-    "Index (catalog.schema.index)",
-    ["SELECT"],
-  ),
-  typeInfo("databricks_app", "Databricks app", "App name", ["CAN_USE"]),
-  typeInfo(
-    "gateway_model_service",
-    "Unity Gateway model service",
-    "Service (catalog.schema.service)",
-    ["EXECUTE"],
-  ),
-];
-
-export function resourceTypeInfo(type: string): ResourceTypeInfo | null {
-  return RESOURCE_TYPES.find((info) => info.type === type) ?? null;
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** The label of a known type, or the wire value of one this page does not know. */
-export function resourceTypeLabel(type: string): string {
-  return resourceTypeInfo(type)?.label ?? type;
+/**
+ * The noun of a type, capitalised ("Secret", "SQL warehouse"); the wire value
+ * while the catalogue loads or for a type it does not list.
+ */
+export function resourceTypeLabel(
+  catalogue: ResourceCatalogue | null,
+  type: string,
+): string {
+  const entry = findResourceType(catalogue, type);
+  return entry === null ? type : capitalise(entry.label);
 }
 
-// --------------------------------------------------------------- identities
-
-export interface AccessAsChoice {
-  value: AccessAs;
-  label: string;
-  isAvailable: boolean;
-  /** Why it cannot be chosen; `null` when it can. */
-  reason: string | null;
+/** A permission level in words: `CAN_MANAGE_RUN` is "Can manage run". */
+export function resourceLevelLabel(level: string): string {
+  return capitalise(level.toLowerCase().replaceAll("_", " "));
 }
+
+/** A secret scope offered by the suggestions: a prefix to go on typing from, not a target. */
+export function isScopePrefix(
+  type: string,
+  suggestion: ResourceSuggestion,
+): boolean {
+  return type === "secret" && suggestion.target.endsWith("/");
+}
+
+// ------------------------------------------------------------- access modes
+
+const ACCESS_MODES: readonly AccessAs[] = ["obo", "own_sp", "shared_sp"];
 
 const ACCESS_AS_LABEL: Record<AccessAs, string> = {
   obo: "As the visitor (OBO)",
   own_sp: "As the app's own service principal",
-  shared_sp: "As the appmux service principal",
+  shared_sp: "As the shared service principal",
 };
 
 /** How the child reaches a resource; a secret has no identity, appmux reads it at start. */
@@ -138,47 +78,75 @@ export function accessAsLabel(accessAs: AccessAs | null): string {
     : ACCESS_AS_LABEL[accessAs];
 }
 
-/** The three identities, each with whether this app can use it now (design 8.2). */
-export function accessAsChoices(app: AppDetail): AccessAsChoice[] {
+export interface AccessModeChoice {
+  value: AccessAs;
+  label: string;
+  isAvailable: boolean;
+  /** Why it cannot be chosen; `null` when it can. */
+  reason: string | null;
+  /** How to make it available; `null` when it is, or when nothing can be done. */
+  howToGet: string | null;
+}
+
+const ASK_FOR_DELEGATION =
+  "An admin of this app can ask a platform admin for it with Request a delegation, under Authorization.";
+
+/**
+ * The three ways the app can reach a resource of this type, each with whether
+ * it can be chosen now: the type must allow it (the shared service principal
+ * only for a type with an attach check) and the app must have it (a
+ * delegation, or its own service principal's keys).
+ */
+export function accessModeChoices(
+  app: AppDetail,
+  entry: ResourceTypeEntry,
+): AccessModeChoice[] {
   const { obo_delegated, shared_sp_delegated, shared_sp_delegation_allowed } =
     app.delegation;
   const hasOwnSpKeys =
     app.config.own_sp_client_id_key !== null &&
     app.config.own_sp_client_secret_key !== null;
+  const typeLabel = entry.label;
 
-  let sharedSpReason: string | null = null;
-  if (!shared_sp_delegated) {
-    sharedSpReason = shared_sp_delegation_allowed
-      ? "Not delegated to this app. Ask for shared service principal delegation with a request."
-      : "The platform has switched shared service principal delegation off, so a request for it is refused.";
-  }
-
-  return [
-    choice(
-      "obo",
-      obo_delegated,
-      "Not delegated to this app. Ask for OBO delegation with a request.",
-    ),
-    choice(
-      "own_sp",
-      hasOwnSpKeys,
-      "The app has no own service principal keys configured.",
-    ),
-    choice("shared_sp", shared_sp_delegated, sharedSpReason),
-  ];
-}
-
-function choice(
-  value: AccessAs,
-  isAvailable: boolean,
-  reasonWhenUnavailable: string | null,
-): AccessAsChoice {
-  return {
-    value,
-    label: ACCESS_AS_LABEL[value],
-    isAvailable,
-    reason: isAvailable ? null : reasonWhenUnavailable,
-  };
+  return ACCESS_MODES.map((value) => {
+    const label = ACCESS_AS_LABEL[value];
+    const off = (reason: string, howToGet: string | null) => ({
+      value,
+      label,
+      isAvailable: false,
+      reason,
+      howToGet,
+    });
+    if (!entry.access_as.includes(value)) {
+      return value === "shared_sp"
+        ? off(
+            `The shared service principal needs a verified attach check, and a ${typeLabel} has none.`,
+            null,
+          )
+        : off(`A ${typeLabel} cannot be reached this way.`, null);
+    }
+    if (value === "obo" && !obo_delegated) {
+      return off("OBO is not delegated to this app.", ASK_FOR_DELEGATION);
+    }
+    if (value === "own_sp" && !hasOwnSpKeys) {
+      return off(
+        "The app has no service principal keys of its own.",
+        "Attach its client id and client secret as secrets, then name the two keys in the app's settings.",
+      );
+    }
+    if (value === "shared_sp" && !shared_sp_delegated) {
+      return shared_sp_delegation_allowed
+        ? off(
+            "The shared service principal is not delegated to this app.",
+            ASK_FOR_DELEGATION,
+          )
+        : off(
+            "A platform admin has switched shared service principal delegation off for every app.",
+            null,
+          );
+    }
+    return { value, label, isAvailable: true, reason: null, howToGet: null };
+  });
 }
 
 export function checkResultLabel(result: ResourceView["check_result"]): string {
@@ -187,51 +155,110 @@ export function checkResultLabel(result: ResourceView["check_result"]): string {
     : "Not verified: no check exists for this type";
 }
 
-// -------------------------------------------------------------- attach form
+// ---------------------------------------------------------------------- key
 
-/** What the inputs hold: text, as typed (`accessAs` is `""` until chosen). */
+const KEY_MAX_LENGTH = 63;
+
+/** Text as a resource key: lower case, accents dropped, every other run of characters a `-`. */
+function keySlug(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/^[^a-z0-9]+/, "")
+    .slice(0, KEY_MAX_LENGTH)
+    .replace(/[-.]+$/, "");
+}
+
+/**
+ * The key a new resource is filled with: the object's name, or the type when
+ * no object is chosen yet, made unique among the keys the app has (`-2`,
+ * `-3`, …) and kept to the contract's form.
+ */
+export function deriveResourceKey(
+  type: string,
+  objectName: string | null,
+  takenKeys: readonly string[],
+): string {
+  const base = keySlug(objectName ?? "") || keySlug(type) || "resource";
+  if (!takenKeys.includes(base)) return base;
+  for (let counter = 2; ; counter += 1) {
+    const suffix = `-${counter}`;
+    const stem = base
+      .slice(0, KEY_MAX_LENGTH - suffix.length)
+      .replace(/[-.]+$/, "");
+    const candidate = `${stem}${suffix}`;
+    if (!takenKeys.includes(candidate)) return candidate;
+  }
+}
+
+// --------------------------------------------------------------- add form
+
+/** What the Add panel holds, as typed (`type`, `permission` and `accessAs` are `""` until chosen). */
 export interface AttachDraft {
   key: string;
+  /** The person typed the key, so it no longer follows the type and the object. */
+  isKeyEdited: boolean;
   type: string;
   target: string;
+  /** What the key is filled from: the chosen object's name, or a typed secret's key. */
+  objectName: string | null;
   permission: string;
   accessAs: AccessAs | "";
   /** The person accepted an offer of the release's `databricks.yml`. */
   fromBundle: boolean;
 }
 
-export type AttachField = keyof AttachDraft;
-
-const DEFAULT_TYPE = RESOURCE_TYPES[0]?.type ?? "sql_warehouse";
-
-function firstLevel(type: string): string {
-  return resourceTypeInfo(type)?.levels[0] ?? "";
-}
+export type AttachField = Exclude<
+  keyof AttachDraft,
+  "isKeyEdited" | "objectName" | "fromBundle"
+>;
 
 export function emptyAttachDraft(): AttachDraft {
   return {
     key: "",
-    type: DEFAULT_TYPE,
+    isKeyEdited: false,
+    type: "",
     target: "",
-    permission: firstLevel(DEFAULT_TYPE),
+    objectName: null,
+    permission: "",
     accessAs: "",
     fromBundle: false,
   };
 }
 
-/**
- * An offer of the bundle file, filled in. A level that is not one of the type
- * (`IS_OWNER`) is left empty so the person picks one; a target the file left
- * unresolved (`${var.endpoint}`) arrives as `null` and is typed.
- */
-export function attachDraftFromOffer(offer: BundleResource): AttachDraft {
-  const info = resourceTypeInfo(offer.type);
+function withDerivedKey(
+  draft: AttachDraft,
+  takenKeys: readonly string[],
+): AttachDraft {
+  if (draft.isKeyEdited || draft.type === "") return draft;
   return {
+    ...draft,
+    key: deriveResourceKey(draft.type, draft.objectName, takenKeys),
+  };
+}
+
+/**
+ * An offer of the bundle file, filled in. Its key is the one the release
+ * refers to, so it is kept. A level that is not one of the type (`IS_OWNER`)
+ * is left empty so the person picks one; a target the file left unresolved
+ * (`${var.endpoint}`) arrives as `null` and is chosen or typed.
+ */
+export function attachDraftFromOffer(
+  offer: BundleResource,
+  catalogue: ResourceCatalogue | null,
+): AttachDraft {
+  const entry = findResourceType(catalogue, offer.type);
+  return {
+    ...emptyAttachDraft(),
     key: offer.key,
+    isKeyEdited: true,
     type: offer.type,
     target: offer.target ?? "",
-    permission: info?.levels.includes(offer.permission) ? offer.permission : "",
-    accessAs: "",
+    permission: entry?.permissions.includes(offer.permission)
+      ? offer.permission
+      : "",
     fromBundle: true,
   };
 }
@@ -239,33 +266,91 @@ export function attachDraftFromOffer(offer: BundleResource): AttachDraft {
 /** A requirement that is still missing: its offer, or else its key and the type its name suggests. */
 export function attachDraftFromRequirement(
   requirement: Requirement,
+  catalogue: ResourceCatalogue | null,
 ): AttachDraft {
-  if (requirement.offer !== null)
-    return attachDraftFromOffer(requirement.offer);
-  const type =
-    requirement.suggested_type !== null &&
-    resourceTypeInfo(requirement.suggested_type) !== null
-      ? requirement.suggested_type
-      : DEFAULT_TYPE;
+  if (requirement.offer !== null) {
+    return attachDraftFromOffer(requirement.offer, catalogue);
+  }
+  const entry =
+    requirement.suggested_type === null
+      ? null
+      : findResourceType(catalogue, requirement.suggested_type);
   return {
     ...emptyAttachDraft(),
     key: requirement.key,
-    type,
-    permission: firstLevel(type),
+    isKeyEdited: true,
+    type: entry?.type ?? "",
+    permission: entry?.permissions[0] ?? "",
   };
 }
 
-/** A new type keeps the level when it fits, takes its first otherwise, and a secret has no identity. */
-export function changeDraftType(draft: AttachDraft, type: string): AttachDraft {
-  const info = resourceTypeInfo(type);
-  return {
-    ...draft,
-    type,
-    permission: info?.levels.includes(draft.permission)
-      ? draft.permission
-      : firstLevel(type),
-    accessAs: info?.hasAccessAs === false ? "" : draft.accessAs,
-  };
+/** A new type starts the object again, takes its first level, and keeps an access mode it allows. */
+export function chooseDraftType(
+  draft: AttachDraft,
+  entry: ResourceTypeEntry,
+  takenKeys: readonly string[],
+): AttachDraft {
+  return withDerivedKey(
+    {
+      ...draft,
+      type: entry.type,
+      target: "",
+      objectName: null,
+      permission: entry.permissions[0] ?? "",
+      accessAs:
+        draft.accessAs !== "" && entry.access_as.includes(draft.accessAs)
+          ? draft.accessAs
+          : "",
+      fromBundle: false,
+    },
+    takenKeys,
+  );
+}
+
+/** An object picked from the suggestions: its target, and its name for the key. */
+export function chooseDraftObject(
+  draft: AttachDraft,
+  suggestion: ResourceSuggestion,
+  takenKeys: readonly string[],
+): AttachDraft {
+  return withDerivedKey(
+    {
+      ...draft,
+      target: suggestion.target,
+      objectName: suggestion.label,
+      permission: suggestion.permissions.includes(draft.permission)
+        ? draft.permission
+        : (suggestion.permissions[0] ?? draft.permission),
+    },
+    takenKeys,
+  );
+}
+
+/** The key part of a typed `scope/key`, or `null`. */
+function typedSecretKey(target: string): string | null {
+  const slash = target.indexOf("/");
+  const key = slash === -1 ? "" : target.slice(slash + 1).trim();
+  return key === "" ? null : key;
+}
+
+/** A target typed by hand: a secret's key still names the resource; any other text does not. */
+export function typeDraftTarget(
+  draft: AttachDraft,
+  target: string,
+  takenKeys: readonly string[],
+): AttachDraft {
+  return withDerivedKey(
+    {
+      ...draft,
+      target,
+      objectName: draft.type === "secret" ? typedSecretKey(target) : null,
+    },
+    takenKeys,
+  );
+}
+
+export function editDraftKey(draft: AttachDraft, key: string): AttachDraft {
+  return { ...draft, key, isKeyEdited: true };
 }
 
 export interface AttachSubmission {
@@ -287,49 +372,57 @@ const SECRET_TARGET_HELP =
 export function buildAttachRequest(
   app: AppDetail,
   draft: AttachDraft,
+  entry: ResourceTypeEntry | null,
 ): FormResult<AttachSubmission> {
   const key = draft.key.trim();
   const target = draft.target.trim();
-  const info = resourceTypeInfo(draft.type);
   const errors: FormErrors = {};
 
-  if (key === "") {
-    errors.key = "Enter a key; the app's env entries refer to it.";
-  } else if (!ResourceKey.safeParse(key).success) {
-    errors.key =
-      "Use lower-case letters, digits, '.', '_' and '-', at most 63 characters.";
-  } else if (app.resources.some((resource) => resource.key === key)) {
-    errors.key =
-      "A resource with this key is already attached. Detach it first to attach it again.";
-  }
-
-  if (info === null) errors.type = "Pick a type from the list.";
-  if (target === "") {
-    errors.target = `Enter the ${(info?.targetLabel ?? "target").toLowerCase()}.`;
-  }
-  if (info !== null && !info.levels.includes(draft.permission)) {
-    errors.permission = `Use one of ${info.levels.join(", ")}.`;
-  }
-
-  const accessAs = info?.hasAccessAs === false ? null : draft.accessAs;
-  if (info?.hasAccessAs === true) {
-    if (draft.accessAs === "") {
-      errors.accessAs = "Choose the identity the app reaches it as.";
-    } else {
-      const chosen = accessAsChoices(app).find(
-        (candidate) => candidate.value === draft.accessAs,
+  if (entry === null) {
+    errors.type =
+      draft.type === ""
+        ? "Choose a type."
+        : `appmux does not offer the type ${draft.type}. Choose one from the list.`;
+  } else {
+    if (target === "") {
+      errors.target = `Choose one from the list or type it, such as ${entry.target_hint}.`;
+    }
+    if (!entry.permissions.includes(draft.permission)) {
+      errors.permission =
+        draft.permission === ""
+          ? "Choose a permission."
+          : `Use one of ${entry.permissions.map(resourceLevelLabel).join(", ")}.`;
+    }
+    if (entry.access_as.length > 0) {
+      const chosen = accessModeChoices(app, entry).find(
+        (choice) => choice.value === draft.accessAs,
       );
-      if (chosen !== undefined && !chosen.isAvailable) {
+      if (chosen === undefined) {
+        errors.accessAs = "Choose how the app reaches it.";
+      } else if (!chosen.isAvailable) {
         errors.accessAs = chosen.reason ?? "Not available for this app.";
       }
     }
   }
 
+  if (key === "") {
+    errors.key = "Enter a key; the app's env entries refer to it.";
+  } else if (!ResourceKey.safeParse(key).success) {
+    errors.key =
+      "Use lower-case letters, digits, '.', '_' and '-', starting with a letter or digit, at most 63 characters.";
+  } else if (app.resources.some((resource) => resource.key === key)) {
+    errors.key =
+      "A resource with this key is already attached. Detach it first to attach it again.";
+  }
+
+  const hasAccessAs = entry !== null && entry.access_as.length > 0;
   const request = {
     type: draft.type,
     target,
     permission: draft.permission,
-    ...(accessAs === null || accessAs === "" ? {} : { access_as: accessAs }),
+    ...(hasAccessAs && draft.accessAs !== ""
+      ? { access_as: draft.accessAs }
+      : {}),
     ...(draft.fromBundle ? { from_bundle: true } : {}),
   };
   const parsed = AttachResourceRequest.safeParse(request);
@@ -396,6 +489,23 @@ export function requirementsSummary(
       ? "Nothing is required"
       : `${attached} of ${requirements.items.length} attached`;
   return { attached, missing, text };
+}
+
+/**
+ * Said beside an attached resource that nothing reads: the active release
+ * does not refer to it and it holds no own service principal key. `null`
+ * while no release has been read, or when something reads it.
+ */
+export function unusedResourceNote(app: AppDetail, key: string): string | null {
+  const { requirements, config } = app;
+  if (requirements.release_no === null) return null;
+  const isRequired = requirements.items.some((item) => item.key === key);
+  const isOwnSpKey =
+    config.own_sp_client_id_key === key ||
+    config.own_sp_client_secret_key === key;
+  return isRequired || isOwnSpKey
+    ? null
+    : `Release ${requirements.release_no} does not refer to it.`;
 }
 
 // ------------------------------------------------------------------- detach

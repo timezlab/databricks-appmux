@@ -7,6 +7,7 @@ import type { Actor } from "@/lib/app/actions";
 import { emptyAttachDraft } from "@/lib/app/resources";
 import type { AttachDraft } from "@/lib/app/resources";
 import { RequirementsSection } from "./requirements-section";
+import { useResourceTypes } from "./resources/use-resource-types";
 import { ResourcesSection } from "./resources-section";
 import type { AppActions } from "./use-app-actions";
 
@@ -19,13 +20,14 @@ export interface ResourceAreaProps {
 
 interface OpenDraft {
   draft: AttachDraft;
-  /** Counts the drafts opened, so choosing another requirement restarts the form. */
+  /** Counts the drafts opened, so choosing another requirement restarts the panel. */
   id: number;
 }
 
 /**
- * The Requirements panel and the Resources section share one thing: the attach
- * form. An Attach button in the first opens the form in the second, filled in.
+ * The Requirements and the Resources sections share the catalogue of types
+ * and the Add panel: an Add button in the first opens the panel in the
+ * second, filled in.
  */
 export function ResourceArea({
   app,
@@ -33,7 +35,10 @@ export function ResourceArea({
   actions,
   onReload,
 }: ResourceAreaProps) {
+  const types = useResourceTypes();
   const [open, setOpen] = useState<OpenDraft | null>(null);
+  const catalogue =
+    types.state.status === "ready" ? types.state.catalogue : null;
 
   function openWith(draft: AttachDraft): void {
     setOpen((current) => ({ draft, id: (current?.id ?? 0) + 1 }));
@@ -41,18 +46,25 @@ export function ResourceArea({
 
   return (
     <>
-      <RequirementsSection app={app} actor={actor} onAttach={openWith} />
+      <RequirementsSection
+        app={app}
+        actor={actor}
+        catalogue={catalogue}
+        onAdd={openWith}
+      />
       <ResourcesSection
         app={app}
         actor={actor}
         actions={actions}
         onReload={onReload}
+        types={types.state}
+        onRetryTypes={types.reload}
         draft={open?.draft ?? null}
         draftId={open?.id ?? 0}
-        onOpenForm={() => {
+        onOpenPanel={() => {
           openWith(emptyAttachDraft());
         }}
-        onCloseForm={() => {
+        onClosePanel={() => {
           setOpen(null);
         }}
       />

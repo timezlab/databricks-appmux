@@ -69,6 +69,10 @@ import { Loading } from "@/components/loading";
 import { MainNav } from "@/components/main-nav";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
+import {
+  PrincipalCombobox,
+  PrincipalLabel,
+} from "@/components/principal-combobox";
 import { RelativeTime } from "@/components/relative-time";
 import { RouteStrip } from "@/components/route-strip";
 import { Section } from "@/components/section";
@@ -945,6 +949,33 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
       <SkeletonLines lines={2} />
       <SkeletonTable rows={2} columns={3} />
       <SkeletonFigure />
+    </>
+  ),
+  "principal-combobox.tsx": () => (
+    <>
+      <PrincipalCombobox
+        id="who"
+        value={null}
+        onValueChange={() => undefined}
+      />
+      <PrincipalCombobox
+        id="who-chosen"
+        value={{
+          type: "user",
+          name: "erin@example.com",
+          label: "Erin Ng",
+          identifier: "erin@example.com",
+        }}
+        onValueChange={() => undefined}
+      />
+      <PrincipalLabel
+        choice={{
+          type: "service_principal",
+          name: "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab",
+          label: "sales-agent",
+          identifier: "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab",
+        }}
+      />
     </>
   ),
 };

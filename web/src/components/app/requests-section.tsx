@@ -21,6 +21,7 @@ import { unavailableReasons } from "@/lib/app/reasons";
 import { pollData } from "@/lib/app/view";
 import type { PollResult } from "@/lib/poll/schedule";
 import { Button } from "@/components/button";
+import { ConfirmButton } from "@/components/confirm-button";
 import { DataTable } from "@/components/data-table";
 import type { DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
@@ -151,21 +152,21 @@ export function RequestsSection({
       cell: (request) => {
         if (!canWithdraw(request, actor?.email ?? null)) return null;
         const state = actions.stateOf(`withdraw:${request.request_id}`);
+        const kind = requestKindLabel(request.kind).toLowerCase();
         return (
-          <Button
+          <ConfirmButton
             size="small"
+            label="Withdraw"
+            prompt={`Withdraw this ${kind} request? A platform admin can no longer answer it; you can ask again later.`}
+            confirmLabel="Yes, withdraw it"
+            confirmVariant="primary"
             isBusy={state === "busy"}
             busyLabel="Withdrawing"
-            disabled={state === "blocked"}
-            onClick={() => {
+            isDisabled={state === "blocked"}
+            onConfirm={() => {
               void withdraw(request);
             }}
-          >
-            Withdraw{" "}
-            <span className="sr-only">
-              {requestKindLabel(request.kind).toLowerCase()} request
-            </span>
-          </Button>
+          />
         );
       },
     },

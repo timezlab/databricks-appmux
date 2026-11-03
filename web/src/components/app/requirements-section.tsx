@@ -7,42 +7,70 @@ import {
   accessAsLabel,
   attachDraftFromOffer,
   attachDraftFromRequirement,
-  checkResultLabel,
   requirementRows,
   requirementsSummary,
+  resourceLevelLabel,
   resourceTypeLabel,
 } from "@/lib/app/resources";
-import type { AttachDraft, RequirementRow } from "@/lib/app/resources";
-import { toneMark } from "@/lib/status-presentation";
+import type {
+  AttachDraft,
+  RequirementRow,
+  ResourceCatalogue,
+} from "@/lib/app/resources";
 import { Button } from "@/components/button";
 import { DataTable } from "@/components/data-table";
 import type { DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
+import { Lamp } from "@/components/lamp";
 import { Section } from "@/components/section";
-import { Badge } from "@/components/ui/badge";
+import { ResourceTypeIcon } from "./resources/resource-type-icon";
 
 export interface RequirementsSectionProps {
   app: AppDetail;
   actor: Actor | null;
-  /** Opens the attach form with this draft filled in. */
-  onAttach: (draft: AttachDraft) => void;
+  /** The catalogue of types, `null` while it loads (types show by their wire name then). */
+  catalogue: ResourceCatalogue | null;
+  /** Opens the Add panel with this draft filled in. */
+  onAdd: (draft: AttachDraft) => void;
 }
 
-function RequirementDetail({ row }: { row: RequirementRow }) {
+function TypeName({
+  catalogue,
+  type,
+}: {
+  catalogue: ResourceCatalogue | null;
+  type: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <ResourceTypeIcon type={type} />
+      {resourceTypeLabel(catalogue, type)}
+    </span>
+  );
+}
+
+function RequirementDetail({
+  row,
+  catalogue,
+}: {
+  row: RequirementRow;
+  catalogue: ResourceCatalogue | null;
+}) {
   if (row.resource !== null) {
     const { resource } = row;
     return (
       <div className="flex flex-col gap-1">
-        <div className="wrap-break-word">
-          {resourceTypeLabel(resource.type)}:{" "}
-          <span className="font-mono text-[0.9em]">{resource.target}</span> (
-          {resource.permission})
+        <div className="flex flex-wrap items-center gap-x-2 wrap-break-word">
+          <TypeName catalogue={catalogue} type={resource.type} />
+          <span className="font-mono text-[0.9em] break-all">
+            {resource.target}
+          </span>
+        </div>
+        <div className="text-muted-foreground">
+          {resourceLevelLabel(resource.permission)}
         </div>
         <div className="text-muted-foreground">
           {accessAsLabel(resource.access_as)}
-        </div>
-        <div className="text-muted-foreground">
-          {checkResultLabel(resource.check_result)}
         </div>
       </div>
     );
@@ -54,12 +82,14 @@ function RequirementDetail({ row }: { row: RequirementRow }) {
         <div className="text-muted-foreground">
           The release&apos;s databricks.yml offers:
         </div>
-        <div className="wrap-break-word">
-          {resourceTypeLabel(offer.type)}:{" "}
-          <span className="font-mono text-[0.9em]">
+        <div className="flex flex-wrap items-center gap-x-2 wrap-break-word">
+          <TypeName catalogue={catalogue} type={offer.type} />
+          <span className="font-mono text-[0.9em] break-all">
             {offer.target ?? "(target not resolved in the file)"}
-          </span>{" "}
-          ({offer.permission})
+          </span>
+          <span className="text-muted-foreground">
+            {resourceLevelLabel(offer.permission)}
+          </span>
         </div>
       </div>
     );
@@ -67,13 +97,14 @@ function RequirementDetail({ row }: { row: RequirementRow }) {
   if (row.suggestedType !== null) {
     return (
       <span className="text-muted-foreground">
-        Its name looks like a {resourceTypeLabel(row.suggestedType)}.
+        Its name looks like a{" "}
+        {resourceTypeLabel(catalogue, row.suggestedType).toLowerCase()}.
       </span>
     );
   }
   return (
     <span className="text-muted-foreground">
-      Nothing offers it; attach one by hand.
+      Nothing offers it; add one by hand.
     </span>
   );
 }
@@ -81,23 +112,24 @@ function RequirementDetail({ row }: { row: RequirementRow }) {
 /**
  * What the active release's code asks for (`databricks.yml` and the env
  * entries), and which of it the app already has. An offer is filled into the
- * attach form, never attached on its own: the person confirms the target and
- * the identity.
+ * Add panel, never attached on its own: the person confirms the object and
+ * the access mode.
  */
 export function RequirementsSection({
   app,
   actor,
-  onAttach,
+  catalogue,
+  onAdd,
 }: RequirementsSectionProps) {
   const { requirements } = app;
   const rows = requirementRows(app.resources, requirements);
   const summary = requirementsSummary(requirements);
   const gate = manageAvailability(actor);
 
-  function attachRequirement(key: string): void {
+  function addRequirement(key: string): void {
     const requirement = requirements.items.find((item) => item.key === key);
     if (requirement !== undefined) {
-      onAttach(attachDraftFromRequirement(requirement));
+      onAdd(attachDraftFromRequirement(requirement, catalogue));
     }
   }
 
@@ -117,23 +149,24 @@ export function RequirementsSection({
       header: "State",
       cell: (row) =>
         row.state === "attached" ? (
-          <Badge variant="success">
-            <span aria-hidden="true">{toneMark("success")}</span>
-            Attached
-          </Badge>
+          <Lamp state="running" label="Attached" />
         ) : (
-          <Badge variant="warning">
-            <span aria-hidden="true">{toneMark("warning")}</span>
-            Missing
-          </Badge>
+          <Lamp
+            state="warning"
+            label="Missing"
+            description="The release refers to it, but no resource of this key is attached."
+          />
         ),
     },
     {
       key: "detail",
       header: "Detail",
-      cell: (row) => <RequirementDetail row={row} />,
+      cell: (row) => <RequirementDetail row={row} catalogue={catalogue} />,
     },
-    {
+  ];
+
+  if (gate.isAllowed) {
+    columns.push({
       key: "actions",
       header: "Actions",
       isLabelHiddenWhenStacked: true,
@@ -141,16 +174,15 @@ export function RequirementsSection({
         row.state === "attached" ? null : (
           <Button
             size="small"
-            disabled={!gate.isAllowed}
             onClick={() => {
-              attachRequirement(row.key);
+              addRequirement(row.key);
             }}
           >
-            Attach <span className="sr-only">{row.key}</span>
+            Add <span className="sr-only">{row.key}</span>
           </Button>
         ),
-    },
-  ];
+    });
+  }
 
   return (
     <Section title="Requirements">
@@ -162,7 +194,9 @@ export function RequirementsSection({
           <strong>{summary.text}.</strong>
         </p>
         {gate.isAllowed ? null : (
-          <p className="text-sm text-muted-foreground">Attach: {gate.reason}</p>
+          <p className="text-sm text-muted-foreground">
+            Read only: {gate.reason}
+          </p>
         )}
         <DataTable
           caption="Requirements of the active release"
@@ -188,19 +222,23 @@ export function RequirementsSection({
                   key={offer.key}
                   className="flex flex-wrap items-center gap-2"
                 >
-                  <span className="wrap-break-word">
-                    <span className="font-mono text-[0.9em]">{offer.key}</span>:{" "}
-                    {resourceTypeLabel(offer.type)} ({offer.permission})
+                  <span className="font-mono text-[0.9em] wrap-break-word">
+                    {offer.key}
                   </span>
-                  <Button
-                    size="small"
-                    disabled={!gate.isAllowed}
-                    onClick={() => {
-                      onAttach(attachDraftFromOffer(offer));
-                    }}
-                  >
-                    Attach <span className="sr-only">{offer.key}</span>
-                  </Button>
+                  <TypeName catalogue={catalogue} type={offer.type} />
+                  <span className="text-muted-foreground">
+                    {resourceLevelLabel(offer.permission)}
+                  </span>
+                  {gate.isAllowed ? (
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        onAdd(attachDraftFromOffer(offer, catalogue));
+                      }}
+                    >
+                      Add <span className="sr-only">{offer.key}</span>
+                    </Button>
+                  ) : null}
                 </li>
               ))}
             </ul>
