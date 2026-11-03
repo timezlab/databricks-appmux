@@ -511,12 +511,21 @@ describe("shouldReloadAfterError", () => {
     );
   });
 
+  it("reloads after a 409 that says the page's list of requests is out of date (already closed, already pending)", () => {
+    for (const code of ["not_pending", "request_pending"]) {
+      assert.equal(
+        shouldReloadAfterError(new api.ApiError(409, code, "refused")),
+        true,
+        code,
+      );
+    }
+  });
+
   it("does not reload after a 409 that refuses the write on its own terms (a taken slug, no release, a protected release)", () => {
     for (const code of [
       "slug_taken",
       "no_release",
       "release_protected",
-      "request_pending",
       "conflict",
     ]) {
       assert.equal(

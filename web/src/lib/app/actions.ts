@@ -217,19 +217,24 @@ export function canViewSource(actor: Actor | null): Availability {
 /**
  * The 409 codes that say the page holds something the server no longer
  * does (contracts/admin-api.md): `changed_by_others` for a stale `version`,
- * `app_missing` for an app that is gone. Every other 409 (`slug_taken`,
- * `no_release`, `release_protected`, …) refuses the write as it stands, and
- * reading the app again would only bury that refusal under a reload notice.
+ * `app_missing` for an app that is gone, `not_pending` for a request an admin
+ * already closed and `request_pending` for one the list did not show yet.
+ * Every other 409 (`slug_taken`, `no_release`, `release_protected`, and the
+ * `conflict` of an Update that already retried on fresh data) refuses the
+ * write as it stands, and reading the app again would only bury that refusal
+ * under a reload notice.
  */
 const RELOAD_CONFLICT_CODES: ReadonlySet<string> = new Set([
   "changed_by_others",
   "app_missing",
+  "not_pending",
+  "request_pending",
 ]);
 
 /**
- * After a stale version or a vanished app (409) or a 404 (the release or
- * app is gone) the page reads the app again, so the person continues from
- * what is true now.
+ * After a stale version, a vanished app or an out-of-date request (409) or a
+ * 404 (the release or app is gone) the page reads the app again, so the
+ * person continues from what is true now.
  */
 export function shouldReloadAfterError(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
