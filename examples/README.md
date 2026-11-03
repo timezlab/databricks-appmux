@@ -1,27 +1,32 @@
 # Example child apps
 
-Four small apps, each a **standard Databricks App** (`app.yaml` and source, plus `requirements.txt`
+Six small apps, each a **standard Databricks App** (`app.yaml` and source, plus `requirements.txt`
 for the Python ones), written in different stacks so you can register them in appmux by hand, once
 as an **app admin** (register, update, roll back, change config, share) and once as an **end user**
-(open `/<slug>/`).
+(open `/<slug>/`). Two of them, an MCP server and an A2A agent that uses a free Databricks
+model, are for checking calls **between** Apps, inside appmux and outside it.
 
 Nothing in these folders knows about appmux, knows its slug, or needs a change to `app.yaml` or
 source to be hosted by it ([constitution I](../.specify/memory/constitution.md)). Each one also runs
 on a standalone Databricks App unchanged. They exist for hand testing; they are not part of the
 product, they are not shipped in the deploy folder (`scripts/assemble-deploy.sh` copies an
-allow-list that does not include `examples/`), and the Python gate does not run them (it lints the
-three Python apps; the Node app is checked by hand).
+allow-list that does not include `examples/`), and the Python gate lints all five Python apps and
+tests `mcp-tools` and `a2a-agent` (`tests/unit/test_example_*.py`). The Node app is checked by hand.
 
-> **Verification status.** Run **locally only**. The Python apps ran in a scratch virtual
-> environment whose versions match the Apps environment recorded in
-> [design 5.3](../docs/product/v1-design.md) (fastapi 0.115.0, uvicorn 0.30.6, flask 3.0.3,
-> gunicorn 23.0.0, streamlit 1.38.0), on Python 3.12 (the Apps environment is 3.11). The Node app
-> ran on Node v24.12.0 (the Apps environment has Node 22) and has no dependency. None has been run in
-> the appmux container, registered on any appmux instance, or uploaded to a workspace. What the
-> local runs showed is in
-> [What was verified](#what-was-verified); the rest of the behaviour described below (cookie `Path`
-> rewrite, `Location` rewrite, WebSocket relay, the token header) is what the design says appmux does,
-> not something observed.
+> **Verification status.** `fastapi-notes`, `flask-session`, `streamlit-inspector` and `node-stream`
+> were run **locally only**. The three Python ones ran in a scratch virtual environment whose
+> versions match the Apps environment recorded in [design 5.3](../docs/product/v1-design.md)
+> (fastapi 0.115.0, uvicorn 0.30.6, flask 3.0.3, gunicorn 23.0.0, streamlit 1.38.0), on Python 3.12
+> (the Apps environment is 3.11). The Node app ran on Node v24.12.0 (the Apps environment has
+> Node 22) and has no dependency. None of these four has been run in the appmux container,
+> registered on any appmux instance, or uploaded to a workspace. The rest of the behaviour described
+> below for them (cookie `Path` rewrite, `Location` rewrite, WebSocket relay, the token header) is
+> what the design says appmux does, not something observed.
+>
+> `mcp-tools` and `a2a-agent` were also run on 2026-11-03 as children of an appmux App and as
+> standalone Apps on the Free Edition workspace, calling each other and a free foundation model; the
+> results are in [What was verified](#what-was-verified) and in
+> [docs/reference/mcp-and-a2a.md](../docs/reference/mcp-and-a2a.md).
 
 ## The apps
 
@@ -31,6 +36,8 @@ three Python apps; the Node app is checked by hand).
 | [flask-session](flask-session/README.md) | Flask on gunicorn (sync WSGI, server-rendered forms) | `python -m gunicorn --workers 1 --threads 4 app:app` | `session` / 128 MB | a session cookie and a form redirect, which are the two things appmux rewrites on a response |
 | [streamlit-inspector](streamlit-inspector/README.md) | Streamlit (reactive UI over a WebSocket) | `streamlit run app.py` | `inspector` / 512 MB | the WebSocket relay carrying the identity headers, per-session state |
 | [node-stream](node-stream/README.md) | Node, `node:http` only, no dependency | `node server.js` | `stream` / **768 MB** | the Node runtime, a Server-Sent Events stream that stays open, relative asset and stream URLs under the prefix |
+| [mcp-tools](mcp-tools/README.md) | Starlette on uvicorn, an MCP server (stateless Streamable HTTP) | `python -m uvicorn app:app` | `tools` / 128 MB | four tools, `whoami` showing who the server sees at the end of a chain of Apps, being called by another App |
+| [a2a-agent](a2a-agent/README.md) | Starlette on uvicorn, an A2A 1.0 agent whose model is a free Databricks endpoint | `python -m uvicorn app:app` | `agent` / 256 MB | calling a model, an MCP server and another agent with the App's own identity; the shared-SP delegation and `CAN USE` they need |
 
 Every app listens on the port appmux gives it (`8000` in this repo's setup; locally you pick it), and
 every app shows the same three things so you can tell a release from a config change:
@@ -43,7 +50,7 @@ every app shows the same three things so you can tell a release from a config ch
 - **health**: `GET /` answers 200 (appmux's default health path) and each app has its own
   health URL (`/healthz`, or `/_stcore/health` for Streamlit).
 
-Why these four: FastAPI is the framework appmux's own fixtures and docs lean on, so it is the
+Why the first four: FastAPI is the framework appmux's own fixtures and docs lean on, so it is the
 baseline; Flask on gunicorn is the synchronous WSGI path and gives the cookie and redirect rewrite
 something to act on; Streamlit is the app that needs a long-lived WebSocket and relative asset
 paths, the hardest ordinary case; the Node app is the only one on the Node runtime and the only one
@@ -56,12 +63,21 @@ its README). Not included, and why: Dash and Gradio (they would exercise the fra
 variables appmux sets, `DASH_*` and `GRADIO_ROOT_PATH`; they are the natural next examples). The
 omission is easy to reverse.
 
+The last two exist for one question: **can app A call app B** when either is a child of appmux or a
+standalone App. MCP and A2A are plain JSON-RPC over HTTP, so the answer is in three hops (network, a
+bearer the Apps proxy accepts, `CAN USE`), plus appmux's own grants for a child. `mcp-tools` is the
+callee; `a2a-agent` is the caller and also a callee, and it talks to a free foundation-model
+endpoint, so nothing needs a paid model. What was measured, and the setup each combination needs,
+is in [docs/reference/mcp-and-a2a.md](../docs/reference/mcp-and-a2a.md). Both depend only on
+packages the Apps environment already holds (Starlette, uvicorn, httpx, the Databricks SDK).
+
 Packages: every Python requirement is already in the Apps environment, so no wheel folder, index or
 `wheel_sources` is needed ([design 5.3](../docs/product/v1-design.md)). The `requirements.txt` files
 use lower bounds, not `==` pins, so the environment's version satisfies them. The Node app has no
 dependency and no `requirements.txt` (that file would make appmux treat it as Python).
 
-No example uses a resource or a secret, and none calls an API with the visitor's token. A resource
+No example uses a resource or a secret, and none calls an API with the visitor's token (`a2a-agent`
+calls with the App's **own** identity). A resource
 example needs an object in your workspace and exact attach steps that have not been run in the
 container (tasks T129 and T147); an OBO call needs a scope on the appmux App. The apps do show
 whether the token header arrives, which is the part appmux controls (see
@@ -269,6 +285,18 @@ Run on 2026-11-01, locally, from this folder, with the environment variables app
   (`Failed to reserve virtual memory for CodeRange`), so a budget of 512 MB (limit 1,024 MB) fails and
   the suggested 768 MB is the tested one. These are workstation numbers, not container numbers.
 
+- **mcp-tools** and **a2a-agent** (Python 3.11, Starlette 0.38.6, uvicorn 0.30.6): 27 and 62 unit
+  tests pass; the official `mcp` 1.30.0 and `a2a-sdk` 1.3.0 clients ran against them locally. On the
+  Free Edition workspace (2026-11-03) both ran as children of an appmux App (`tools` at 128 MB,
+  `agent` at 256 MB) and as standalone Apps. The calls in
+  [the table of the reference](../docs/reference/mcp-and-a2a.md#calls-between-apps-measured) were
+  run: a person with a user token, a child with the shared service principal, and a standalone App
+  with its own, calling an MCP server and an agent inside and outside appmux. The agent answered
+  with the free model `databricks-gpt-oss-120b` using a tool of the MCP server, and two agents
+  relayed to each other both ways. A caller whose service principal lacked `CAN USE` got `401 {}`,
+  one the proxy admitted but no grant admitted on the child got `404`, and a laptop request with
+  no bearer got `302` without an `Accept` header and `401 {}` with one.
+
 ## What was not verified
 
 Not run in the appmux container, and not run behind the appmux edge at all: the `Path=/<slug>/`
@@ -279,5 +307,10 @@ For `node-stream` also: Node 22 itself (it ran on v24.12.0 and uses no API newer
 reading, not a run), the Server-Sent Events stream through the edge (the 120 second idle wait, the
 64 places per app that an open stream holds, and any buffering), what happens to a stream that is open during an Update or a
 Restart, and the release failing to start under a 512 MB budget (shown here only as a local `ulimit`).
-`import-dir`, Register, Update and the config call have not been run against a workspace. If
+`import-dir`, Register, Update and the config call have not been run for the first four apps. For
+`mcp-tools` and `a2a-agent`, Register, Update, the config call, the delegation and the grants ran
+through the admin API with the CLI's token, not through the UI, so the UI labels in their READMEs
+are quoted, not seen; the reference lists what else was not measured under
+[Not measured](../docs/reference/mcp-and-a2a.md#not-measured) (a call near the 300 s limit, OBO, load,
+`group` grants for a service principal). If
 something here disagrees with what you see, trust what you see and correct this file.

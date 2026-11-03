@@ -1,0 +1,12 @@
+command: ["python", "-m", "uvicorn", "app:app"]
+env:
+  - name: AGENT_NAME
+    value: "a2a-agent"
+  # A free pay-per-token foundation model; the answer to "which one?" is in the README.
+  - name: LLM_ENDPOINT
+    value: "databricks-gpt-oss-120b"
+  # Empty means "not set": the agent then answers without tools / refuses to relay.
+  - name: MCP_SERVER_URL
+    value: ""
+  - name: A2A_PEER_URL
+    value: ""

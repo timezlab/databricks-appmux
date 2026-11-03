@@ -1,0 +1,6 @@
+# All held by the App environment (starlette, uvicorn, httpx, databricks-sdk), so a release of this
+# app needs no wheel and no index.
+starlette>=0.38
+uvicorn>=0.30
+httpx>=0.27
+databricks-sdk>=0.33
