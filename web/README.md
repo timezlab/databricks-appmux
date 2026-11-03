@@ -34,6 +34,7 @@ src/lib/api/        the API client, one file per route group, schemas/ (Zod)
 src/lib/<feature>/  pure logic per page, no React
 tests/              unit/ (mirrors src/lib), components/ (RTL), contract/ and csp/ (guards), export/
 public/theme.js     the theme script, copied to the root of out/ (see Theme below)
+public/licenses/    the fonts' OFL-1.1 license texts, shipped beside the fonts in out/licenses/ (see Colour, type and the wordmark)
 e2e/                the browser tests: server.ts (edge stand-in with the CSP and a mock API), fixtures.ts (scenarios), pages.ts, page-watch.ts, csp.spec.ts, fonts.spec.ts, motion.spec.ts, theme.spec.ts, shell.spec.ts, screenshots.ts
 e2e/primitives/     a page of every interactive primitive, built and prerendered by Playwright's global setup (build.ts), never part of out/
 ```
@@ -263,7 +264,12 @@ in both colour schemes.
 
 The interface face is IBM Plex Sans (variable) and routes, paths and code are IBM Plex Mono,
 both self-hosted from npm by `src/app/fonts.css` (latin and latin-ext only, woff2), so the CSP's
-`font-src 'self'` holds.
+`font-src 'self'` holds. Both are under the SIL Open Font License 1.1, which asks that the license
+travel with the fonts: the export carries the two packages' own `LICENSE` files as
+[`licenses/ibm-plex-sans-license.txt`](public/licenses/ibm-plex-sans-license.txt) and
+[`licenses/ibm-plex-mono-license.txt`](public/licenses/ibm-plex-mono-license.txt). Copy them
+again from `node_modules/@fontsource-variable/ibm-plex-sans/LICENSE` and
+`node_modules/@fontsource/ibm-plex-mono/LICENSE` when either package is upgraded.
 
 The header shows the word "appmux" in text, with no logo or icon.
 
