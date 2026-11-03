@@ -113,13 +113,27 @@ _CREDENTIAL_NAME: Final = (
 # Every shape fails closed: a longer or odder spelling of a credential is refused too. A plain word
 # like "secret" or "token" with no "=" or ":" and a value after it is not a shape, so an audit
 # reason can still say that a secret was rotated.
+#
+# A child's output is masked in the event loop every app shares, so each shape runs in time linear
+# in the text (review T205 R1). The two shapes that can start many times inside one run of
+# characters (a JSON web token's "eyJ", a credential name) start only where that run starts: the
+# match then takes the first "eyJ" or name in the run, ``kept`` is the text before it, and each
+# later part takes its run whole and never gives any of it back. Each start in one run reaches the
+# same end of the run, so it has the same outcome: these shapes match exactly what the plain forms
+# ("eyJ[...]{8,}\.[...]{8,}\." and NAME[\w.-]*...) match, but scan a run once instead of once for
+# each start in it.
+_BASE64URL: Final = "[A-Za-z0-9_-]"
+_NAME_CHARACTER: Final = r"[\w.-]"
 _DATABRICKS_TOKEN_SHAPES: Final = (
     re.compile(r"dapi[0-9a-fA-F]{16,}"),  # Databricks personal access token
     re.compile(r"dose[0-9a-fA-F]{16,}"),  # Databricks OAuth client secret
 )
 _CREDENTIAL_VALUE_SHAPES: Final = (
     *_DATABRICKS_TOKEN_SHAPES,
-    re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."),  # JSON web token
+    re.compile(  # JSON web token: its header and payload
+        rf"(?<!{_BASE64URL})(?>(?P<kept>{_BASE64URL}*?)eyJ)"
+        rf"{_BASE64URL}{{8,}}+\.{_BASE64URL}{{8,}}+\."
+    ),
     re.compile(_NOT_AFTER_ALNUM + r"bearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
     # Vendor API keys.
     re.compile(_NOT_AFTER_ALNUM + r"(?:sk|pk|ghp|gho|ghs|xox[abps])[-_][A-Za-z0-9_-]{10,}"),
@@ -127,10 +141,13 @@ _CREDENTIAL_VALUE_SHAPES: Final = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"://[^/\s:@]+:[^/\s@]+@"),  # a password in a URL
 )
-# NAME=value and NAME: value, also quoted ("NAME": "value") and with a longer name around it. The
-# group is the name and its separator, which masking keeps.
+# NAME=value and NAME: value, also quoted ("NAME": "value") and with a longer name around it.
+# ``kept`` is the whole name and its separator, which masking keeps.
 _NAMED_CREDENTIAL: Final = re.compile(
-    "(" + _CREDENTIAL_NAME + r"""[\w.-]*["']?\s*[=:]\s*["']?)\S+""", re.IGNORECASE
+    rf"(?<!{_NAME_CHARACTER})"
+    rf"(?P<kept>(?>{_NAME_CHARACTER}*?{_CREDENTIAL_NAME}){_NAME_CHARACTER}*+"
+    r"""["']?\s*[=:]\s*["']?)\S+""",
+    re.IGNORECASE,
 )
 _CREDENTIAL_SHAPES: Final = (*_CREDENTIAL_VALUE_SHAPES, _NAMED_CREDENTIAL)
 _MASK: Final = "***"
@@ -153,9 +170,13 @@ def mask_credentials(text: str) -> str:
     ``Authorization: Bearer <token>`` the token is gone before the name rule masks one word; a
     ``NAME=value`` keeps its name. Like the refusal, it knows common shapes, not all of them.
     """
-    for shape in _CREDENTIAL_VALUE_SHAPES:
-        text = shape.sub(_MASK, text)
-    return _NAMED_CREDENTIAL.sub(lambda found: found.group(1) + _MASK, text)
+    for shape in _CREDENTIAL_SHAPES:
+        text = shape.sub(_masked_match, text)
+    return text
+
+
+def _masked_match(found: re.Match[str]) -> str:
+    return (found.groupdict().get("kept") or "") + _MASK
 
 
 def _refuse_token_shape(text: str) -> str:

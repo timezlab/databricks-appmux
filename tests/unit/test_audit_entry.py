@@ -9,6 +9,7 @@ left out of it.
 from __future__ import annotations
 
 import json
+import time
 import types
 from dataclasses import dataclass
 from pathlib import Path
@@ -592,3 +593,52 @@ def test_a_refused_group_name_is_not_repeated_in_the_error() -> None:
         _entry(action="grant.app", detail={"principal": "group:" + FAKE_DATABRICKS_TOKEN})
 
     assert FAKE_DATABRICKS_TOKEN not in str(refusal.value)
+
+
+# A shape inside a longer word keeps the start of the word: only the value is masked.
+MASKED_IN_A_LONGER_WORD = {
+    "json web token after a prefix": ("jwt_" + FAKE_JWT, "jwt_***c2lnbmF0dXJl"),
+    "json web token after a dash": ("x-" + FAKE_JWT, "x-***c2lnbmF0dXJl"),
+    "json web token after another eyJ": ("eyJ" + FAKE_JWT, "***c2lnbmF0dXJl"),
+    "name inside a longer name": ("MY_CLIENT_SECRET=" + FAKE_PASSWORD, "MY_CLIENT_SECRET=***"),
+    "name after a repeated name": (
+        "tokentoken.secret_value: " + FAKE_PASSWORD,
+        "tokentoken.secret_value: ***",
+    ),
+    "two names on one line": (
+        "client.token=" + FAKE_PASSWORD + " then password: x",
+        "client.token=*** then password: ***",
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    ("text", "masked"), MASKED_IN_A_LONGER_WORD.values(), ids=list(MASKED_IN_A_LONGER_WORD)
+)
+def test_masking_keeps_the_start_of_the_word_a_shape_sits_in(text: str, masked: str) -> None:
+    assert audit.mask_credentials(text) == masked
+
+
+# Lines a hostile child can print: a name or "eyJ" repeated with nothing that completes the shape.
+# An open quantifier after the name made every start rescan the rest of the line (review T205 R1).
+LONG_LINES_WITH_NO_CREDENTIAL = {
+    "a credential name repeated, 32 KB": "token" * 6_400,
+    "eyJ repeated, 64 KB": "eyJ" * 21_334,
+}
+
+
+@pytest.mark.parametrize(
+    "line", LONG_LINES_WITH_NO_CREDENTIAL.values(), ids=list(LONG_LINES_WITH_NO_CREDENTIAL)
+)
+def test_masking_and_refusing_a_long_line_take_time_in_proportion_to_its_length(line: str) -> None:
+    # A child's output is masked in the event loop every app shares. Measured on the machine this
+    # was written on, to mask and refuse each line: the quadratic shapes took 10 s (the name) and
+    # 2.9 s (eyJ), the linear ones take 6 ms and 21 ms. The bound is over 20 times the linear cost,
+    # so a slow runner does not fail it, and a fraction of the quadratic one.
+    started = time.perf_counter()
+    masked = audit.mask_credentials(line)
+    kept = audit._refuse_credential_shape(line)
+    took_s = time.perf_counter() - started
+
+    assert (masked, kept) == (line, line)
+    assert took_s < 0.5
