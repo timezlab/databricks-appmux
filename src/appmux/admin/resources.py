@@ -26,7 +26,7 @@ message, not in a log, not in an exception.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Final
 from urllib.parse import quote
@@ -162,7 +162,7 @@ class DatabricksAttachChecker:
             },
         )
         if response.status_code in (400, 403, 404):
-            if _names_a_missing_scope(response):
+            if names_a_missing_scope(response):
                 return CheckVerdict.UNVERIFIED
             if own_warehouse:
                 return CheckVerdict.NO_ACCESS
@@ -194,7 +194,7 @@ class DatabricksAttachChecker:
         if response.status_code in (400, 403, 404):
             return (
                 CheckVerdict.UNVERIFIED
-                if _names_a_missing_scope(response)
+                if names_a_missing_scope(response)
                 else (CheckVerdict.NO_ACCESS)
             )
         raise AttachCheckUnavailable(CHECK_UNAVAILABLE_MESSAGE)
@@ -208,39 +208,49 @@ class DatabricksAttachChecker:
         timeout_s: float,
         json: dict[str, str] | None = None,
     ) -> httpx.Response:
-        response = await self._try_send(token, method, path, timeout_s=timeout_s, json=json)
+        response = await send_with_token(
+            self._client, token, method, path, timeout_s=timeout_s, json=json
+        )
         if response is None:
             raise AttachCheckUnavailable(CHECK_UNAVAILABLE_MESSAGE)
         return response
 
-    async def _try_send(
-        self,
-        token: str,
-        method: str,
-        path: str,
-        *,
-        timeout_s: float,
-        json: dict[str, str] | None,
-    ) -> httpx.Response | None:
-        # Returns ``None`` instead of raising from inside ``except``: the transport error's text
-        # is not ours to vouch for and this request carried a bearer token, so it must not stay
-        # behind as the new error's ``__context__``.
-        try:
-            return await self._client.request(
-                method,
-                path,
-                json=json,
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-                # The client may carry another credential; this call carries only the token.
-                auth=None,
-                follow_redirects=False,
-                timeout=timeout_s,
-            )
-        except (httpx.HTTPError, httpx.InvalidURL):
-            return None
+
+async def send_with_token(
+    client: httpx.AsyncClient,
+    token: str,
+    method: str,
+    path: str,
+    *,
+    timeout_s: float,
+    json: Mapping[str, object] | None = None,
+    params: Mapping[str, str] | None = None,
+) -> httpx.Response | None:
+    """One request to the workspace made with a person's token, or ``None`` if it got no answer.
+
+    The one place that sends a person's token to Databricks from the admin API (the attach check
+    and the resource suggestions both use it): only the token in the one header that needs it,
+    whatever other credential the client carries, no redirect followed, and ``None`` instead of an
+    exception from inside ``except`` because the transport error's text is not ours to vouch for
+    and this request carried a bearer token, so it must not stay behind as the new error's
+    ``__context__``.
+    """
+    try:
+        return await client.request(
+            method,
+            path,
+            json=json,
+            params=params,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            auth=None,
+            follow_redirects=False,
+            timeout=timeout_s,
+        )
+    except (httpx.HTTPError, httpx.InvalidURL):
+        return None
 
 
-def _names_a_missing_scope(response: httpx.Response) -> bool:
+def names_a_missing_scope(response: httpx.Response) -> bool:
     """Whether a refusal says the App lacks the OAuth scope, rather than that access is denied."""
     text = response.text[:_MAX_READ_CHARS].lower()
     return "required scope" in text or "invalid scope" in text

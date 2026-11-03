@@ -1,18 +1,18 @@
 {
   "items": [
     {
-      "target": "1234567890abcdef",
-      "label": "Shared Serverless",
-      "detail": "RUNNING, size Small",
+      "target": "fedcba0987654321",
+      "label": "Reporting",
+      "detail": null,
       "permissions": [
         "CAN_USE",
         "CAN_MANAGE"
       ]
     },
     {
-      "target": "fedcba0987654321",
-      "label": "Reporting",
-      "detail": null,
+      "target": "1234567890abcdef",
+      "label": "Shared Serverless",
+      "detail": "RUNNING, size Small",
       "permissions": [
         "CAN_USE",
         "CAN_MANAGE"

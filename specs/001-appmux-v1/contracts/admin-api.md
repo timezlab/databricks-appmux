@@ -900,11 +900,11 @@ made with the person's token and filtered by `q` here:
 | `serving_endpoint` | `GET /api/2.0/serving-endpoints` | `name` | `name` |
 | `secret`, `q` without `/` | `GET /api/2.0/secrets/scopes/list` | `<scope>/`, a prefix for the next keystrokes and not a complete target | `<scope>` |
 | `secret`, `q` of the form `scope/prefix` | `GET /api/2.0/secrets/list?scope=<scope>` (key names only; the value endpoint is never called) | `<scope>/<key>` | `<key>` |
-| `mlflow_experiment` | `POST /api/2.0/mlflow/experiments/search` | `experiment_id` | `name` |
-| `job` | `GET /api/2.2/jobs/list` (its `name` parameter is an exact match, so the filter is made here) | `job_id` | `settings.name` |
+| `mlflow_experiment` | `POST /api/2.0/mlflow/experiments/search` (`max_results` 1000, `view_type` `ACTIVE_ONLY`) | `experiment_id` | `name` |
+| `job` | `GET /api/2.2/jobs/list?limit=100` (its `name` parameter is an exact match, so the filter is made here) | `job_id` | `settings.name` |
 
 Every other type answers `not_supported`. A scope named in `q` that does not exist or is not visible to the person
-answers `source: "caller_token"`, no items and a `note`, since Databricks answers `404` for both.
+answers `source: "caller_token"`, no items and a `note`, since Databricks answers `404` for both. A `q` whose scope part cannot be a scope name (empty, a character outside letters, digits and `. _ @ -`, or a second slash) answers the same without calling anything. An object whose target the attach form would refuse is left out of the list.
 
 #### MetricsBreakdown
 

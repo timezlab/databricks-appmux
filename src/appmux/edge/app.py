@@ -44,6 +44,7 @@ from appmux.admin.platform import (
 )
 from appmux.admin.releases import ReleaseRoutes
 from appmux.admin.requests import RenameCascade, RequestRoutes
+from appmux.admin.resource_suggestions import ResourceSuggestionRoutes
 from appmux.admin.resources import ResourceRoutes
 from appmux.admin.source_viewer import SnapshotStore, SourceViewerRoutes
 from appmux.admin.workspace_browse import WorkspaceBrowseRoutes
@@ -228,7 +229,7 @@ def create_edge_app(
     * ``attach_checker`` mounts the requirements, attach and detach routes;
     * ``source_store`` (the content store) mounts the read-only source viewer;
     * ``workspace_client`` (the client every call to the workspace goes through) mounts the
-      folder browser, which reads a folder with the visitor's own token;
+      folder browser and the resource pickers, which read with the visitor's own token;
     * ``open_mode_cookies`` is the one writer and reader of the Open as a user cookie: the
       ``POST /apps/{app}/open-mode`` route sets it, and, unless ``forward_token_policy`` is given,
       the pipeline reads the same instance to decide whether a child receives an admin's token.
@@ -287,6 +288,7 @@ def create_edge_app(
         providers.append(SourceViewerRoutes(source_store))
     if workspace_client is not None:
         providers.append(WorkspaceBrowseRoutes(WorkspaceHttpApi(workspace_client)))
+        providers.append(ResourceSuggestionRoutes(workspace_client))
     admin_app = create_admin_app(
         registry=registry, authorizer=authorizer, route_providers=providers
     )
