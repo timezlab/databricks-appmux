@@ -163,20 +163,31 @@ describe("access modes per type", () => {
     assert.match(endpoint?.reason ?? "", /attach check/);
   });
 
-  it("needs OBO delegation for obo, and the own-SP keys for own_sp, saying how to get each", () => {
-    const bare = appWith({
+  it("keeps obo selectable without the delegation and says what the visitor's token needs", () => {
+    // Setting is not use: the delegation only decides whether a visitor's token reaches the app.
+    const undelegated = appWith({
       delegation: { ...APP.delegation, obo_delegated: false },
+    });
+    const obo = byValue(undelegated, WAREHOUSE).obo;
+    assert.equal(obo?.isAvailable, true);
+    assert.equal(obo?.reason, null);
+    assert.match(obo?.note ?? "", /until a platform admin delegates OBO/i);
+    assert.match(obo?.howToGet ?? "", /Request a delegation/);
+    assert.equal(byValue(APP, WAREHOUSE).obo?.note, null);
+  });
+
+  it("needs the own-SP keys for own_sp, saying how to get them", () => {
+    const bare = appWith({
       config: {
         ...APP.config,
         own_sp_client_id_key: null,
         own_sp_client_secret_key: null,
       },
     });
-    const modes = byValue(bare, WAREHOUSE);
-    assert.equal(modes.obo?.isAvailable, false);
-    assert.match(modes.obo?.howToGet ?? "", /Request a delegation/);
-    assert.equal(modes.own_sp?.isAvailable, false);
-    assert.match(modes.own_sp?.howToGet ?? "", /client secret/);
+    const ownSp = byValue(bare, WAREHOUSE).own_sp;
+    assert.equal(ownSp?.isAvailable, false);
+    assert.match(ownSp?.howToGet ?? "", /client secret/);
+    assert.equal(ownSp?.note, null);
   });
 
   it("names the identity in words, and a secret as read by appmux", () => {

@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AddResourcePanel } from "@/components/app/resources/add-resource-panel";
 import { ResourceTypeList } from "@/lib/api";
-import type { ResourceSuggestionList, ResourceTypeEntry } from "@/lib/api";
+import type {
+  AppDetail,
+  ResourceSuggestionList,
+  ResourceTypeEntry,
+} from "@/lib/api";
 import { emptyAttachDraft } from "@/lib/app/resources";
 import type { ResourceCatalogue } from "@/lib/app/resources";
 import { stubFetch } from "../../../support/fake-fetch";
@@ -60,12 +64,12 @@ function stubCalls({
   return { suggestions, attaches };
 }
 
-function renderPanel() {
+function renderPanel(app: AppDetail = APP) {
   const onAdded = vi.fn();
   const onClose = vi.fn();
   const view = renderWithActions((actions) => (
     <AddResourcePanel
-      app={APP}
+      app={app}
       catalogue={CATALOGUE}
       initialDraft={emptyAttachDraft()}
       actions={actions}
@@ -206,6 +210,41 @@ describe("AddResourcePanel", () => {
         /A platform admin has switched shared service principal delegation off/,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("lets OBO be added before the platform delegates it, and says what the visitor's token needs", async () => {
+    // Setting is not use: the resource is stored now; visitors' tokens reach the app after the delegation.
+    const { attaches } = stubCalls();
+    const { user, onAdded } = renderPanel({
+      ...APP,
+      delegation: { ...APP.delegation, obo_delegated: false },
+    });
+    await chooseType(user, /^SQL warehouse/);
+    const object = screen.getByRole("combobox", { name: /^SQL warehouse/ });
+    await waitFor(() => {
+      expect(object).toBeEnabled();
+    });
+    await user.click(object);
+    await user.click(screen.getByRole("option", { name: "Shared Serverless" }));
+
+    await user.click(screen.getByRole("combobox", { name: /^Access mode/ }));
+    expect(
+      screen.getByRole("option", { name: /^As the visitor/ }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+    await user.click(screen.getByRole("option", { name: /^As the visitor/ }));
+
+    expect(
+      screen.getByText(/Until a platform admin delegates OBO to this app/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open Authorization" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => {
+      expect(onAdded).toHaveBeenCalledExactlyOnceWith("shared-serverless");
+    });
+    expect(describeCall(attaches[0]).body).toMatchObject({ access_as: "obo" });
   });
 
   it("goes from a secret scope on to its keys, and fills the key from the secret's", async () => {

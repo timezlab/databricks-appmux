@@ -84,7 +84,9 @@ export interface AccessModeChoice {
   isAvailable: boolean;
   /** Why it cannot be chosen; `null` when it can. */
   reason: string | null;
-  /** How to make it available; `null` when it is, or when nothing can be done. */
+  /** What to know before choosing a mode that can be chosen; `null` when there is nothing. */
+  note: string | null;
+  /** How to make it available, or to make the note go away; `null` when nothing can be done. */
   howToGet: string | null;
 }
 
@@ -95,7 +97,9 @@ const ASK_FOR_DELEGATION =
  * The three ways the app can reach a resource of this type, each with whether
  * it can be chosen now: the type must allow it (the shared service principal
  * only for a type with an attach check) and the app must have it (a
- * delegation, or its own service principal's keys).
+ * delegation, or its own service principal's keys). OBO is the exception:
+ * declaring it is setting, so it needs no delegation; the delegation only
+ * decides whether a visitor's token reaches the app, and a note says so.
  */
 export function accessModeChoices(
   app: AppDetail,
@@ -115,6 +119,7 @@ export function accessModeChoices(
       label,
       isAvailable: false,
       reason,
+      note: null,
       howToGet,
     });
     if (!entry.access_as.includes(value)) {
@@ -126,7 +131,14 @@ export function accessModeChoices(
         : off(`A ${typeLabel} cannot be reached this way.`, null);
     }
     if (value === "obo" && !obo_delegated) {
-      return off("OBO is not delegated to this app.", ASK_FOR_DELEGATION);
+      return {
+        value,
+        label,
+        isAvailable: true,
+        reason: null,
+        note: "You can add it now. Until a platform admin delegates OBO to this app, visitors' tokens are not passed to it.",
+        howToGet: ASK_FOR_DELEGATION,
+      };
     }
     if (value === "own_sp" && !hasOwnSpKeys) {
       return off(
@@ -145,7 +157,14 @@ export function accessModeChoices(
             null,
           );
     }
-    return { value, label, isAvailable: true, reason: null, howToGet: null };
+    return {
+      value,
+      label,
+      isAvailable: true,
+      reason: null,
+      note: null,
+      howToGet: null,
+    };
   });
 }
 

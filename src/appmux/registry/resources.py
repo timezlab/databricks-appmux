@@ -403,11 +403,9 @@ def _require_access_as(
         raise AttachRefused(
             "access_as_invalid", f"access_as is one of: {', '.join(ACCESS_AS_VALUES)}"
         )
-    if access_as == "obo" and not app.obo_delegated:
-        raise AttachRefused(
-            "delegation_missing",
-            "access_as obo needs the obo delegation of this app; request it first",
-        )
+    # No gate on obo: declaring it is setting, and the app's obo delegation only decides, at
+    # request time, whether a visitor's token reaches the child (edge/open_mode.py and
+    # authz/policy.py). The attach check still proves the attacher's own token reaches the object.
     if access_as == "shared_sp":
         if not app.shared_sp_delegated:
             raise AttachRefused(

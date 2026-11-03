@@ -566,13 +566,13 @@ Each resource except a secret says which identity the child uses it as (`access_
 
 | `access_as` | The child reaches it as | What must be true |
 |---|---|---|
-| `obo` | the visitor | the app has `obo_delegated`; each visitor has the rights |
+| `obo` | the visitor | declaring it needs nothing from the platform (setting); the child gets the visitor's token only while the app has `obo_delegated` (use), and each visitor needs the rights |
 | `own_sp` | its own existing service principal | the app has own-SP keys; someone with rights granted that SP the permission **outside appmux** |
 | `shared_sp` | the appmux service principal | the app has `shared_sp_delegated`, and the appmux SP already has the rights |
 
 **appmux never grants access to a resource.** In Databricks, adding a resource sets the app SP's permission; a child has no SP to set. appmux checks instead that **the person attaching it could use it themselves**. The **attach check** runs in that person's request with their own token, so no workspace admin and no SP grant is involved. It is the standalone rule too: declaring a resource, in a bundle or in the UI, needs the declarer to hold the permission.
 
-1. `authorize(resource.attach)`: `CAN_MANAGE` on the app. The delegation or own-SP keys for the chosen `access_as` exist.
+1. `authorize(resource.attach)`: `CAN_MANAGE` on the app. For `shared_sp` the delegation (and the platform switch) exists; for `own_sp` the own-SP keys exist; `obo` needs neither, because declaring it is setting and the delegation only gates use: a resource declared as `obo` stays inactive for visitors until a platform admin delegates OBO to the app, and the Add panel of the app page says so when it is chosen.
 2. With the attacher's token, one read-only call per type shows they can reach the target (for a Lakebase database, a login with their OBO token; for a `secret`, `SELECT length(secret('<scope>', '<key>'))` on a SQL warehouse, which succeeds only with `READ` on the scope and returns the length, never the value). The calls, the OAuth scope each needs and the result when it fails are in [data model 4.7](v1-data-model.md#47-app_resources) (spike 16: 8 of 14 types verified). Where the response carries the caller's own permission level (the serving endpoint), appmux compares it with the requested one; elsewhere the call proves the attacher can reach the object, not which level they hold. Result `ok`; if no such call exists for the type (`mlflow_experiment`, `job`, `databricks_app` and the types with nothing to test) or the App's scopes do not cover it, `unverified`. The checks of `secret`, `sql_warehouse` and `uc_function` run a statement, so they need a SQL warehouse the attacher can use; the platform setting `attach_check_warehouse_id` names it.
 3. A "no access" answer refuses the attach and writes nothing. `ok` and `unverified` are stored — **except that `shared_sp` accepts only `ok`**: the shared identity is the one case where a resource could be borrowed from someone with no right to it (a confused deputy), so it fails closed.
 

@@ -368,14 +368,15 @@ async def test_a_type_the_catalogue_does_not_hold_is_refused() -> None:
 # --- access_as obeys the delegation flags --------------------------------------------------------
 
 
-async def test_obo_needs_the_obo_delegation_of_the_app() -> None:
+async def test_obo_can_be_declared_for_an_app_the_platform_has_not_delegated_it_to() -> None:
+    # Setting is not use: an admin of the app picks the identity a resource is reached with, and
+    # the platform's delegation only decides whether a visitor's token reaches the child.
     checker = StubChecker()
 
-    refused = await refusal(checker, access_as="obo", app=make_app(obo=False))
+    result = await attach(checker, access_as="obo", app=make_app(obo=False))
 
-    assert refused.code == "delegation_missing"
-    assert "obo" in refused.message
-    assert checker.probes == []
+    assert result == "ok"
+    assert len(checker.probes) == 1
 
 
 async def test_shared_sp_needs_the_shared_sp_delegation_of_the_app() -> None:
@@ -397,14 +398,10 @@ async def test_shared_sp_needs_the_platform_switch_even_for_a_delegated_app() ->
     assert checker.probes == []
 
 
-async def test_the_delegation_of_one_identity_does_not_open_another() -> None:
+async def test_the_obo_delegation_does_not_open_the_shared_service_principal() -> None:
     only_obo = make_app(obo=True, shared_sp=False)
-    only_shared = make_app(obo=False, shared_sp=True)
 
     assert (await refusal(StubChecker(), access_as="shared_sp", app=only_obo)).code == (
-        "delegation_missing"
-    )
-    assert (await refusal(StubChecker(), access_as="obo", app=only_shared)).code == (
         "delegation_missing"
     )
 

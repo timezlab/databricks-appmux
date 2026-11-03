@@ -658,14 +658,16 @@ def test_shared_sp_is_refused_for_a_type_that_has_no_check() -> None:
     assert harness.checker.probes == []
 
 
-def test_obo_is_refused_for_an_app_without_the_obo_delegation(harness: Harness) -> None:
+def test_obo_can_be_attached_to_an_app_without_the_obo_delegation(harness: Harness) -> None:
+    # Setting is not use: the resource is stored, and the visitor's token still does not reach
+    # the child until a platform admin delegates OBO to the app.
     response = harness.attach("plain", "sql-warehouse", WAREHOUSE_BODY, ERIN)
 
-    assert response.status_code == 400
-    assert error_code(response) == "delegation_missing"
-    assert harness.stored("plain") == {}
-    assert harness.registry.audit_rows == ()
-    assert harness.checker.probes == []
+    assert response.status_code == 200, response.text
+    assert harness.stored("plain") == {
+        "sql-warehouse": ("sql_warehouse", "wh-0123", "obo", "ok"),
+    }
+    assert len(harness.checker.probes) == 1
 
 
 def test_shared_sp_is_refused_while_the_platform_switch_is_off(harness: Harness) -> None:

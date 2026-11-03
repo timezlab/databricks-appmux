@@ -312,7 +312,11 @@ export function AddResourcePanel({
                     </Select>
                   )}
                 </Field>
-                <AccessModeHelp modes={modes} slug={app.slug} />
+                <AccessModeHelp
+                  modes={modes}
+                  selected={draft.accessAs}
+                  slug={app.slug}
+                />
               </div>
             )}
 
@@ -361,32 +365,52 @@ export function AddResourcePanel({
   );
 }
 
-/** The modes that cannot be chosen, each with its reason and the way to get it when there is one. */
+/**
+ * The modes that cannot be chosen, each with its reason and the way to get it
+ * when there is one, and the note of the mode that is chosen (OBO before the
+ * platform delegates it: it can be added, and visitors' tokens reach the app
+ * only after the delegation).
+ */
 function AccessModeHelp({
   modes,
+  selected,
   slug,
 }: {
   modes: readonly AccessModeChoice[];
+  selected: AccessAs | "";
   slug: string;
 }) {
   const unavailable = modes.filter((mode) => !mode.isAvailable);
-  if (unavailable.length === 0) return null;
+  const noted = modes.find(
+    (mode) => mode.value === selected && mode.note !== null,
+  );
+  if (unavailable.length === 0 && noted === undefined) return null;
   const authorizationPath = appPagePath(slug, "authorization");
+  const openAuthorization =
+    authorizationPath === null ? null : (
+      <>
+        {" "}
+        <Link href={authorizationPath}>Open Authorization</Link>
+      </>
+    );
   return (
     <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
+      {noted === undefined ? null : (
+        <li key={`note-${noted.value}`}>
+          <span className="font-medium text-foreground">{noted.label}:</span>{" "}
+          {noted.note}
+          {noted.howToGet === null ? null : <> {noted.howToGet}</>}
+          {noted.howToGet === null ? null : openAuthorization}
+        </li>
+      )}
       {unavailable.map((mode) => (
         <li key={mode.value}>
           <span className="font-medium text-foreground">{mode.label}:</span>{" "}
           {mode.reason}
           {mode.howToGet === null ? null : <> {mode.howToGet}</>}
-          {mode.howToGet !== null &&
-          mode.value !== "own_sp" &&
-          authorizationPath !== null ? (
-            <>
-              {" "}
-              <Link href={authorizationPath}>Open Authorization</Link>
-            </>
-          ) : null}
+          {mode.howToGet !== null && mode.value !== "own_sp"
+            ? openAuthorization
+            : null}
         </li>
       ))}
     </ul>
