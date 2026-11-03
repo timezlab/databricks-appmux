@@ -192,8 +192,13 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
   service principals as rows with an icon, the display name and the identifier; type `everyone` and get the
   "everyone" row; typing a full e-mail is always accepted when the directory cannot be read.
 - **Folder browser (point 2).** Beside the source folder field: a popover listing the folder's sub-folders with a
-  breadcrumb, starting at My folder and Shared; it marks a folder that looks like an app (it holds `app.yaml`,
-  `requirements.txt` or `package.json`) and says what that means for memory (Node needs about 768 MB).
+  breadcrumb. It opens at the folder the field names, else at the person's own folder (`/Workspace/Users/<their
+  e-mail>`, labelled "My folder"). The breadcrumb and Up are the real folders above the one shown, down to
+  `/Workspace` (which lists Users, Shared and Repos), so a person goes up from their own folder and down into
+  another person's; what Databricks shows them of it is its answer to their token, and a refusal is shown in
+  words. `/Workspace` itself cannot be used as a source folder. The browser marks a folder that looks like an app
+  (it holds `app.yaml`, `requirements.txt` or `package.json`) and says what that means for memory (Node needs
+  about 768 MB).
 - **Logs (point 4).** The Logs section: the last lines of the child's output, polled, with a stream mark,
   pause, wrap and copy, and, for an app that stopped, the exit code and signal. The output ring stores no control
   character other than tab and a carriage return inside a line (and the line feeds of a multi-line note of appmux's

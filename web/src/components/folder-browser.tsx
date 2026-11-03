@@ -14,12 +14,12 @@ import type { KeyboardEvent, Ref } from "react";
 import { browseWorkspace } from "@/lib/api";
 import type { WorkspaceListing, WorkspaceRoot } from "@/lib/api";
 import {
+  WORKSPACE_FOLDER,
   breadcrumb,
   browseRefusal,
   folderHint,
   orderEntries,
   startPath,
-  upTarget,
 } from "@/lib/folder-browser";
 import { Button } from "./button";
 import type { FieldControlProps } from "./field";
@@ -113,7 +113,7 @@ export function SourceFolderInput({
 }
 
 export interface FolderBrowserProps {
-  /** The field's text: the browser opens at the folder it names, else at the roots. */
+  /** The field's text: the browser opens at the folder it names, else at the person's own folder. */
   fieldValue: string;
   onPick: (path: string) => void;
   onUseMemory?: (memoryMb: number) => void;
@@ -196,8 +196,8 @@ function BrowserPanel({
 
   // The roots name the crumbs ("My folder" instead of the person's address).
   // Listing them calls nothing upstream, so it is asked once on opening; when
-  // the browser opens at the roots, the listing below is that same call and
-  // keeps them, so it is not asked twice.
+  // the field names no folder, the call below is that same one: it keeps the
+  // roots and opens the first of them, the person's own folder.
   useEffect(() => {
     if (start === null) return;
     const controller = new AbortController();
@@ -221,8 +221,12 @@ function BrowserPanel({
       signal: controller.signal,
     }).then(
       (listing) => {
+        if (listing.path === null) {
+          setRoots(listing.roots);
+          setTarget(listing.roots[0]?.path ?? WORKSPACE_FOLDER);
+          return;
+        }
         setFetched({ key, listing });
-        if (listing.path === null) setRoots(listing.roots);
       },
       (error: unknown) => {
         if (!controller.signal.aborted) setFetched({ key, error });
@@ -241,29 +245,33 @@ function BrowserPanel({
       ? browseRefusal(current.error)
       : null;
   const crumbs = breadcrumb(target, roots);
+  // The crumbs are the real folders above the one shown, so Up needs no listing:
+  // it also works from a folder that was refused.
   const folderAbove = crumbs.at(-2)?.path ?? null;
-  const up = listing === null ? null : upTarget(listing);
   const hint = listing === null ? null : folderHint(listing);
-  const canGoUp = target !== null;
-  // Only a folder that was listed can be used: a refused one may not exist.
-  const pickable = listing?.path ?? null;
+  const canGoUp = folderAbove !== null;
+  // Only a folder that was listed can be used: a refused one may not exist. The
+  // top of the tree lists Users, Shared and Repos and is not an app's folder.
+  const pickable =
+    listing?.path != null && listing.path !== WORKSPACE_FOLDER
+      ? listing.path
+      : null;
   // Why Use this folder is off, while it is off; a refusal says why in its notice.
   const pickReason =
     pickable !== null
       ? null
-      : target === null
+      : target === WORKSPACE_FOLDER && listing !== null
         ? "Open a folder first."
         : current === null
           ? "Wait for the folder to load."
           : null;
 
-  function open(path: string | null): void {
+  function open(path: string): void {
     setTarget(path);
   }
 
   function goUp(): void {
-    if (!canGoUp) return;
-    open(up === null ? folderAbove : up.path);
+    if (folderAbove !== null) open(folderAbove);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -299,7 +307,7 @@ function BrowserPanel({
               const isLast = index === crumbs.length - 1;
               return (
                 <li
-                  key={crumb.path ?? ""}
+                  key={crumb.path}
                   className="flex min-w-0 items-center gap-1"
                 >
                   {index === 0 ? null : (
@@ -345,24 +353,6 @@ function BrowserPanel({
           className="max-h-64 min-h-24 overflow-y-auto rounded-md border p-1 outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           {current === null ? <SkeletonRows /> : null}
-          {listing !== null && listing.path === null
-            ? listing.roots.map((root) => (
-                <CommandPrimitive.Item
-                  key={root.path}
-                  value={root.path}
-                  className={ROW_CLASSES}
-                  onSelect={() => {
-                    open(root.path);
-                  }}
-                >
-                  <FolderIcon aria-hidden="true" />
-                  <span className="font-medium">{root.label}</span>
-                  <span className="min-w-0 truncate text-muted-foreground">
-                    {root.path}
-                  </span>
-                </CommandPrimitive.Item>
-              ))
-            : null}
           {listing !== null && listing.path !== null
             ? orderEntries(listing.entries).map((entry) =>
                 entry.kind === "folder" ? (
@@ -421,7 +411,7 @@ function BrowserPanel({
                 setAttempt((previous) => previous + 1);
               }}
               onStart={() => {
-                open(null);
+                open(WORKSPACE_FOLDER);
               }}
               onUp={goUp}
             />
@@ -534,7 +524,7 @@ function RecoveryAction({
       return (
         <div>
           <Button size="small" onClick={onStart}>
-            Start
+            Go to Workspace
           </Button>
         </div>
       );

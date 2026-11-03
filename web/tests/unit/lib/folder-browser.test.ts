@@ -10,7 +10,6 @@ import {
   mayBrowseWorkspace,
   orderEntries,
   startPath,
-  upTarget,
 } from "@/lib/folder-browser";
 
 const ROOTS = [
@@ -41,7 +40,7 @@ describe("startPath", () => {
     );
   });
 
-  it("opens at the roots for an empty field, a path outside /Workspace/ or /Workspace/ itself", () => {
+  it("names no folder for an empty field, a path outside /Workspace/ or /Workspace/ itself, so the browser opens at the person's own folder", () => {
     assert.equal(startPath(""), null);
     assert.equal(startPath("Shared/apps"), null);
     assert.equal(startPath("/Workspace/"), null);
@@ -50,20 +49,21 @@ describe("startPath", () => {
 });
 
 describe("breadcrumb", () => {
-  it("is only the start at the roots", () => {
-    assert.deepEqual(breadcrumb(null, ROOTS), [
-      { label: "Workspace", path: null },
-    ]);
+  it("is only the top while the start is not known yet, and at /Workspace", () => {
+    const top = [{ label: "Workspace", path: "/Workspace" }];
+    assert.deepEqual(breadcrumb(null, ROOTS), top);
+    assert.deepEqual(breadcrumb("/Workspace", ROOTS), top);
   });
 
-  it("names a known root by its label, then one crumb per folder below it", () => {
+  it("walks every folder from /Workspace, naming a known root by its label", () => {
     assert.deepEqual(
       breadcrumb(
         "/Workspace/Users/alice@example.com/sales-board/server",
         ROOTS,
       ),
       [
-        { label: "Workspace", path: null },
+        { label: "Workspace", path: "/Workspace" },
+        { label: "Users", path: "/Workspace/Users" },
         { label: "My folder", path: "/Workspace/Users/alice@example.com" },
         {
           label: "sales-board",
@@ -77,6 +77,15 @@ describe("breadcrumb", () => {
     );
   });
 
+  it("names another person's folder by its own name, not as My folder", () => {
+    assert.deepEqual(
+      breadcrumb("/Workspace/Users/bob@example.com", ROOTS).map(
+        (crumb) => crumb.label,
+      ),
+      ["Workspace", "Users", "bob@example.com"],
+    );
+  });
+
   it("does not take a sibling whose name starts like a root for that root", () => {
     assert.deepEqual(
       breadcrumb("/Workspace/Shared-old/x", ROOTS).map((crumb) => crumb.label),
@@ -84,27 +93,13 @@ describe("breadcrumb", () => {
     );
   });
 
-  it("splits a path under no known root into its folders below /Workspace", () => {
+  it("splits a path into its folders when the roots are not known", () => {
     assert.deepEqual(breadcrumb("/Workspace/Repos/team/app", []), [
-      { label: "Workspace", path: null },
+      { label: "Workspace", path: "/Workspace" },
       { label: "Repos", path: "/Workspace/Repos" },
       { label: "team", path: "/Workspace/Repos/team" },
       { label: "app", path: "/Workspace/Repos/team/app" },
     ]);
-  });
-});
-
-describe("upTarget", () => {
-  it("has nowhere to go from the roots", () => {
-    assert.equal(upTarget(listing({ path: null, parent: null })), null);
-  });
-
-  it("goes to the parent, or back to the roots when the server gives none", () => {
-    assert.deepEqual(upTarget(listing()), { path: "/Workspace/Shared" });
-    assert.deepEqual(
-      upTarget(listing({ path: "/Workspace/Shared", parent: null })),
-      { path: null },
-    );
   });
 });
 

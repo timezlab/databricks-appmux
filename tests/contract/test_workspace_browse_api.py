@@ -207,6 +207,35 @@ def test_a_folder_is_listed_with_the_visitors_own_token() -> None:
     assert call.headers["Authorization"] == f"Bearer {VISITOR_TOKEN}"
 
 
+@pytest.mark.parametrize(
+    ("path", "parent"),
+    [
+        ("/Workspace", None),
+        ("/Workspace/", None),  # one trailing slash is dropped
+        ("/Workspace/Users", "/Workspace"),
+        (f"/Workspace/Users/{BOB}", "/Workspace/Users"),  # another person's folder
+        (HOME, "/Workspace/Users"),
+        (SHARED, "/Workspace"),
+    ],
+)
+def test_the_folders_above_a_persons_own_can_be_listed_down_to_the_top(
+    path: str, parent: str | None
+) -> None:
+    # Reaching another person's folder means going up from one's own and down again; whether the
+    # platform shows it is its answer to the visitor's token (404 or 403 below), not this route's.
+    browser = Browser(listed(("/Workspace/Users", "DIRECTORY"), ("/Workspace/Shared", "DIRECTORY")))
+
+    response = browser.browse(path)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["parent"] == parent
+    assert body["path"] == path.removesuffix("/")
+    [call] = browser.requests
+    assert dict(call.url.params) == {"path": path.removesuffix("/")}
+    assert call.headers["Authorization"] == f"Bearer {VISITOR_TOKEN}"
+
+
 def test_a_python_app_folder_is_hinted_as_python_with_no_memory_suggestion() -> None:
     browser = Browser(listed((f"{SALES}/requirements.txt", "FILE"), (f"{SALES}/app.py", "FILE")))
 
@@ -324,7 +353,7 @@ def test_a_listing_with_no_objects_key_is_an_empty_folder() -> None:
         "/Workspace/" + "a" * 512,
         "/Users/alice@example.com",
         "Workspace/Shared",
-        "/Workspace",
+        "/Workspace//",
         "/Volumes/main/default/files",
         "https://example.com/Workspace/Shared",
     ],

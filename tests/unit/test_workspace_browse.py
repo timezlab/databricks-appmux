@@ -51,6 +51,9 @@ def listing_of_names(
         (f"{HOME}/sales", f"{HOME}/sales"),
         ("/Workspace/Repos/team/app", "/Workspace/Repos/team/app"),
         (f"{HOME}/sales/", f"{HOME}/sales"),  # one trailing slash is dropped
+        ("/Workspace", None),  # the top of the tree: it lists Users, Shared and Repos
+        ("/Workspace/", "/Workspace"),
+        ("/Workspace/Users", None),  # and so does the folder that holds every person's folder
         (f"{HOME}/v1..2", f"{HOME}/v1..2"),  # two dots inside a name are a name
         (f"{HOME}/.hidden", f"{HOME}/.hidden"),
         (f"{HOME}/café ünïcode", f"{HOME}/café ünïcode"),
@@ -79,8 +82,6 @@ def test_a_path_inside_the_workspace_tree_is_accepted(raw: str, expected: str | 
         "Workspace/Shared",
         "/workspace/Shared",
         "/Workspacefoo/x",
-        "/Workspace",
-        "/Workspace/",
         "/Workspace//",
         "/Volumes/main/default/files",
         "dbfs:/Workspace/Shared",
@@ -131,21 +132,22 @@ def test_the_roots_listing_names_my_folder_and_shared_and_lists_nothing() -> Non
 @pytest.mark.parametrize(
     ("path", "parent"),
     [
-        (HOME, None),  # a root
-        (SHARED, None),
+        (HOME, "/Workspace/Users"),  # a person's folder is below Users, like everyone else's
+        (SHARED, "/Workspace"),
         (f"{HOME}/sales", HOME),
         (f"{HOME}/sales/server", f"{HOME}/sales"),
         (f"{SHARED}/team", SHARED),
         ("/Workspace/Users/bob@example.com", "/Workspace/Users"),  # another person's folder
-        ("/Workspace/Users", None),  # a top-level folder: back to the roots
-        ("/Workspace/Repos", None),
+        ("/Workspace/Users", "/Workspace"),
+        ("/Workspace/Repos", "/Workspace"),
         ("/Workspace/Repos/team", "/Workspace/Repos"),
+        ("/Workspace", None),  # the top: nothing above it to browse
     ],
 )
-def test_the_parent_is_the_folder_above_and_none_at_a_root_or_top_level(
+def test_the_parent_is_the_folder_above_and_none_only_at_the_top(
     path: str, parent: str | None
 ) -> None:
-    assert parent_of(path, EMAIL) == parent
+    assert parent_of(path) == parent
 
 
 # --- the entries ----------------------------------------------------------------------------
@@ -161,7 +163,7 @@ def test_folders_come_first_then_names_without_regard_to_case() -> None:
         file(f"{at}/a.txt"),
     ]
 
-    listing = listing_of(at, objects, EMAIL)
+    listing = listing_of(at, objects)
 
     assert [(entry.name, entry.kind) for entry in listing.entries] == [
         ("alpha", "folder"),
@@ -190,7 +192,7 @@ def test_a_directory_or_a_repo_is_a_folder_and_every_other_object_is_a_file(
 ) -> None:
     at = f"{HOME}/sales"
 
-    listing = listing_of(at, [WorkspaceObject(f"{at}/thing", object_type)], EMAIL)
+    listing = listing_of(at, [WorkspaceObject(f"{at}/thing", object_type)])
 
     assert [(entry.name, entry.kind) for entry in listing.entries] == [("thing", kind)]
 
@@ -198,7 +200,7 @@ def test_a_directory_or_a_repo_is_a_folder_and_every_other_object_is_a_file(
 def test_the_listing_carries_the_folder_and_its_parent_and_no_roots() -> None:
     at = f"{HOME}/sales"
 
-    listing = listing_of(at, [], EMAIL)
+    listing = listing_of(at, [])
 
     assert (listing.path, listing.parent, listing.roots) == (at, HOME, [])
     assert listing.entries == []
@@ -209,7 +211,7 @@ def test_an_object_that_is_not_a_path_under_the_workspace_tree_is_left_out() -> 
     at = f"{HOME}/sales"
     objects = [file(f"{at}/app.py"), file("/Users/other/file"), file(f"{at}/"), file("")]
 
-    listing = listing_of(at, objects, EMAIL)
+    listing = listing_of(at, objects)
 
     assert [entry.name for entry in listing.entries] == ["app.py"]
 
@@ -220,7 +222,7 @@ def test_an_entry_the_next_browse_would_refuse_is_not_listed() -> None:
     objects = [folder(f"{at}/src"), folder(f"{at}/bad\x07name"), folder(f"{at}/{too_long}")]
     objects += [file(f"{at}/notes\x1b[31m.txt")]
 
-    listing = listing_of(at, objects, EMAIL)
+    listing = listing_of(at, objects)
 
     assert [entry.name for entry in listing.entries] == ["src"]
     for entry in listing.entries:
@@ -231,7 +233,7 @@ def test_a_marker_whose_path_is_over_the_limit_still_says_what_the_folder_is() -
     # The folder itself can be opened and used as a source; only the file's own path is long.
     at = "/Workspace/" + "d" * (MAX_PATH_LENGTH - len("/Workspace/") - len("/app.py"))
 
-    listing = listing_of(at, listing_of_names(["app.yaml"], at=at), EMAIL)
+    listing = listing_of(at, listing_of_names(["app.yaml"], at=at))
 
     assert listing.entries == []
     assert listing.markers == ["app.yaml"]
@@ -240,12 +242,8 @@ def test_a_marker_whose_path_is_over_the_limit_still_says_what_the_folder_is() -
 def test_exactly_the_cap_is_not_truncated_and_one_more_is() -> None:
     at = f"{HOME}/sales"
 
-    at_cap = listing_of(
-        at, listing_of_names([f"f{n:04}.txt" for n in range(MAX_ENTRIES)], at=at), EMAIL
-    )
-    over = listing_of(
-        at, listing_of_names([f"f{n:04}.txt" for n in range(MAX_ENTRIES + 1)], at=at), EMAIL
-    )
+    at_cap = listing_of(at, listing_of_names([f"f{n:04}.txt" for n in range(MAX_ENTRIES)], at=at))
+    over = listing_of(at, listing_of_names([f"f{n:04}.txt" for n in range(MAX_ENTRIES + 1)], at=at))
 
     assert (len(at_cap.entries), at_cap.truncated) == (MAX_ENTRIES, False)
     assert (len(over.entries), over.truncated) == (MAX_ENTRIES, True)
@@ -258,7 +256,7 @@ def test_truncation_keeps_the_folders_before_any_file() -> None:
         [f"z{n:03}" for n in range(60)], kind="DIRECTORY", at=at
     )
 
-    listing = listing_of(at, objects, EMAIL)
+    listing = listing_of(at, objects)
 
     assert listing.truncated is True
     assert sum(entry.kind == "folder" for entry in listing.entries) == 60
@@ -279,7 +277,7 @@ def test_markers_are_the_known_files_in_the_contracts_order() -> None:
         "app.yaml",
     ]
 
-    listing = listing_of(at, listing_of_names(names, at=at), EMAIL)
+    listing = listing_of(at, listing_of_names(names, at=at))
 
     assert listing.markers == ["app.yaml", "databricks.yml", "requirements.txt", "pyproject.toml"]
 
@@ -288,7 +286,7 @@ def test_a_folder_that_has_a_marker_name_is_not_a_marker() -> None:
     at = f"{HOME}/sales"
     objects = listing_of_names(["app.yaml", "package.json"], kind="DIRECTORY", at=at)
 
-    listing = listing_of(at, objects, EMAIL)
+    listing = listing_of(at, objects)
 
     assert listing.markers == []
     assert listing.looks_like_app is False
@@ -299,7 +297,7 @@ def test_a_marker_past_the_cap_still_counts() -> None:
     objects = listing_of_names([f"a{n:04}.txt" for n in range(MAX_ENTRIES + 5)], at=at)
     objects += listing_of_names(["requirements.txt"], at=at)
 
-    listing = listing_of(at, objects, EMAIL)
+    listing = listing_of(at, objects)
 
     assert listing.truncated is True
     assert "requirements.txt" not in [entry.name for entry in listing.entries]
@@ -333,7 +331,7 @@ def test_the_markers_decide_looks_like_app_the_runtime_hint_and_the_memory_hint(
 ) -> None:
     at = f"{HOME}/sales"
 
-    listing = listing_of(at, listing_of_names(names, at=at), EMAIL)
+    listing = listing_of(at, listing_of_names(names, at=at))
 
     assert (listing.looks_like_app, listing.runtime_hint, listing.suggested_memory_mb) == (
         looks_like_app,

@@ -7,14 +7,17 @@ browser shows what the Update will be able to read and nothing more. It writes n
 nothing (``workspace.browse``: a platform admin or a manager of some app, with a token).
 
 **Roots.** Without a ``path`` the answer is the two places a person starts from, ``My folder``
-(``/Workspace/Users/<their e-mail>``) and ``Shared``, and nothing is called upstream.
+(``/Workspace/Users/<their e-mail>``) and ``Shared``, and nothing is called upstream. They are
+shortcuts, not the edge of what can be browsed: every folder has its real parent, so a person
+climbs from their own folder to ``/Workspace/Users`` or ``/Workspace`` and goes down into another
+person's folder (the platform answers with what their token may see).
 
-**Paths.** Only the ``/Workspace/`` tree can be browsed. A path is refused before any call when it
-is longer than 512 characters, holds a control character, or has an empty, ``.`` or ``..`` part
-(a name that merely contains two dots is a name). The platform resolves paths itself, so this is not
-what keeps a person in their own folders (their token does that); it keeps the route from sending
-the platform something that is not a workspace path, and the listing from naming a path the next
-call would refuse. The refusal never repeats the path.
+**Paths.** Only the ``/Workspace`` tree can be browsed, ``/Workspace`` itself included. A path is
+refused before any call when it is longer than 512 characters, holds a control character, or has an
+empty, ``.`` or ``..`` part (a name that merely contains two dots is a name). The platform resolves
+paths itself, so this is not what keeps a person in their own folders (their token does that); it
+keeps the route from sending the platform something that is not a workspace path, and the listing
+from naming a path the next call would refuse. The refusal never repeats the path.
 
 **Failures.** Whatever the platform answers becomes one of four answers: ``404 not_found`` (it also
 answers 404 for a folder the person may not see), ``403 no_access``, ``403 session_expired`` (it did
@@ -59,6 +62,7 @@ MAX_ENTRIES: Final = 200
 MAX_PATH_LENGTH: Final = 512
 
 _HTTP_FORBIDDEN: Final = 403
+_WORKSPACE_TOP: Final = "/Workspace"
 _SHARED_ROOT: Final = "/Workspace/Shared"
 _FORBIDDEN_SEGMENTS: Final = frozenset({"", ".", ".."})
 # A directory and a repo can be opened; every other object (a file, a notebook, a library, a kind
@@ -108,6 +112,8 @@ def _is_browsable(path: str) -> bool:
     The request's check, and the one an entry passes to be listed, so that no entry names a folder
     the next call would refuse.
     """
+    if path == _WORKSPACE_TOP:
+        return True
     return (
         len(path) <= MAX_PATH_LENGTH
         and not any(unicodedata.category(character) == _CONTROL_CATEGORY for character in path)
@@ -129,12 +135,11 @@ def _roots_of(email: str) -> list[WorkspaceRoot]:
     ]
 
 
-def parent_of(path: str, email: str) -> str | None:
-    """The folder above ``path``; ``None`` at a root or a top-level folder (back to the roots)."""
-    if any(path == root.path for root in _roots_of(email)):
+def parent_of(path: str) -> str | None:
+    """The folder above ``path``, down to ``/Workspace``, which has none."""
+    if path == _WORKSPACE_TOP:
         return None
-    parent = path.rpartition("/")[0]
-    return parent if parent.startswith(WORKSPACE_PATH_PREFIX) else None
+    return path.rpartition("/")[0]
 
 
 def roots_listing(email: str) -> WorkspaceListing:
@@ -152,7 +157,7 @@ def roots_listing(email: str) -> WorkspaceListing:
     )
 
 
-def listing_of(path: str, objects: Iterable[WorkspaceObject], email: str) -> WorkspaceListing:
+def listing_of(path: str, objects: Iterable[WorkspaceObject]) -> WorkspaceListing:
     """The answer for the folder ``path`` holding ``objects`` (the platform's listing of it).
 
     An object whose own path a browse would refuse (too long, a control character) is not listed,
@@ -168,7 +173,7 @@ def listing_of(path: str, objects: Iterable[WorkspaceObject], email: str) -> Wor
     runtime_hint = _runtime_hint_of(markers)
     return WorkspaceListing(
         path=path,
-        parent=parent_of(path, email),
+        parent=parent_of(path),
         roots=[],
         entries=entries[:MAX_ENTRIES],
         truncated=len(entries) > MAX_ENTRIES,
@@ -221,7 +226,7 @@ class WorkspaceBrowseRoutes:
                 return _json(roots_listing(actor.email))
             path = clean_browse_path(raw)
             objects = await self._list(actor.visitor_token.get_secret_value(), path)
-            return _json(listing_of(path, objects, actor.email))
+            return _json(listing_of(path, objects))
 
         return [Route("/workspace/browse", browse, methods=["GET"])]
 

@@ -15,23 +15,25 @@ import type {
   WorkspaceRoot,
 } from "@/lib/api";
 
-const WORKSPACE_FOLDER = "/Workspace";
+/** The top of the tree: it lists Users, Shared and Repos, and has nothing above it. */
+export const WORKSPACE_FOLDER = "/Workspace";
 const WORKSPACE_PREFIX = `${WORKSPACE_FOLDER}/`;
 
-/** The first crumb, which lists the roots (My folder, Shared). */
+/** The first crumb, which opens the top of the tree. */
 export const START_CRUMB_LABEL = "Workspace";
 
 export interface Crumb {
   label: string;
-  /** The folder it opens; `null` for the roots. */
-  path: string | null;
+  /** The folder it opens. */
+  path: string;
 }
 
 /**
  * Where the browser opens: the folder the field already names (a settings form
- * holds the app's folder), else the roots. The server judges the rest of the
- * path; a folder that is gone answers `not_found`, whose notice leads back to
- * the start.
+ * holds the app's folder); `null` when the field names none, and the browser
+ * then opens at the person's own folder, the first of the roots. The server
+ * judges the rest of the path; a folder that is gone answers `not_found`,
+ * whose notice leads to the top of the tree.
  */
 export function startPath(fieldText: string): string | null {
   const trimmed = fieldText.trim();
@@ -40,46 +42,29 @@ export function startPath(fieldText: string): string | null {
   return folder.length > WORKSPACE_FOLDER.length ? folder : null;
 }
 
-function isInside(path: string, folder: string): boolean {
-  return path === folder || path.startsWith(`${folder}/`);
-}
-
 /**
- * The crumbs from the start to `path`. A path under a root the browser has
- * seen is named from that root's label ("My folder"), so the person's own
- * address is not spelled out; any other path is split below `/Workspace`.
+ * The crumbs from `/Workspace` to `path`, one per folder, so every crumb and
+ * "Up" lead to a real folder, another person's included. A folder that is one
+ * of the roots the browser has seen is named by its label ("My folder"), so the
+ * person's own address is not spelled out; every other folder shows its name.
+ * `null` (the start is not known yet) has only the top.
  */
 export function breadcrumb(
   path: string | null,
   roots: readonly WorkspaceRoot[],
 ): Crumb[] {
-  const start: Crumb = { label: START_CRUMB_LABEL, path: null };
-  if (path === null) return [start];
-  if (!path.startsWith(WORKSPACE_PREFIX)) return [start, { label: path, path }];
-  const root = roots
-    .filter((candidate) => isInside(path, candidate.path))
-    .toSorted((a, b) => b.path.length - a.path.length)[0];
-  const crumbs: Crumb[] = [start];
-  let current = root?.path ?? WORKSPACE_FOLDER;
-  if (root !== undefined) crumbs.push({ label: root.label, path: root.path });
-  for (const segment of path.slice(current.length).split("/")) {
+  const crumbs: Crumb[] = [
+    { label: START_CRUMB_LABEL, path: WORKSPACE_FOLDER },
+  ];
+  if (path?.startsWith(WORKSPACE_PREFIX) !== true) return crumbs;
+  let current = WORKSPACE_FOLDER;
+  for (const segment of path.slice(WORKSPACE_PREFIX.length).split("/")) {
     if (segment === "") continue;
     current = `${current}/${segment}`;
-    crumbs.push({ label: segment, path: current });
+    const root = roots.find((candidate) => candidate.path === current);
+    crumbs.push({ label: root?.label ?? segment, path: current });
   }
   return crumbs;
-}
-
-/**
- * Where "Up" goes: nowhere from the roots; the parent the server named; the
- * roots when it named none (a root, or a top-level folder such as
- * `/Workspace/Repos`).
- */
-export function upTarget(
-  listing: WorkspaceListing,
-): { path: string | null } | null {
-  if (listing.path === null) return null;
-  return { path: listing.parent };
 }
 
 function byNameIgnoringCase(a: WorkspaceEntry, b: WorkspaceEntry): number {
@@ -137,7 +122,7 @@ export function folderHint(listing: WorkspaceListing): FolderHint | null {
  * What the browser offers after a refusal:
  * - `reload-page`: sign in again (a lapsed session or a missing token);
  * - `retry`: list the same folder again;
- * - `start`: go back to the roots;
+ * - `start`: go to the top of the tree (`/Workspace`), which always exists;
  * - `up`: go to the folder above;
  * - `type`: nothing to browse; the field takes the path.
  */
@@ -192,7 +177,7 @@ const REFUSALS = new Map<string, RefusalWords>([
     "not_found",
     {
       title: "This folder does not exist, or you cannot see it",
-      hint: `Go back to the start and pick a folder. ${TYPE_INSTEAD}`,
+      hint: `Go to the top of the Workspace and pick a folder. ${TYPE_INSTEAD}`,
       recovery: "start",
     },
   ],
@@ -208,7 +193,7 @@ const REFUSALS = new Map<string, RefusalWords>([
     "invalid_path",
     {
       title: "That is not a workspace folder",
-      hint: "A folder path starts with /Workspace/. Go back to the start, or fix the path in the field.",
+      hint: "A folder path starts with /Workspace/. Go to the top of the Workspace, or fix the path in the field.",
       recovery: "start",
     },
   ],

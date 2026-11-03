@@ -32,7 +32,7 @@ function listing(changes: Partial<WorkspaceListing>): WorkspaceListing {
   };
 }
 
-/** `GET /workspace/browse`: the roots, Shared, and a Node.js app folder in it. */
+/** `GET /workspace/browse`: the roots (the browser opens at the first, Shared here), and a Node.js app folder in it. */
 function browse(query: { path?: string } = {}): Promise<WorkspaceListing> {
   switch (query.path) {
     case undefined:
@@ -263,9 +263,7 @@ describe("RegisterSection", () => {
     const panel = await screen.findByRole("dialog", {
       name: "Browse the workspace",
     });
-    await user.click(
-      await within(panel).findByRole("option", { name: /Shared/ }),
-    );
+    // No folder in the field: the browser opens at the first root, no click needed.
     await user.click(
       await within(panel).findByRole("option", { name: /inventory/ }),
     );

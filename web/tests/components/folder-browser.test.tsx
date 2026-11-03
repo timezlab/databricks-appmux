@@ -1,7 +1,8 @@
 /**
  * The source-folder field with its browser, against a stubbed
- * `GET /workspace/browse`: the roots, a folder, an app-looking folder, each
- * refusal of the route, and that the field stays free to type in.
+ * `GET /workspace/browse`: the person's own folder as the start, the way up to
+ * /Workspace and down into another person's folder, an app-looking folder,
+ * each refusal of the route, and that the field stays free to type in.
  */
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -19,6 +20,7 @@ import { jsonResponse, stubFetch } from "../support/fake-fetch";
 import type { RecordedCall } from "../support/fake-fetch";
 
 const MY_FOLDER = "/Workspace/Users/alice@example.com";
+const BOB_FOLDER = "/Workspace/Users/bob@example.com";
 
 const ROOTS: WorkspaceListing = {
   path: null,
@@ -52,8 +54,36 @@ function folder(path: string, overrides: Partial<WorkspaceListing> = {}) {
 
 const LISTINGS = new Map<string, WorkspaceListing>([
   [
+    "/Workspace",
+    folder("/Workspace", {
+      entries: [
+        { name: "Users", path: "/Workspace/Users", kind: "folder" },
+        { name: "Shared", path: "/Workspace/Shared", kind: "folder" },
+        { name: "Repos", path: "/Workspace/Repos", kind: "folder" },
+      ],
+    }),
+  ],
+  [
+    "/Workspace/Users",
+    folder("/Workspace/Users", {
+      parent: "/Workspace",
+      entries: [
+        { name: "alice@example.com", path: MY_FOLDER, kind: "folder" },
+        { name: "bob@example.com", path: BOB_FOLDER, kind: "folder" },
+      ],
+    }),
+  ],
+  [
+    BOB_FOLDER,
+    folder(BOB_FOLDER, {
+      parent: "/Workspace/Users",
+      entries: [{ name: "wiki", path: `${BOB_FOLDER}/wiki`, kind: "folder" }],
+    }),
+  ],
+  [
     MY_FOLDER,
     folder(MY_FOLDER, {
+      parent: "/Workspace/Users",
       entries: [
         { name: "notes.txt", path: `${MY_FOLDER}/notes.txt`, kind: "file" },
         {
@@ -192,34 +222,29 @@ function options(): string[] {
 }
 
 describe("SourceFolderInput", () => {
-  it("starts at the roots, opens a folder, and fills the field with Use this folder", async () => {
+  it("opens at the person's own folder and fills the field with Use this folder", async () => {
     const { user } = setup();
     const panel = await openBrowser(user);
 
-    await within(panel).findByRole("option", { name: /My folder/ });
-    expect(options()).toEqual([
-      `My folder${MY_FOLDER}`,
-      "Shared/Workspace/Shared",
-    ]);
-    expect(
-      within(panel).getByRole("button", { name: "Use this folder" }),
-    ).toBeDisabled();
-    expect(
-      within(panel).getByRole("button", { name: "Use this folder" }),
-    ).toHaveAccessibleDescription("Open a folder first.");
-
-    await user.click(within(panel).getByRole("option", { name: /My folder/ }));
     await within(panel).findByRole("option", { name: "archive" });
     // Folders first, by name; the file is listed, dimmed and not selectable.
     expect(options()).toEqual(["archive", "sales-board", "notes.txt(a file)"]);
     expect(
       within(panel).getByRole("option", { name: /notes\.txt/ }),
     ).toHaveAttribute("aria-disabled", "true");
+    const path = within(
+      within(panel).getByRole("navigation", { name: "Folder path" }),
+    );
+    // Its crumbs are the real folders above it, so Up and the crumbs can leave it.
+    expect(path.getByText("My folder")).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+    expect(path.getByRole("button", { name: "Workspace" })).toBeEnabled();
+    expect(path.getByRole("button", { name: "Users" })).toBeEnabled();
     expect(
-      within(
-        within(panel).getByRole("navigation", { name: "Folder path" }),
-      ).getByText("My folder"),
-    ).toHaveAttribute("aria-current", "location");
+      within(panel).getByRole("button", { name: "Up one folder" }),
+    ).toBeEnabled();
 
     await user.click(
       within(panel).getByRole("button", { name: "Use this folder" }),
@@ -233,18 +258,46 @@ describe("SourceFolderInput", () => {
     );
   });
 
-  it("asks for the roots once when it opens at them", async () => {
+  it("asks for the roots once, then lists the person's own folder once", async () => {
     const { user } = setup();
     const panel = await openBrowser(user);
-    await within(panel).findByRole("option", { name: /My folder/ });
-    expect(calls).toEqual(["(roots)"]);
+    await within(panel).findByRole("option", { name: "archive" });
+    expect(calls).toEqual(["(roots)", MY_FOLDER]);
   });
 
-  it("asks for the roots and the folder once each when it opens at a folder", async () => {
-    const { user } = setup({ initial: MY_FOLDER });
+  it("goes up from the person's own folder to /Workspace and down into another person's folder", async () => {
+    const { user } = setup();
     const panel = await openBrowser(user);
     await within(panel).findByRole("option", { name: "archive" });
-    expect(calls.toSorted()).toEqual(["(roots)", MY_FOLDER]);
+
+    await user.click(
+      within(panel).getByRole("button", { name: "Up one folder" }),
+    );
+    await within(panel).findByRole("option", { name: "bob@example.com" });
+    expect(options()).toEqual(["alice@example.com", "bob@example.com"]);
+
+    await user.click(
+      within(panel).getByRole("button", { name: "Up one folder" }),
+    );
+    await within(panel).findByRole("option", { name: "Users" });
+    expect(options()).toEqual(["Repos", "Shared", "Users"]);
+    // The top has nothing above it, and it is not a folder to use as the app's source.
+    expect(
+      within(panel).getByRole("button", { name: "Up one folder" }),
+    ).toBeDisabled();
+    const use = within(panel).getByRole("button", { name: "Use this folder" });
+    expect(use).toBeDisabled();
+    expect(use).toHaveAccessibleDescription("Open a folder first.");
+
+    await user.click(within(panel).getByRole("option", { name: "Users" }));
+    await user.click(
+      await within(panel).findByRole("option", { name: "bob@example.com" }),
+    );
+    await within(panel).findByRole("option", { name: "wiki" });
+    await user.click(
+      within(panel).getByRole("button", { name: "Use this folder" }),
+    );
+    expect(field()).toHaveValue(BOB_FOLDER);
   });
 
   it("says why Use this folder is off while the folder loads", async () => {
@@ -286,7 +339,7 @@ describe("SourceFolderInput", () => {
     await within(panel).findByRole("option", { name: "sales-board" });
 
     await user.click(within(panel).getByRole("button", { name: "Workspace" }));
-    await within(panel).findByRole("option", { name: /Shared/ });
+    await within(panel).findByRole("option", { name: "Shared" });
   });
 
   it("moves with the arrows, opens with Enter, goes up with Backspace and closes with Escape", async () => {
@@ -363,7 +416,7 @@ describe("SourceFolderInput", () => {
     [403, "session_expired", "Reload", /sign in again/],
     [403, "user_token_missing", "Reload", /Reload the page/],
     [403, "no_access", "Up", /ask the folder's owner/],
-    [404, "not_found", "Start", /Go back to the start/],
+    [404, "not_found", "Go to Workspace", /top of the Workspace/],
     [503, "workspace_unavailable", "Retry", /Try again in a moment/],
   ])(
     "shows a %i %s refusal in the server's words, with what to do",
@@ -390,9 +443,9 @@ describe("SourceFolderInput", () => {
     await within(panel).findByRole("option", { name: "archive" });
 
     refusals.set(MY_FOLDER, [503, "workspace_unavailable"]);
-    await user.click(within(panel).getByRole("button", { name: "Workspace" }));
+    await user.click(within(panel).getByRole("button", { name: "Users" }));
     await user.click(
-      await within(panel).findByRole("option", { name: /My folder/ }),
+      await within(panel).findByRole("option", { name: "alice@example.com" }),
     );
     const unavailable = await within(panel).findByRole("alert");
     refusals.delete(MY_FOLDER);

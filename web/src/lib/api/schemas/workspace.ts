@@ -33,8 +33,8 @@ export const WorkspaceEntry = z.object({
 export type WorkspaceEntry = z.infer<typeof WorkspaceEntry>;
 
 /**
- * `path` is null for the roots, which are then in `roots` (else `[]`). `parent` is null at a root
- * and at a top-level folder, so the browser goes back to the roots.
+ * `path` is null for the roots, which are then in `roots` (else `[]`). `parent` is the real folder
+ * above, down to `/Workspace`, which has none.
  */
 export const WorkspaceListing = z.object({
   path: z.string().nullable(),
