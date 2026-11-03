@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { DatabricksMark } from "@/components/databricks-mark";
 import { MainNav } from "@/components/main-nav";
 import { Notice } from "@/components/notice";
+import "./fonts.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
