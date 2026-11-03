@@ -75,6 +75,9 @@ REGISTER_BODY: Final[dict[str, object]] = {
     "memory_budget_mb": 256,
     "owner": GRACE,
 }
+# The one field a registration may leave out: the platform default budget applies instead.
+OPTIONAL_REGISTER_FIELDS: Final = frozenset({"memory_budget_mb"})
+CODE_DEFAULT_BUDGET_MB: Final = 512
 
 UpdaterMode = Literal[
     "create",
@@ -272,6 +275,47 @@ async def test_a_platform_admin_registers_an_app_and_gets_its_page_back() -> Non
     assert (detail.egress, detail.grants, detail.resources) == ([], [], [])
 
 
+def seed_default_budget(registry: StubRegistry, memory_budget_mb: int) -> None:
+    registry.seed(
+        "platform_settings",
+        {
+            "key": "default_memory_budget_mb",
+            "value": memory_budget_mb,
+            "updated_by": DANA,
+            "updated_at": NOW,
+        },
+    )
+
+
+async def test_a_registration_without_a_budget_gets_the_platform_default() -> None:
+    body = {key: value for key, value in REGISTER_BODY.items() if key != "memory_budget_mb"}
+
+    unset = Harness()
+    reply = await unset.register(DANA, body)
+    assert reply.status == 200
+    assert AppDetail.model_validate_json(reply.body).memory_budget_mb == CODE_DEFAULT_BUDGET_MB
+    (unset_row,) = unset.registry.audit_rows
+    assert unset_row.detail == {"owner": GRACE, "budget_mb": CODE_DEFAULT_BUDGET_MB}
+
+    registry = seeded_registry()
+    seed_default_budget(registry, 768)
+    configured = Harness(registry)
+    reply = await configured.register(DANA, body)
+    assert reply.status == 200
+    assert app_of(registry, "reports").memory_budget_mb == 768
+    (configured_row,) = registry.audit_rows
+    assert configured_row.detail == {"owner": GRACE, "budget_mb": 768}
+
+
+async def test_a_budget_named_in_the_registration_beats_the_platform_default() -> None:
+    registry = seeded_registry()
+    seed_default_budget(registry, 768)
+
+    await Harness(registry).register(DANA)  # REGISTER_BODY names 256
+
+    assert app_of(registry, "reports").memory_budget_mb == 256
+
+
 async def test_the_app_is_stored_stopped_with_no_release_and_no_delegation() -> None:
     harness = Harness()
 
@@ -391,7 +435,9 @@ async def test_a_body_that_fails_its_schema_is_400_and_nothing_is_written(
     assert harness.is_untouched()
 
 
-@pytest.mark.parametrize("field", list(REGISTER_BODY))
+@pytest.mark.parametrize(
+    "field", [name for name in REGISTER_BODY if name not in OPTIONAL_REGISTER_FIELDS]
+)
 async def test_a_missing_field_is_400_naming_the_field(field: str) -> None:
     harness = Harness()
     body = {name: value for name, value in REGISTER_BODY.items() if name != field}

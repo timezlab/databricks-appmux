@@ -80,7 +80,7 @@ export interface SettingGroup {
 }
 
 /**
- * The thirteen settings, grouped by what they govern, riskiest first: the
+ * The fourteen settings, grouped by what they govern, riskiest first: the
  * delegation switch lends a token, the rest are limits. Every setting is in
  * exactly one group (tested), so none can go missing from the page.
  */
@@ -119,8 +119,14 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     id: "sandbox",
     href: "#sandbox",
     title: "Sandbox and memory",
-    summary: "What each app's sandbox may use, and what appmux keeps back.",
-    keys: ["memory_reserve_mb", "max_processes_per_child", "child_cpu_pin"],
+    summary:
+      "What each app's sandbox may use, what a new app starts with, and what appmux keeps back.",
+    keys: [
+      "memory_reserve_mb",
+      "default_memory_budget_mb",
+      "max_processes_per_child",
+      "child_cpu_pin",
+    ],
   },
   {
     id: "releases",

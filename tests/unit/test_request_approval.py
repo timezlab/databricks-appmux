@@ -38,8 +38,10 @@ REGISTER_PAYLOAD: Final[Mapping[str, object]] = {
     "slug": "reports",
     "display_name": "Weekly reports",
     "source_path": "/Workspace/Shared/apps/reports",
-    "memory_budget_mb": 256,
 }
+# What a ``register`` row looked like before the visitor stopped typing the budget.
+LEGACY_REGISTER_PAYLOAD: Final[Mapping[str, object]] = {**REGISTER_PAYLOAD, "memory_budget_mb": 256}
+CODE_DEFAULT_BUDGET_MB: Final = 512
 ADMIN_TOKEN: Final = SecretStr("tok-test-admin")  # a fake value for a test
 SRC: Final = Path(__file__).resolve().parents[2] / "src" / "appmux"
 TAKEN_NOTE: Final = "slug 'reports' is already taken (automatic)"
@@ -53,11 +55,13 @@ def plan_for(
     reason: str | None = "the team runs this",
     requester_can_manage: bool = True,
     shared_sp_allowed: bool = True,
+    default_memory_budget_mb: int | None = None,
 ) -> ApprovalPlan:
     snapshot = make_snapshot(
         apps=apps if apps is not None else [make_app()],
         requests=[request],
         shared_sp_allowed=shared_sp_allowed,
+        default_memory_budget_mb=default_memory_budget_mb,
     )
     return plan_approval(
         snapshot, request, reason=reason, requester_can_manage=requester_can_manage
@@ -68,9 +72,11 @@ def settings_request(**payload: object) -> PermissionRequest:
     return make_request(1, kind="settings", payload=payload)
 
 
-def register_request(**overrides: object) -> PermissionRequest:
+def register_request(
+    payload: Mapping[str, object] = REGISTER_PAYLOAD, **overrides: object
+) -> PermissionRequest:
     return make_request(
-        1, kind="register", payload=REGISTER_PAYLOAD, app_slug=None, requested_by=GRACE
+        1, kind="register", payload=payload, app_slug=None, requested_by=GRACE
     ).model_copy(update=overrides)
 
 
@@ -108,9 +114,69 @@ def test_a_delegation_approval_sets_the_flags_that_were_asked() -> None:
 def test_a_register_approval_creates_the_app_for_the_asker() -> None:
     plan = plan_for(register_request(), apps=[])
     assert plan.outcome is Outcome.APPLY
-    assert plan.new_app == REGISTER_PAYLOAD
+    assert plan.new_app == {**REGISTER_PAYLOAD, "memory_budget_mb": CODE_DEFAULT_BUDGET_MB}
     assert plan.audit_slug == "reports"
     assert plan.app_values == {}
+
+
+def test_a_register_approval_gives_the_app_the_platform_default_budget() -> None:
+    plan = plan_for(register_request(), apps=[], default_memory_budget_mb=768)
+    assert plan.new_app is not None
+    assert plan.new_app["memory_budget_mb"] == 768
+    # The audit row shows the budget the app was created with, as it shows the other fields.
+    assert plan.after["memory_budget_mb"] == 768
+
+
+def test_a_pending_register_row_from_before_the_change_is_approved_at_the_platform_default() -> (
+    None
+):
+    """The row still holds the budget its asker typed; approving ignores it, it is not invalid."""
+    request = register_request(LEGACY_REGISTER_PAYLOAD)
+
+    plan = plan_for(request, apps=[], default_memory_budget_mb=768)
+
+    assert plan.outcome is Outcome.APPLY
+    assert plan.new_app is not None
+    assert plan.new_app["memory_budget_mb"] == 768
+    changes = approval_changes(plan, app=None, approver=DANA, closed_at=NOW)
+    app_insert = changes[0]
+    assert app_insert.kind is WriteKind.APP_INSERT
+    assert app_insert.values["memory_budget_mb"] == 768
+    (entry,) = answer_audit(plan, request, approver=DANA, reason="the team asked")
+    assert entry.detail.budget_mb == 768
+
+
+def test_a_legacy_register_row_still_needs_a_reason_and_is_still_checked_for_its_other_fields() -> (
+    None
+):
+    with pytest.raises(BadRequest) as no_reason:
+        plan_for(register_request(LEGACY_REGISTER_PAYLOAD), apps=[], reason=None)
+    assert no_reason.value.error_code == "reason_required"
+
+    broken = {**LEGACY_REGISTER_PAYLOAD, "source_path": "/etc/passwd"}
+    with pytest.raises(BadRequest) as invalid:
+        plan_for(register_request(broken), apps=[])
+    assert invalid.value.error_code == "request_invalid"
+
+
+def test_a_register_row_that_holds_a_budget_the_old_form_would_have_refused_is_still_approved() -> (
+    None
+):
+    """The legacy key is dropped, not validated: only the platform default decides the budget."""
+    request = register_request({**REGISTER_PAYLOAD, "memory_budget_mb": 99999})
+
+    plan = plan_for(request, apps=[])
+
+    assert plan.new_app is not None
+    assert plan.new_app["memory_budget_mb"] == CODE_DEFAULT_BUDGET_MB
+
+
+def test_a_stored_default_that_no_longer_fits_falls_back_to_the_code_default() -> None:
+    """A row edited in the database must not stop an approval; the platform page names the key."""
+    plan = plan_for(register_request(), apps=[], default_memory_budget_mb=63)
+
+    assert plan.new_app is not None
+    assert plan.new_app["memory_budget_mb"] == CODE_DEFAULT_BUDGET_MB
 
 
 def test_a_rename_applies_every_field_or_none_when_the_slug_turns_out_taken() -> None:

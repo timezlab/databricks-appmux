@@ -72,6 +72,7 @@ export type PackageMode = z.infer<typeof PackageMode>;
 /** The keys `PUT /platform/settings/{key}` accepts: every `platform_settings` key except `platform_admins` and `egress_global`, which have their own routes. */
 export const SettingKey = z.enum([
   "memory_reserve_mb",
+  "default_memory_budget_mb",
   "package_mode",
   "default_wheel_sources",
   "shared_sp_delegation_allowed",

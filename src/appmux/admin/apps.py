@@ -85,6 +85,7 @@ from appmux.registry.audit import AuditDetail, ChangedFields
 from appmux.registry.errors import RowAlreadyExists
 from appmux.registry.models import App, AppConfig, Release
 from appmux.registry.models import EnvEntry as RegistryEnvEntry
+from appmux.registry.platform import default_memory_budget_mb
 from appmux.registry.protocol import Change
 from appmux.registry.snapshot import RegistrySnapshot
 from appmux.registry.writers import WriteKind
@@ -244,14 +245,14 @@ def _stored_app(snapshot: RegistrySnapshot, slug: str) -> tuple[App, AppConfig]:
     return app, config
 
 
-def _register_detail(body: RegisterAppRequest) -> AuditDetail:
-    """The audit detail of a registration (data model 4.9): the owner and the budget.
+def _register_detail(body: RegisterAppRequest, memory_budget_mb: int) -> AuditDetail:
+    """The audit detail of a registration (data model 4.9): the owner and the budget it got.
 
     The audit model is stricter about an email than the request schema, so a refusal here is
     reported against ``owner``, a field the caller sent. The message never repeats the value.
     """
     try:
-        return AuditDetail(owner=body.owner, budget_mb=body.memory_budget_mb)
+        return AuditDetail(owner=body.owner, budget_mb=memory_budget_mb)
     except ValidationError as exc:
         raise BadRequest(
             "the request is not valid: owner is not valid (a plain lower-case address such as "
@@ -340,17 +341,26 @@ class AppRoutes:
             body = await parse_body(request, RegisterAppRequest)
             actor = context.actor(request)
             admin_token = _admin_token(actor, doing="save the app", then="open this page again")
+            # Left out, the budget is the platform default as the snapshot holds it now.
+            memory_budget_mb = (
+                body.memory_budget_mb
+                if body.memory_budget_mb is not None
+                else default_memory_budget_mb(context.registry.snapshot)
+            )
 
             changes = register_app_changes(
                 slug=body.slug,
                 display_name=body.display_name,
                 owner=body.owner,
                 source_path=body.source_path,
-                memory_budget_mb=body.memory_budget_mb,
+                memory_budget_mb=memory_budget_mb,
                 registered_by=actor.email,
             )
             entry = context.audit_entry(
-                request, "app.register", app_slug=body.slug, detail=_register_detail(body)
+                request,
+                "app.register",
+                app_slug=body.slug,
+                detail=_register_detail(body, memory_budget_mb),
             )
             try:
                 rows = await context.write(request, changes, [entry], admin_token=admin_token)

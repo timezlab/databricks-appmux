@@ -67,9 +67,24 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
-function setup() {
+function setup(defaultMemoryBudgetMb?: number) {
   const user = userEvent.setup();
-  const page = renderInPlatform(<RegisterSection view={platformView()} />);
+  const view = platformView();
+  const page = renderInPlatform(
+    <RegisterSection
+      view={
+        defaultMemoryBudgetMb === undefined
+          ? view
+          : {
+              ...view,
+              settings: {
+                ...view.settings,
+                default_memory_budget_mb: defaultMemoryBudgetMb,
+              },
+            }
+      }
+    />,
+  );
   return { user, ...page };
 }
 
@@ -81,7 +96,8 @@ async function fill(
     slug: string;
     name: string;
     source: string;
-    memory: string;
+    /** Left out: the field stays blank, for the platform default. */
+    memory?: string;
     owner: string;
   },
 ): Promise<void> {
@@ -94,10 +110,12 @@ async function fill(
     screen.getByRole("textbox", { name: /^Source folder/ }),
     values.source,
   );
-  await user.type(
-    screen.getByRole("textbox", { name: /^Memory budget/ }),
-    values.memory,
-  );
+  if (values.memory !== undefined) {
+    await user.type(
+      screen.getByRole("textbox", { name: /^Memory budget/ }),
+      values.memory,
+    );
+  }
   await user.type(
     screen.getByRole("textbox", { name: /^Owner/ }),
     values.owner,
@@ -175,6 +193,34 @@ describe("RegisterSection", () => {
       screen.getByRole("textbox", { name: /^Memory budget/ }),
     ).toHaveAccessibleDescription(/must be at least 64/);
     expect(registerApp).not.toHaveBeenCalled();
+  });
+
+  it("says what a blank memory budget means: the platform default, by its number", () => {
+    setup(768);
+
+    const budget = screen.getByRole("textbox", { name: /^Memory budget/ });
+    expect(budget).toHaveValue("");
+    expect(budget).toHaveAttribute("placeholder", "768");
+    expect(budget).toHaveAccessibleDescription(
+      /blank.*platform default.*768 MB/i,
+    );
+    expect(budget).not.toBeRequired();
+  });
+
+  it("leaves the memory budget out of the body when it is blank, so the platform default applies", async () => {
+    vi.mocked(registerApp).mockResolvedValue(
+      appDetail({ slug: "inventory", owner: "carol@example.com" }),
+    );
+    const { user } = setup();
+    await fill(user, { ...VALID, memory: undefined });
+    await user.click(screen.getByRole("button", { name: "Register app" }));
+
+    expect(registerApp).toHaveBeenCalledExactlyOnceWith({
+      slug: "inventory",
+      display_name: "Inventory",
+      source_path: "/Workspace/Shared/apps/inventory",
+      owner: "carol@example.com",
+    });
   });
 
   it("sends the contract body, then announces, refreshes and empties the form", async () => {

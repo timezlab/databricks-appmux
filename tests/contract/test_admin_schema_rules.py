@@ -603,6 +603,12 @@ def test_a_memory_budget_is_an_integer_from_64_to_16384(budget: object) -> None:
         accepted(schemas.RegisterAppRequest, REGISTER | {"memory_budget_mb": good})
 
 
+def test_a_direct_registration_may_leave_the_budget_out_for_the_platform_default() -> None:
+    without_budget = {key: value for key, value in REGISTER.items() if key != "memory_budget_mb"}
+    accepted(schemas.RegisterAppRequest, without_budget)
+    assert schemas.RegisterAppRequest.model_validate(without_budget).memory_budget_mb is None
+
+
 @pytest.mark.parametrize("path", ["/home/a", "/workspace/a", "Workspace/a", ""])
 def test_a_source_path_starts_with_workspace(path: str) -> None:
     refused(
@@ -706,7 +712,6 @@ REGISTER_PAYLOAD = {
     "slug": "wiki",
     "display_name": "Team wiki",
     "source_path": "/Workspace/Shared/apps/wiki",
-    "memory_budget_mb": 128,
 }
 
 
@@ -714,7 +719,7 @@ def permission_request(kind: str, app: str, payload: dict[str, Any]) -> dict[str
     return {"kind": kind, "app": app, "payload": payload, "reason": "because"}
 
 
-def test_a_register_request_holds_all_four_fields_and_names_its_own_slug() -> None:
+def test_a_register_request_holds_the_three_fields_and_names_its_own_slug() -> None:
     accepted(
         schemas.CreatePermissionRequest, permission_request("register", "wiki", REGISTER_PAYLOAD)
     )
@@ -730,9 +735,15 @@ def test_a_register_request_holds_all_four_fields_and_names_its_own_slug() -> No
         permission_request("register", "other", REGISTER_PAYLOAD),
         "app must equal payload.slug",
     )
+
+
+@pytest.mark.parametrize("budget", [128, 63, None])
+def test_a_register_request_does_not_ask_for_a_budget_the_platform_sets_it(
+    budget: object,
+) -> None:
     refused(
         schemas.CreatePermissionRequest,
-        permission_request("register", "wiki", REGISTER_PAYLOAD | {"memory_budget_mb": 63}),
+        permission_request("register", "wiki", REGISTER_PAYLOAD | {"memory_budget_mb": budget}),
         "payload.memory_budget_mb",
     )
 

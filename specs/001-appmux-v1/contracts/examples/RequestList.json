@@ -47,8 +47,7 @@
       "payload": {
         "slug": "wiki",
         "display_name": "Team wiki",
-        "source_path": "/Workspace/Shared/apps/wiki",
-        "memory_budget_mb": 128
+        "source_path": "/Workspace/Shared/apps/wiki"
       },
       "reason": "the team wiki, a small Flask app",
       "requested_by": "frank@example.com",

@@ -146,8 +146,9 @@ then **Platform** > **Register an app** and fill in:
 | Owner | `<your-email>` |
 
 The app now exists in the **Platform** > **Apps** list, stopped, with no release. (A user who is not
-a platform admin presses **Request a new app** on the launcher with the same fields plus a reason,
-**Send request**; a platform admin approves it from the inbox on **Platform**.)
+a platform admin presses **Request a new app** on the launcher with the same fields except the memory
+budget, plus a reason, **Send request**; a platform admin approves it from the inbox on **Platform**, and the
+app starts with the platform's default memory budget, 512 MB unless changed in **Platform** > **Settings**.)
 
 **3. Update: make release 1.** Open the app (**Apps** > the app) and press **Update** in the header
 of the **Status** section. appmux reads the folder with your token, snapshots it and creates release

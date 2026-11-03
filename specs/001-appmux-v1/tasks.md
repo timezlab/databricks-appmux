@@ -485,6 +485,10 @@ when its tests pass; the lane that writes a route writes its tests first.
 
 - [ ] T205 Whole-branch review by a fresh agent, the Python gate and the seven UI checks, the deploy to the dev App and a hand run of all eleven points with screenshots before and after, docs (`ARCHITECTURE.md`, `web/README.md`, design 10.1, data model, `docs/index.md`), ADRs 0019 and 0020 set to accepted or left proposed with the owner's choices named.
 
+## Phase 16: Owner feedback (added 2026-11-03)
+
+- [x] T206 A new app gets one platform default memory budget instead of a typed one: the setting `default_memory_budget_mb` (default 512, 64 to 16384, editable on Platform > Settings); a `register` request no longer holds `memory_budget_mb` (sending it is `400`) and approving creates the app with the current default, also when a pending row stored earlier still holds the key (ignored); `POST /apps` takes the budget as optional, left out meaning the default; the visitor form has no memory field and says who sets it and how to ask for more; the inbox shows the default as the budget; the `settings` request keeps `memory_budget_mb`. Tests: `test_settings.py`, `test_request_catalogue.py`, `test_request_approval.py`, `test_register_update.py`, the contract and example tests on both sides, and the web unit, component and e2e tests of the forms and the inbox.
+
 ---
 
 ## Dependencies and execution order

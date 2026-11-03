@@ -14,6 +14,7 @@ import {
 
 const SETTINGS: PlatformView["settings"] = {
   memory_reserve_mb: 1024,
+  default_memory_budget_mb: 512,
   package_mode: "wheelhouse",
   default_wheel_sources: ["/Workspace/Shared/appmux/wheelhouse"],
   shared_sp_delegation_allowed: false,
@@ -54,6 +55,7 @@ describe("descriptors", () => {
 describe("settingDraft", () => {
   it("writes each value the way its editor takes it", () => {
     assert.equal(settingDraft("memory_reserve_mb", SETTINGS), "1024");
+    assert.equal(settingDraft("default_memory_budget_mb", SETTINGS), "512");
     assert.equal(settingDraft("child_cpu_pin", SETTINGS), "true");
     assert.equal(
       settingDraft("shared_sp_delegation_allowed", SETTINGS),
@@ -83,6 +85,25 @@ describe("parseSettingDraft", () => {
     assert.equal(errorOf("memory_reserve_mb", "-5"), "must be a whole number");
     assert.equal(
       errorOf("memory_reserve_mb", "10.5"),
+      "must be a whole number",
+    );
+  });
+
+  it("keeps the default memory budget in the bounds of one app's budget, 64 to 16,384 MB", () => {
+    assert.equal(valueOf("default_memory_budget_mb", "64"), 64);
+    assert.equal(valueOf("default_memory_budget_mb", " 768 "), 768);
+    assert.equal(valueOf("default_memory_budget_mb", "16384"), 16384);
+    assert.equal(
+      errorOf("default_memory_budget_mb", "63"),
+      "must be at least 64",
+    );
+    assert.equal(
+      errorOf("default_memory_budget_mb", "16385"),
+      "must be at most 16,384",
+    );
+    assert.equal(errorOf("default_memory_budget_mb", ""), "is required");
+    assert.equal(
+      errorOf("default_memory_budget_mb", "5e2"),
       "must be a whole number",
     );
   });
@@ -194,6 +215,10 @@ describe("settingSaveWarning", () => {
 describe("formatSettingValue", () => {
   it("writes a value with its unit", () => {
     assert.equal(formatSettingValue("memory_reserve_mb", SETTINGS), "1,024 MB");
+    assert.equal(
+      formatSettingValue("default_memory_budget_mb", SETTINGS),
+      "512 MB",
+    );
     assert.equal(formatSettingValue("request_timeout_s", SETTINGS), "120 s");
     assert.equal(formatSettingValue("max_concurrent_requests", SETTINGS), "64");
   });

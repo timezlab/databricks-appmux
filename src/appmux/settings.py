@@ -43,6 +43,9 @@ DEFAULT_UI_DIR: Final = Path("web/out")
 # beside the locked ones (data model 4.1, rule between keys; rule 10 of section 7).
 RELEASES_KEPT_FREE: Final = 4
 MAX_REQUEST_TIMEOUT_S: Final = 290  # below the platform proxy's 300 s
+# The bounds of one app's memory budget (data model 4.2); the platform default budget shares them.
+MEMORY_BUDGET_MIN_MB: Final = 64
+MEMORY_BUDGET_MAX_MB: Final = 16384
 
 
 class SettingsError(ValueError):
@@ -222,6 +225,8 @@ class PlatformSettings(BaseModel):
     keys the documents give only a sample (``memory_reserve_mb``, ``package_mode``,
     ``egress_global``) the sample value; ``default_wheel_sources`` is empty (optional, design
     13.1 item 6) and ``platform_admins`` is unset until the bootstrap admin sets it.
+    ``default_memory_budget_mb`` (512) is the budget of a new app registered by request or left
+    blank in a direct registration; the bounds are those of one app's budget.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
@@ -230,6 +235,12 @@ class PlatformSettings(BaseModel):
         default=None, json_schema_extra=_ALL_CHILDREN
     )
     memory_reserve_mb: int = Field(default=1024, ge=1, json_schema_extra=_ALL_CHILDREN)
+    default_memory_budget_mb: int = Field(
+        default=512,
+        ge=MEMORY_BUDGET_MIN_MB,
+        le=MEMORY_BUDGET_MAX_MB,
+        json_schema_extra=_ALL_CHILDREN,
+    )
     package_mode: Literal["index", "wheelhouse", "wheelhouse+index"] = Field(
         default="wheelhouse", json_schema_extra=_ALL_CHILDREN
     )

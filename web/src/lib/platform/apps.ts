@@ -102,20 +102,22 @@ export function parseRegisterForm(
   existingSlugs: readonly string[],
 ): FormParse<RegisterAppRequest> {
   const slug = values.slug.trim();
+  // A blank field leaves the budget out: the app gets the platform default.
+  const isMemoryBlank = values.memory_budget_mb.trim() === "";
   const memory = parseWholeNumber(values.memory_budget_mb);
   const parsed = RegisterAppRequest.safeParse({
     slug,
     display_name: values.display_name.trim(),
     source_path: values.source_path.trim(),
     // A NaN is refused by the schema; the message below is the one shown.
-    memory_budget_mb: memory ?? Number.NaN,
+    ...(isMemoryBlank ? {} : { memory_budget_mb: memory ?? Number.NaN }),
     owner: values.owner.trim(),
   });
 
   const errors: Record<string, string> = parsed.success
     ? {}
     : { ...formErrors(parsed.error.issues) };
-  if (memory === null) {
+  if (!isMemoryBlank && memory === null) {
     errors.memory_budget_mb = memoryProblem(values.memory_budget_mb);
   }
   if (errors.slug === undefined && existingSlugs.includes(slug)) {

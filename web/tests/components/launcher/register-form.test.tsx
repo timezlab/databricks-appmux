@@ -53,10 +53,6 @@ async function fillValidForm(user: UserEvent, slug = "wiki"): Promise<void> {
     "/Workspace/Shared/apps/wiki",
   );
   await user.type(
-    screen.getByRole("textbox", { name: /^Memory budget/ }),
-    "128",
-  );
-  await user.type(
     screen.getByRole("textbox", { name: /^Reason/ }),
     "the team wiki, a small Flask app",
   );
@@ -66,6 +62,16 @@ describe("RegisterForm", () => {
   it("opens with the keyboard on the slug field", () => {
     renderForm();
     expect(screen.getByRole("textbox", { name: /^Slug/ })).toHaveFocus();
+  });
+
+  it("asks for no memory budget and says who sets it and how to get more", () => {
+    renderForm();
+    expect(screen.queryByRole("textbox", { name: /memory/i })).toBeNull();
+    expect(
+      screen.getByText(
+        /platform admin sets the memory budget.*ask for more in Settings/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("marks an invalid slug, announces the failure, moves focus back to it and sends nothing", async () => {
@@ -186,7 +192,7 @@ describe("RegisterForm", () => {
     expect(screen.queryByRole("button", { name: "Browse" })).toBeNull();
   });
 
-  it("offers Browse to a person who may list the workspace, and a Node.js folder fills the memory budget too", async () => {
+  it("offers Browse to a person who may list the workspace, and a Node.js folder offers no memory figure to use", async () => {
     const appFolder = "/Workspace/Shared/apps/wiki";
     const nodeApp: WorkspaceListing = {
       path: appFolder,
@@ -213,17 +219,15 @@ describe("RegisterForm", () => {
     const panel = await screen.findByRole("dialog", {
       name: "Browse the workspace",
     });
-    await user.click(
-      await within(panel).findByRole("button", { name: "Use 768 MB" }),
-    );
-    await user.click(
-      within(panel).getByRole("button", { name: "Use this folder" }),
-    );
+    const useFolder = await within(panel).findByRole("button", {
+      name: "Use this folder",
+    });
+    expect(
+      within(panel).queryByRole("button", { name: /^Use \d+ MB$/ }),
+    ).toBeNull();
+    await user.click(useFolder);
 
     expect(calls[0]?.url).toContain("/workspace/browse");
     expect(source).toHaveValue(appFolder);
-    expect(screen.getByRole("textbox", { name: /^Memory budget/ })).toHaveValue(
-      "768",
-    );
   });
 });

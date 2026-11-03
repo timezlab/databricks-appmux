@@ -4,8 +4,6 @@ import { describe, it } from "vitest";
 import { ApiError, CreatePermissionRequest, RequestRow } from "@/lib/api";
 import {
   EMPTY_REGISTER_FORM,
-  MEMORY_BUDGET_MAX_MB,
-  MEMORY_BUDGET_MIN_MB,
   REASON_MAX_LENGTH,
   submitRegisterForm,
   validateRegisterForm,
@@ -22,7 +20,6 @@ const VALID: RegisterFormValues = {
   slug: "wiki",
   displayName: "Team wiki",
   sourcePath: "/Workspace/Shared/apps/wiki",
-  memoryBudgetMb: "128",
   reason: "the team wiki, a small Flask app",
 };
 const NOTHING_KNOWN: RegisterFormContext = {
@@ -58,7 +55,6 @@ describe("a valid form", () => {
         slug: "  wiki ",
         displayName: " Team wiki\n",
         sourcePath: " /Workspace/Shared/apps/wiki ",
-        memoryBudgetMb: " 128 ",
         reason: "  because \n",
       },
       NOTHING_KNOWN,
@@ -71,7 +67,6 @@ describe("a valid form", () => {
         slug: "wiki",
         display_name: "Team wiki",
         source_path: "/Workspace/Shared/apps/wiki",
-        memory_budget_mb: 128,
       },
       reason: "because",
     });
@@ -85,12 +80,11 @@ describe("an empty form", () => {
     });
     assert.deepEqual(Object.keys(errors).toSorted(), [
       "displayName",
-      "memoryBudgetMb",
       "reason",
       "slug",
       "sourcePath",
     ]);
-    assert.equal(new Set(Object.values(errors)).size, 5);
+    assert.equal(new Set(Object.values(errors)).size, 4);
   });
 });
 
@@ -163,43 +157,12 @@ describe("the display name", () => {
 });
 
 describe("the memory budget", () => {
-  it("is 64 to 16384 MB, edges included", () => {
-    assert.equal(MEMORY_BUDGET_MIN_MB, 64);
-    assert.equal(MEMORY_BUDGET_MAX_MB, 16384);
-    for (const memoryBudgetMb of ["64", "16384", "1024"]) {
-      assert.ok(
-        validateRegisterForm({ ...VALID, memoryBudgetMb }, NOTHING_KNOWN).ok,
-        memoryBudgetMb,
-      );
-    }
-    for (const memoryBudgetMb of ["63", "16385", "0"]) {
-      const errors = errorsOf({ memoryBudgetMb });
-      assert.deepEqual(Object.keys(errors), ["memoryBudgetMb"], memoryBudgetMb);
-      assert.match(errors.memoryBudgetMb ?? "", /64/);
-      assert.match(errors.memoryBudgetMb ?? "", /16,?384/);
-    }
-  });
-
-  it("must be a whole number", () => {
-    for (const memoryBudgetMb of [
-      "abc",
-      "12.5",
-      "1e3",
-      "-64",
-      "0x40",
-      "64MB",
-    ]) {
-      const errors = errorsOf({ memoryBudgetMb });
-      assert.deepEqual(Object.keys(errors), ["memoryBudgetMb"], memoryBudgetMb);
-      assert.match(errors.memoryBudgetMb ?? "", /whole number/i);
-    }
-  });
-
-  it("is required", () => {
-    assert.match(
-      errorsOf({ memoryBudgetMb: " " }).memoryBudgetMb ?? "",
-      /enter/i,
-    );
+  it("is not asked for: the form has no such field and the body has no such key", () => {
+    assert.equal("memoryBudgetMb" in EMPTY_REGISTER_FORM, false);
+    const result = validateRegisterForm(VALID, NOTHING_KNOWN);
+    assert.ok(result.ok);
+    assert.equal(result.request.kind, "register");
+    assert.equal("memory_budget_mb" in result.request.payload, false);
   });
 });
 

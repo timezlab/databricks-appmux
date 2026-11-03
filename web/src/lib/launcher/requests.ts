@@ -81,8 +81,10 @@ function slugOf(request: RequestRow): string {
   );
 }
 
+// No budget line: a registration does not ask for one, and approving ignores one
+// that a request stored before the platform default existed still carries.
 function registerDetails(request: RequestRow): string[] {
-  return ["slug", "source_path", "memory_budget_mb"]
+  return ["slug", "source_path"]
     .filter((key) => key in request.payload)
     .map(
       (key) =>

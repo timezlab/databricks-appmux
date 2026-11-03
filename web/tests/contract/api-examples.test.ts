@@ -16,6 +16,7 @@ import { manifest } from "../support/manifest";
 
 /** Optional keys of the request schemas: removing one must still parse. */
 const OPTIONAL_REQUEST_KEYS: Record<string, string[]> = {
+  RegisterAppRequest: ["memory_budget_mb"],
   UpdateAppRequest: ["slug", "display_name", "source_path", "memory_budget_mb"],
   AttachResourceRequest: ["from_bundle"],
   DecidePermissionRequest: ["reason", "note"],

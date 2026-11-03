@@ -34,6 +34,7 @@ const CONTEXT: InboxContext = {
   apps: [{ slug: "sales" }, { slug: "reports" }],
   isSharedSpAllowed: false,
   freeMemoryMb: 1393,
+  defaultMemoryBudgetMb: 512,
 };
 
 function registerRow(payload: Record<string, unknown> = {}): RequestRow {
@@ -45,7 +46,6 @@ function registerRow(payload: Record<string, unknown> = {}): RequestRow {
       slug: "wiki",
       display_name: "Team wiki",
       source_path: "/Workspace/Shared/apps/wiki",
-      memory_budget_mb: 128,
       ...payload,
     },
     current: null,
@@ -129,6 +129,28 @@ describe("inboxItem: what is shown", () => {
     assert.ok(item.changes.every((change) => change.current === null));
     assert.ok(item.changes.every((change) => change.isGate));
     assert.match(item.changes[3]?.note ?? "", /1,393 MB free in the slot/);
+  });
+
+  it("shows the platform default as the memory budget of a registration, which the asker does not choose", () => {
+    const item = inboxItem(registerRow(), {
+      ...CONTEXT,
+      defaultMemoryBudgetMb: 768,
+    });
+    const memory = item.changes.find(
+      (change) => change.field === "memory_budget_mb",
+    );
+    assert.equal(memory?.requested, "768 MB");
+    assert.match(memory?.note ?? "", /platform default/i);
+    assert.match(memory?.note ?? "", /1,393 MB free in the slot/);
+  });
+
+  it("ignores a budget that an older registration still carries, as approving does", () => {
+    const item = inboxItem(registerRow({ memory_budget_mb: 128 }), CONTEXT);
+    const memory = item.changes.find(
+      (change) => change.field === "memory_budget_mb",
+    );
+    assert.equal(memory?.requested, "512 MB");
+    assert.ok(item.changes.every((change) => !change.isUnknown));
   });
 
   it("says a missing field of a registration is missing, not blank", () => {
@@ -247,11 +269,19 @@ describe("inboxItem: warnings", () => {
     assert.deepEqual(on.warnings, []);
   });
 
-  it("warns when a new app's budget is larger than the free memory", () => {
-    const item = inboxItem(registerRow({ memory_budget_mb: 2048 }), CONTEXT);
+  it("warns when the default budget a new app will get is larger than the free memory", () => {
+    const item = inboxItem(registerRow(), {
+      ...CONTEXT,
+      defaultMemoryBudgetMb: 2048,
+    });
     assert.equal(item.warnings.length, 1);
     assert.match(item.warnings[0] ?? "", /2,048 MB/);
     assert.match(item.warnings[0] ?? "", /1,393 MB/);
+  });
+
+  it("does not warn about a new app when the default budget fits, whatever an older registration asked for", () => {
+    const item = inboxItem(registerRow({ memory_budget_mb: 4096 }), CONTEXT);
+    assert.deepEqual(item.warnings, []);
   });
 
   it("compares only the increase when an existing app's budget grows", () => {

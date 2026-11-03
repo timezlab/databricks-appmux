@@ -74,6 +74,7 @@ export type PlatformApp = z.infer<typeof PlatformApp>;
 export const PlatformView = z.object({
   settings: z.object({
     memory_reserve_mb: z.int(),
+    default_memory_budget_mb: z.int(),
     package_mode: PackageMode,
     default_wheel_sources: z.array(z.string()),
     shared_sp_delegation_allowed: z.boolean(),

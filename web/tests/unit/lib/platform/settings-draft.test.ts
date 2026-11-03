@@ -20,6 +20,7 @@ import { ApiError } from "@/lib/api";
 
 const STORED: PlatformView["settings"] = {
   memory_reserve_mb: 1024,
+  default_memory_budget_mb: 512,
   package_mode: "wheelhouse",
   default_wheel_sources: ["/Workspace/Shared/appmux/wheelhouse"],
   shared_sp_delegation_allowed: false,

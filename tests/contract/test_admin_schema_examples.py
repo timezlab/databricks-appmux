@@ -31,6 +31,7 @@ MANIFEST_FILE: Final = EXAMPLES_DIR / "manifest.json"
 # keys of the contract's request tables, minus those the example needs for another reason:
 # ``access_as`` of the example is a warehouse's, which a non-secret must name.
 OPTIONAL_REQUEST_KEYS: Final[dict[str, frozenset[str]]] = {
+    "RegisterAppRequest": frozenset({"memory_budget_mb"}),
     "UpdateAppRequest": frozenset({"slug", "display_name", "source_path", "memory_budget_mb"}),
     "AttachResourceRequest": frozenset({"from_bundle"}),
     "DecidePermissionRequest": frozenset({"reason", "note"}),

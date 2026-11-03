@@ -33,7 +33,6 @@ REGISTER_PAYLOAD: Final[Mapping[str, object]] = {
     "slug": "reports",
     "display_name": "Weekly reports",
     "source_path": "/Workspace/Shared/apps/reports",
-    "memory_budget_mb": 256,
 }
 MARKER: Final = "Marker Value From The Client"  # not a valid slug, so the payload is refused
 FRANK: Final = "frank@example.com"
@@ -133,8 +132,8 @@ def test_a_valid_payload_of_each_catalogue_entry_is_accepted(
         pytest.param(
             "register",
             "reports",
-            {**REGISTER_PAYLOAD, "memory_budget_mb": 10},
-            id="register-budget-below-range",
+            {**REGISTER_PAYLOAD, "memory_budget_mb": 256},
+            id="register-does-not-ask-for-a-budget",
         ),
         pytest.param("delegation", "sales", {}, id="delegation-asks-for-nothing"),
         pytest.param("delegation", "sales", {"obo": False}, id="delegation-false-is-not-a-request"),
@@ -354,7 +353,7 @@ def test_a_reason_is_required_to_approve_exactly_when_a_gate_field_is_present(
 
 def test_the_gate_fields_are_the_catalogues_and_nothing_else() -> None:
     expected = {
-        "register": frozenset({"slug", "display_name", "source_path", "memory_budget_mb"}),
+        "register": frozenset({"slug", "display_name", "source_path"}),
         "delegation": frozenset({"obo", "shared_sp"}),
         "settings": frozenset({"source_path"}),
     }

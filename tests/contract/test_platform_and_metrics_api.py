@@ -93,6 +93,7 @@ ERIN: Final = "erin@example.com"  # in the bootstrap list only
 # A valid value of each settable key, different from its default.
 VALID_VALUES: Final[dict[str, object]] = {
     "memory_reserve_mb": 2048,
+    "default_memory_budget_mb": 768,
     "package_mode": "index",
     "default_wheel_sources": ["/Workspace/Shared/wheels"],
     "shared_sp_delegation_allowed": True,
@@ -515,6 +516,11 @@ def test_the_two_keys_with_their_own_route_are_400_and_name_that_route(
         ("request_timeout_s", 291),  # the platform proxy ends a request at 300 s
         ("request_timeout_s", 0),
         ("memory_reserve_mb", 0),
+        ("default_memory_budget_mb", 63),  # a new app's budget has the same bounds as any app's
+        ("default_memory_budget_mb", 16385),
+        ("default_memory_budget_mb", SUBMITTED_MARKER),
+        ("default_memory_budget_mb", True),
+        ("default_memory_budget_mb", None),
         ("max_concurrent_requests", -1),
         ("package_mode", SUBMITTED_MARKER),
         ("package_mode", 1),

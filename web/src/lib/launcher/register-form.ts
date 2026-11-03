@@ -15,24 +15,19 @@ import {
 } from "@/lib/forms/field-errors";
 import { CreatePermissionRequest } from "@/lib/api";
 import type { RequestRow } from "@/lib/api";
-import {
-  MEMORY_BUDGET_MAX_MB,
-  MEMORY_BUDGET_MIN_MB,
-  REASON_MAX_LENGTH,
-} from "@/lib/api/schemas/primitives";
+import { REASON_MAX_LENGTH } from "@/lib/api/schemas/primitives";
 import { MAX_PENDING_REGISTER_REQUESTS } from "./requests";
 
-// The limits are the schema's (admin-api.md, RegisterAppRequest and
-// CreatePermissionRequest.reason), read from where they are defined; the test
-// checks both edges of each against the schema.
-export { MEMORY_BUDGET_MAX_MB, MEMORY_BUDGET_MIN_MB, REASON_MAX_LENGTH };
+// The limit is the schema's (admin-api.md, CreatePermissionRequest.reason),
+// read from where it is defined; the test checks both edges against the schema.
+// The form has no memory budget: the platform sets one when the request is approved.
+export { REASON_MAX_LENGTH };
 
 /** What the inputs hold: text, as typed. */
 export interface RegisterFormValues {
   slug: string;
   displayName: string;
   sourcePath: string;
-  memoryBudgetMb: string;
   reason: string;
 }
 
@@ -40,7 +35,6 @@ export const EMPTY_REGISTER_FORM: RegisterFormValues = {
   slug: "",
   displayName: "",
   sourcePath: "",
-  memoryBudgetMb: "",
   reason: "",
 };
 
@@ -65,22 +59,14 @@ const FIELDS: readonly RegisterFormField[] = [
   "slug",
   "displayName",
   "sourcePath",
-  "memoryBudgetMb",
   "reason",
 ];
-
-const WHOLE_NUMBER = /^\d+$/;
-
-function parseMemoryBudget(text: string): number {
-  return WHOLE_NUMBER.test(text) ? Number(text) : Number.NaN;
-}
 
 function trimmed(values: RegisterFormValues): RegisterFormValues {
   return {
     slug: values.slug.trim(),
     displayName: values.displayName.trim(),
     sourcePath: values.sourcePath.trim(),
-    memoryBudgetMb: values.memoryBudgetMb.trim(),
     reason: values.reason.trim(),
   };
 }
@@ -93,7 +79,6 @@ function toCandidate(values: RegisterFormValues): unknown {
       slug: values.slug,
       display_name: values.displayName,
       source_path: values.sourcePath,
-      memory_budget_mb: parseMemoryBudget(values.memoryBudgetMb),
     },
     reason: values.reason,
   };
@@ -114,13 +99,6 @@ const WORDING: Record<
     sourcePath === ""
       ? "Enter the workspace folder the app is read from."
       : "The folder must start with /Workspace/.",
-  memoryBudgetMb: ({ memoryBudgetMb }) => {
-    if (memoryBudgetMb === "") return "Enter the memory budget in MB.";
-    if (!WHOLE_NUMBER.test(memoryBudgetMb)) {
-      return "Use a whole number of MB, such as 256.";
-    }
-    return `Use a number from ${MEMORY_BUDGET_MIN_MB} to ${MEMORY_BUDGET_MAX_MB} MB.`;
-  },
   reason: ({ reason }) =>
     reason.length > REASON_MAX_LENGTH
       ? `Use at most ${REASON_MAX_LENGTH} characters (now ${reason.length}).`
@@ -132,7 +110,6 @@ const PAYLOAD_FIELD = new Map<PropertyKey, RegisterFormField>([
   ["slug", "slug"],
   ["display_name", "displayName"],
   ["source_path", "sourcePath"],
-  ["memory_budget_mb", "memoryBudgetMb"],
 ]);
 
 /** The form field an issue of the request body belongs to, or the form as a whole. */

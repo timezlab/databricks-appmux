@@ -158,6 +158,7 @@ function InboxBody({
     apps: view.apps,
     isSharedSpAllowed: view.settings.shared_sp_delegation_allowed,
     freeMemoryMb: view.memory.free_mb,
+    defaultMemoryBudgetMb: view.settings.default_memory_budget_mb,
   };
   const items = inboxRequests(requests.data.items).map((row) =>
     inboxItem(row, context),

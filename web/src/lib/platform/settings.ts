@@ -11,6 +11,10 @@
  */
 import { PackageMode, PutSettingRequest } from "@/lib/api/schemas";
 import type { PlatformView, SettingKey } from "@/lib/api/schemas";
+import {
+  MEMORY_BUDGET_MAX_MB,
+  MEMORY_BUDGET_MIN_MB,
+} from "@/lib/api/schemas/primitives";
 import { formatCount } from "@/lib/format";
 import { formErrors, parseWholeNumber } from "./forms";
 import type { FormParse } from "./forms";
@@ -53,6 +57,11 @@ export const SETTING_DESCRIPTORS: Record<SettingKey, SettingDescriptor> = {
   memory_reserve_mb: describe(
     "memory_reserve_mb",
     "Memory kept for appmux itself. The apps share the rest of the container's limit.",
+    { kind: "integer", unit: "MB" },
+  ),
+  default_memory_budget_mb: describe(
+    "default_memory_budget_mb",
+    "The memory budget a newly registered app starts with. A request to register an app does not name one. Apps already registered keep their budget.",
     { kind: "integer", unit: "MB" },
   ),
   package_mode: describe(
@@ -135,6 +144,7 @@ export function settingDraft(
     case "child_cpu_pin":
       return String(settings[key]);
     case "memory_reserve_mb":
+    case "default_memory_budget_mb":
     case "max_releases_per_app":
     case "max_locked_releases":
     case "request_timeout_s":
@@ -178,6 +188,14 @@ export function formatSettingValue(
 function ownProblem(key: SettingKey, value: number): string | null {
   if (key === "request_timeout_s" && value > MAX_REQUEST_TIMEOUT_S) {
     return `must be at most ${MAX_REQUEST_TIMEOUT_S}`;
+  }
+  if (key === "default_memory_budget_mb") {
+    if (value < MEMORY_BUDGET_MIN_MB) {
+      return `must be at least ${formatCount(MEMORY_BUDGET_MIN_MB)}`;
+    }
+    if (value > MEMORY_BUDGET_MAX_MB) {
+      return `must be at most ${formatCount(MEMORY_BUDGET_MAX_MB)}`;
+    }
   }
   return null;
 }

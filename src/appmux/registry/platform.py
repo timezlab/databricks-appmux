@@ -14,6 +14,7 @@ two admins saving at once end as the later one (TD-013).
 
 from __future__ import annotations
 
+import logging
 from typing import Final
 
 from pydantic import ValidationError
@@ -23,8 +24,12 @@ from appmux.registry.snapshot import RegistrySnapshot
 from appmux.registry.writers import WriteKind
 from appmux.settings import PlatformSettings
 
+logger = logging.getLogger(__name__)
+
 # The two keys the rule between keys joins (``PlatformSettings.locks_leave_room_to_clean_up``).
 LOCK_RULE_KEYS: Final = ("max_locked_releases", "max_releases_per_app")
+
+_DEFAULT_BUDGET_KEY: Final = "default_memory_budget_mb"
 
 
 def stored_settings(snapshot: RegistrySnapshot) -> dict[str, object]:
@@ -48,6 +53,24 @@ def settings_in_force(snapshot: RegistrySnapshot) -> PlatformSettings:
     the database, since the admin API cannot write one); ``faulty_keys`` names the keys at fault.
     """
     return PlatformSettings.model_validate(stored_settings(snapshot))
+
+
+def default_memory_budget_mb(snapshot: RegistrySnapshot) -> int:
+    """The budget a new app starts with: the stored setting, or the code's default.
+
+    Only this key is read, so a bad value under another key cannot stop an app from being
+    registered. A stored value that no longer fits (a row edited in the database) falls back to
+    the code's default rather than refusing the registration; the budget can be changed afterwards.
+    """
+    row = snapshot.setting(_DEFAULT_BUDGET_KEY)
+    if row is not None:
+        try:
+            stored = PlatformSettings.model_validate({_DEFAULT_BUDGET_KEY: row.value})
+        except ValidationError:
+            logger.error("the stored default memory budget is unusable; the code default applies")
+        else:
+            return stored.default_memory_budget_mb
+    return PlatformSettings().default_memory_budget_mb
 
 
 def faulty_keys(error: ValidationError) -> tuple[str, ...]:
