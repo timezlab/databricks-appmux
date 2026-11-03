@@ -170,6 +170,77 @@ export function delegationChoices(app: AppDetail): DelegationChoices {
   };
 }
 
+export interface IdentityMode {
+  id: "obo" | "shared_sp" | "own_sp";
+  label: string;
+  isInEffect: boolean;
+  /** The state in a word or two, beside the lamp. */
+  stateText: string;
+  /** What the mode means for the app. */
+  description: string;
+  /** How to get it when it is not in effect; `null` when it is, or when nothing can be done. */
+  howToGet: string | null;
+}
+
+const ASK_FOR_DELEGATION =
+  "An admin of this app can ask for it with Request a delegation; a platform admin decides.";
+
+/**
+ * The identities the app can reach Databricks with, and which are in effect
+ * (design 8.1): OBO and the shared service principal are delegated by a
+ * platform admin; the app's own service principal needs only its two keys.
+ */
+export function identityModes(app: AppDetail): IdentityMode[] {
+  const choices = delegationChoices(app);
+  const hasOwnSpKeys =
+    app.config.own_sp_client_id_key !== null &&
+    app.config.own_sp_client_secret_key !== null;
+
+  const sharedSpState = choices.sharedSp.state;
+  return [
+    {
+      id: "obo",
+      label: "As the visitor (OBO)",
+      isInEffect: choices.obo.state === "delegated",
+      stateText:
+        choices.obo.state === "delegated" ? "Delegated" : "Not delegated",
+      description:
+        "The app uses each visitor's own Databricks rights, within the appmux App's scopes, while the visitor is on the page.",
+      howToGet: choices.obo.state === "delegated" ? null : ASK_FOR_DELEGATION,
+    },
+    {
+      id: "shared_sp",
+      label: "As the shared service principal",
+      isInEffect: sharedSpState === "delegated",
+      stateText:
+        sharedSpState === "delegated"
+          ? "Delegated"
+          : sharedSpState === "not_allowed"
+            ? "Switched off by the platform"
+            : "Not delegated",
+      description:
+        "The app borrows the identity appmux itself runs as, as a token that lasts an hour; it works without a visitor.",
+      howToGet:
+        sharedSpState === "delegated"
+          ? null
+          : sharedSpState === "not_allowed"
+            ? "A platform admin has switched this delegation off for every app, so a request for it is refused."
+            : ASK_FOR_DELEGATION,
+    },
+    {
+      id: "own_sp",
+      label: "As the app's own service principal",
+      isInEffect: hasOwnSpKeys,
+      stateText: hasOwnSpKeys ? "Configured" : "Not configured",
+      description:
+        "The app uses a service principal of its own, from two attached secrets; no delegation is needed.",
+      howToGet: hasOwnSpKeys
+        ? null
+        : "Attach its client id and client secret as secrets under Resources, then name the two keys in the app's settings.",
+    },
+  ];
+}
+
 const DELEGATION_KIND_LABEL: Record<DelegationKind, string> = {
   obo: "Act on behalf of users (OBO)",
   shared_sp: "Act as the shared service principal",

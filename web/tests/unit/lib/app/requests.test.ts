@@ -14,6 +14,7 @@ import {
   buildSettingsRequest,
   canWithdraw,
   delegationChoices,
+  identityModes,
   limitRequests,
   pendingRequestOfKind,
   requestAnswerText,
@@ -206,6 +207,64 @@ describe("delegationChoices", () => {
       ).sharedSp,
       { state: "delegated" },
     );
+  });
+});
+
+describe("identityModes", () => {
+  function byId(app: api.AppDetail) {
+    return Object.fromEntries(
+      identityModes(app).map((mode) => [mode.id, mode]),
+    );
+  }
+
+  it("lists OBO, the shared service principal and the app's own, in that order", () => {
+    assert.deepEqual(
+      identityModes(APP).map((mode) => mode.id),
+      ["obo", "shared_sp", "own_sp"],
+    );
+  });
+
+  it("says what is in effect for the example app", () => {
+    const modes = byId(APP);
+    assert.equal(modes.obo?.isInEffect, true);
+    assert.equal(modes.obo?.stateText, "Delegated");
+    assert.equal(modes.obo?.howToGet, null);
+    assert.equal(modes.own_sp?.isInEffect, true);
+    assert.equal(modes.own_sp?.stateText, "Configured");
+  });
+
+  it("says the shared service principal is switched off, and that a request for it is refused", () => {
+    const sharedSp = byId(APP).shared_sp;
+    assert.equal(sharedSp?.isInEffect, false);
+    assert.match(sharedSp?.stateText ?? "", /switched off/i);
+    assert.match(sharedSp?.howToGet ?? "", /platform admin/i);
+  });
+
+  it("points to a request when a delegation can be asked for", () => {
+    const modes = byId(
+      appWithDelegation({
+        obo_delegated: false,
+        shared_sp_delegation_allowed: true,
+      }),
+    );
+    assert.equal(modes.obo?.stateText, "Not delegated");
+    assert.match(modes.obo?.howToGet ?? "", /request a delegation/i);
+    assert.equal(modes.shared_sp?.stateText, "Not delegated");
+    assert.match(modes.shared_sp?.howToGet ?? "", /request a delegation/i);
+  });
+
+  it("says how to give the app its own service principal when it has none", () => {
+    const ownSp = byId({
+      ...APP,
+      config: {
+        ...APP.config,
+        own_sp_client_id_key: null,
+        own_sp_client_secret_key: null,
+      },
+    }).own_sp;
+    assert.equal(ownSp?.isInEffect, false);
+    assert.equal(ownSp?.stateText, "Not configured");
+    assert.match(ownSp?.howToGet ?? "", /secret/i);
   });
 });
 
