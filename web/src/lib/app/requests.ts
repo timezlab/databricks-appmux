@@ -174,6 +174,8 @@ export interface IdentityMode {
   id: "obo" | "shared_sp" | "own_sp";
   label: string;
   isInEffect: boolean;
+  /** Switched off by the platform for every app: a request for it is refused. */
+  isSwitchedOff: boolean;
   /** The state in a word or two, beside the lamp. */
   stateText: string;
   /** What the mode means for the app. */
@@ -202,6 +204,7 @@ export function identityModes(app: AppDetail): IdentityMode[] {
       id: "obo",
       label: "As the visitor (OBO)",
       isInEffect: choices.obo.state === "delegated",
+      isSwitchedOff: false,
       stateText:
         choices.obo.state === "delegated" ? "Delegated" : "Not delegated",
       description:
@@ -212,6 +215,7 @@ export function identityModes(app: AppDetail): IdentityMode[] {
       id: "shared_sp",
       label: "As the shared service principal",
       isInEffect: sharedSpState === "delegated",
+      isSwitchedOff: sharedSpState === "not_allowed",
       stateText:
         sharedSpState === "delegated"
           ? "Delegated"
@@ -231,6 +235,7 @@ export function identityModes(app: AppDetail): IdentityMode[] {
       id: "own_sp",
       label: "As the app's own service principal",
       isInEffect: hasOwnSpKeys,
+      isSwitchedOff: false,
       stateText: hasOwnSpKeys ? "Configured" : "Not configured",
       description:
         "The app uses a service principal of its own, from two attached secrets; no delegation is needed.",

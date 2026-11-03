@@ -3,63 +3,76 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GrantForm } from "@/components/app/grant-form";
+import { stubFetch } from "../../support/fake-fetch";
+import type { RecordedCall } from "../../support/fake-fetch";
 import {
   APP,
   describeCall,
   jsonResponse,
   readExample,
   renderWithActions,
-  stubApi,
 } from "./form-test-harness";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderForm(isDisabled = false) {
+const SP_ID = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab";
+
+/**
+ * The directory answers with the contract's example list; a grant is
+ * answered by `onGrant`. Only the grant calls are returned.
+ */
+function stubDirectoryAndGrant(
+  onGrant: () => Response | Promise<Response> = () =>
+    jsonResponse(200, readExample("AppGrant")),
+): RecordedCall[] {
+  const grantCalls: RecordedCall[] = [];
+  stubFetch((call) => {
+    if (call.url.includes("/principals")) {
+      return jsonResponse(200, readExample("PrincipalList"));
+    }
+    grantCalls.push(call);
+    return onGrant();
+  });
+  return grantCalls;
+}
+
+function renderForm() {
   const onReload = vi.fn();
   const view = renderWithActions((actions) => (
-    <GrantForm
-      app={APP}
-      actions={actions}
-      isDisabled={isDisabled}
-      onReload={onReload}
-    />
+    <GrantForm app={APP} actions={actions} onReload={onReload} />
   ));
   return { ...view, onReload, user: userEvent.setup() };
 }
 
+function who() {
+  return screen.getByRole("combobox", { name: /^Who/ });
+}
+
+function level() {
+  return screen.getByRole("combobox", { name: /^Level/ });
+}
+
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  typed: string,
+  option: RegExp,
+) {
+  await user.click(who());
+  await user.type(screen.getByPlaceholderText(/Type a name/), typed);
+  await user.click(await screen.findByRole("option", { name: option }));
+}
+
 describe("GrantForm", () => {
-  it("refuses an address without @: an announced error on the field, focus on it, nothing sent", async () => {
-    const calls = stubApi(() => jsonResponse(200, readExample("AppGrant")));
-    const { user } = renderForm();
-    const address = screen.getByRole("textbox", { name: /Email address/ });
-
-    await user.type(address, "dana");
-    await user.click(screen.getByRole("button", { name: "Share" }));
-
-    expect(address).toBeInvalid();
-    expect(address).toHaveAccessibleDescription(
-      /Enter an email address, such as user@example\.com\./,
-    );
-    expect(address).toHaveFocus();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "The access was not changed",
-    );
-    expect(calls).toHaveLength(0);
-  });
-
-  it("sends the address lower-cased with the chosen level, then clears the form and reloads the app", async () => {
-    const calls = stubApi(() => jsonResponse(200, readExample("AppGrant")));
+  it("adds a suggested user at the chosen level, then clears the field and puts focus back on it", async () => {
+    const calls = stubDirectoryAndGrant();
     const { user, onChanged, onNotice } = renderForm();
-    const address = screen.getByRole("textbox", { name: /Email address/ });
 
-    await user.type(address, "  Dana@Example.com ");
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Level" }),
-      "Can manage",
-    );
-    await user.click(screen.getByRole("button", { name: "Share" }));
+    await pick(user, "erin", /Erin Ng/);
+    await user.click(level());
+    await user.click(screen.getByRole("option", { name: /^Can manage/ }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => {
       expect(onChanged).toHaveBeenCalledTimes(1);
@@ -69,58 +82,50 @@ describe("GrantForm", () => {
       path: "/apps/sales/grants",
       body: {
         type: "user",
-        name: "dana@example.com",
+        name: "erin@example.com",
         permission: "CAN_MANAGE",
       },
     });
     expect(onNotice).toHaveBeenCalledWith(
       expect.objectContaining({ tone: "success" }),
     );
-    expect(address).toHaveValue("");
+    expect(who()).not.toHaveTextContent("Erin Ng");
+    expect(level()).toHaveTextContent("Can use");
+    expect(who()).toHaveFocus();
   });
 
-  it("asks for a group by name and sends type group", async () => {
-    const calls = stubApi(() => jsonResponse(200, readExample("AppGrant")));
-    const { user, onChanged } = renderForm();
+  it("refuses to add nobody: an announced error on the field, focus on it, nothing sent", async () => {
+    const calls = stubDirectoryAndGrant();
+    const { user } = renderForm();
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Who" }),
-      "A group",
-    );
-    await user.type(
-      screen.getByRole("textbox", { name: /Group name/ }),
-      "sales-team",
-    );
-    await user.click(screen.getByRole("button", { name: "Share" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
-    await waitFor(() => {
-      expect(onChanged).toHaveBeenCalled();
-    });
-    expect(describeCall(calls[0]).body).toEqual({
-      type: "group",
-      name: "sales-team",
-      permission: "CAN_USE",
-    });
+    expect(who()).toHaveAttribute("aria-invalid", "true");
+    expect(who()).toHaveAccessibleDescription(/Choose who to share with/);
+    expect(who()).toHaveFocus();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The access was not changed",
+    );
+    expect(calls).toHaveLength(0);
   });
 
-  it("gives everyone only Can use: no level to choose, and the schema's body is sent", async () => {
-    const calls = stubApi(() => jsonResponse(200, readExample("AppGrant")));
+  it("gives everyone only Can use: Can manage is off with the reason, and the schema's body is sent", async () => {
+    const calls = stubDirectoryAndGrant();
     const { user, onChanged } = renderForm();
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Who" }),
-      "Everyone",
-    );
+    await pick(user, "*", /Use “\*” as everyone/);
 
-    expect(screen.queryByRole("combobox", { name: "Level" })).toBeNull();
-    expect(screen.queryByRole("textbox")).toBeNull();
     expect(
-      screen.getByText(
-        /Everyone who signs in to the workspace can open the app/,
-      ),
+      screen.getByText(/Everyone can only use the app/),
     ).toBeInTheDocument();
+    await user.click(level());
+    expect(screen.getByRole("option", { name: /^Can manage/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.keyboard("{Escape}");
 
-    await user.click(screen.getByRole("button", { name: "Share" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => {
       expect(onChanged).toHaveBeenCalled();
     });
@@ -131,22 +136,40 @@ describe("GrantForm", () => {
     });
   });
 
+  it("drops a chosen Can manage when a service principal is picked, which can only use the app", async () => {
+    const calls = stubDirectoryAndGrant();
+    const { user, onChanged } = renderForm();
+
+    await user.click(level());
+    await user.click(screen.getByRole("option", { name: /^Can manage/ }));
+    await pick(user, "sales", /sales-agent/);
+
+    expect(level()).toHaveTextContent("Can use");
+    expect(screen.getByText(/ADR 0020/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalled();
+    });
+    expect(describeCall(calls[0]).body).toEqual({
+      type: "service_principal",
+      name: SP_ID,
+      permission: "CAN_USE",
+    });
+  });
+
   it("is busy while the call runs: the button says so and a second press sends nothing", async () => {
     let answer: (response: Response) => void = () => undefined;
-    const calls = stubApi(
+    const calls = stubDirectoryAndGrant(
       () =>
         new Promise<Response>((resolve) => {
           answer = resolve;
         }),
     );
     const { user, onChanged } = renderForm();
-    await user.type(
-      screen.getByRole("textbox", { name: /Email address/ }),
-      "dana@example.com",
-    );
+    await pick(user, "sales", /sales-team/);
 
-    await user.click(screen.getByRole("button", { name: "Share" }));
-    const busy = await screen.findByRole("button", { name: "Sharing" });
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    const busy = await screen.findByRole("button", { name: "Adding" });
     expect(busy).toHaveAttribute("aria-busy", "true");
     await user.click(busy);
     expect(calls).toHaveLength(1);
@@ -155,40 +178,25 @@ describe("GrantForm", () => {
     await waitFor(() => {
       expect(onChanged).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByRole("button", { name: "Share" })).not.toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Add" })).not.toHaveAttribute(
       "aria-busy",
     );
   });
 
-  it("is off when the person may not manage: every control is disabled", () => {
-    renderForm(true);
-    expect(screen.getByRole("combobox", { name: "Who" })).toBeDisabled();
-    expect(
-      screen.getByRole("textbox", { name: /Email address/ }),
-    ).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Level" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
-  });
-
-  it("shows the server's refusal where the person is looking and keeps what they typed", async () => {
-    stubApi(() =>
+  it("shows the server's refusal in words and keeps who was chosen", async () => {
+    stubDirectoryAndGrant(() =>
       jsonResponse(400, {
         error: { code: "invalid_request", message: "unknown group 'ghosts'" },
       }),
     );
     const { user, onChanged } = renderForm();
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Who" }),
-      "A group",
-    );
-    const name = screen.getByRole("textbox", { name: /Group name/ });
-    await user.type(name, "ghosts");
-    await user.click(screen.getByRole("button", { name: "Share" }));
+    await pick(user, "ghosts", /Use “ghosts” as a group/);
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("The access was not changed");
     expect(alert).toHaveTextContent("unknown group 'ghosts'");
-    expect(name).toHaveValue("ghosts");
+    expect(who()).toHaveTextContent("ghosts");
     expect(onChanged).not.toHaveBeenCalled();
   });
 });

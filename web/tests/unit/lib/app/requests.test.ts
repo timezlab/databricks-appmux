@@ -236,6 +236,7 @@ describe("identityModes", () => {
   it("says the shared service principal is switched off, and that a request for it is refused", () => {
     const sharedSp = byId(APP).shared_sp;
     assert.equal(sharedSp?.isInEffect, false);
+    assert.equal(sharedSp?.isSwitchedOff, true);
     assert.match(sharedSp?.stateText ?? "", /switched off/i);
     assert.match(sharedSp?.howToGet ?? "", /platform admin/i);
   });
@@ -250,6 +251,7 @@ describe("identityModes", () => {
     assert.equal(modes.obo?.stateText, "Not delegated");
     assert.match(modes.obo?.howToGet ?? "", /request a delegation/i);
     assert.equal(modes.shared_sp?.stateText, "Not delegated");
+    assert.equal(modes.shared_sp?.isSwitchedOff, false);
     assert.match(modes.shared_sp?.howToGet ?? "", /request a delegation/i);
   });
 
