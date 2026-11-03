@@ -325,10 +325,8 @@ describe("bucketRows", () => {
         children_running: running,
         children_registered: registered,
       });
-    const bucket = bucketRows(
-      [platform(5, 3, 4), platform(1, 1, 2)],
-      day,
-    ).buckets[0];
+    const bucket = bucketRows([platform(5, 3, 4), platform(1, 1, 2)], day)
+      .buckets[0];
     assert.equal(bucket?.childrenRunning, 3);
     assert.equal(bucket?.childrenRegistered, 4);
   });

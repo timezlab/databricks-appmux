@@ -9,6 +9,7 @@
  * (its length divided by the step, rounded up), else `400 window_too_long`;
  * the data is kept for 7 days (data model 8).
  */
+import { ApiError } from "@/lib/api";
 import type { AppSummary, MetricStep } from "@/lib/api/schemas";
 import { isValidSlug } from "@/lib/slug-link";
 import { MIN_POLL_INTERVAL_MS } from "@/lib/poll/schedule";
@@ -143,7 +144,7 @@ export function timeRangeById(id: string): TimeRange | null {
 }
 
 /** The next longer range, offered when a window holds no traffic; `null` after the longest. */
-export function longerRange(id: string): TimeRange | null {
+export function longerRange(id: string): (typeof TIME_RANGES)[number] | null {
   const index = TIME_RANGES.findIndex((range) => range.id === id);
   if (index < 0) return null;
   return TIME_RANGES[index + 1] ?? null;
@@ -202,6 +203,19 @@ export function previousWindow(window: MetricsWindow): MetricsWindow | null {
   const startMs = fromMs - (toMs - fromMs);
   if (toMs - startMs > RETENTION_MINUTES * MINUTE_MS) return null;
   return { from: toQueryTime(startMs), to: toQueryTime(fromMs) };
+}
+
+/**
+ * The server's answer to a window longer than 7 days or than 1440 steps. The
+ * ranges here never ask for one, so it means the server's limits and this page's
+ * differ (a newer or an older appmux): the page says so, not "not accepted".
+ */
+export function isWindowTooLong(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    error.code === "window_too_long"
+  );
 }
 
 // ----------------------------------------------------------------- scope

@@ -21,6 +21,7 @@ import {
 } from "./model";
 import type {
   BucketFrame,
+  ChartOutline,
   ChartTone,
   ColumnChartSpec,
   LegendItem,
@@ -85,6 +86,13 @@ export interface EmptyBreakdown {
 }
 
 export type BreakdownView = BreakdownModel | EmptyBreakdown;
+
+/** The charts `buildBreakdownModel` draws, in order, by a name that holds whatever the step: the frames before the answer. */
+export const BREAKDOWN_OUTLINE: readonly ChartOutline[] = [
+  { id: "requests-by-app", name: "Requests by app" },
+  { id: "memory-by-app", name: "Memory peak by app" },
+  { id: "errors-by-app", name: "Server errors by app" },
+];
 
 /** One app's points added up over one bucket, or over the window; memory is the peak. */
 interface PointTotals {

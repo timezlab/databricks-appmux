@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
+import { ApiError } from "@/lib/api";
 import type { AppSummary } from "@/lib/api/schemas";
 import {
   BREAKDOWN_LIMIT,
@@ -11,6 +12,7 @@ import {
   TIME_RANGES,
   breakdownQueryFor,
   isTimeRangeId,
+  isWindowTooLong,
   longerRange,
   managedApps,
   metricsPollIntervalMs,
@@ -209,5 +211,23 @@ describe("stepMinutes", () => {
       (["1m", "5m", "15m", "1h"] as const).map(stepMinutes),
       [1, 5, 15, 60],
     );
+  });
+});
+
+describe("isWindowTooLong", () => {
+  it("knows the server's answer to a window it will not cover, and nothing else", () => {
+    assert.equal(
+      isWindowTooLong(new ApiError(400, "window_too_long", "use step=15m")),
+      true,
+    );
+    assert.equal(
+      isWindowTooLong(new ApiError(400, "invalid_request", "bad step")),
+      false,
+    );
+    assert.equal(
+      isWindowTooLong(new ApiError(500, "window_too_long", "odd")),
+      false,
+    );
+    assert.equal(isWindowTooLong(new Error("window_too_long")), false);
   });
 });

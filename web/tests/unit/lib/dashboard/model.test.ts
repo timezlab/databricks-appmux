@@ -3,7 +3,11 @@ import { describe, it } from "vitest";
 
 import { MetricsResponse, MetricsRow } from "@/lib/api/schemas";
 import type { FigureKey } from "@/lib/dashboard/figures";
-import { TONE_TEXTURE, buildDashboardModel } from "@/lib/dashboard/model";
+import {
+  TONE_TEXTURE,
+  buildDashboardModel,
+  chartOutline,
+} from "@/lib/dashboard/model";
 import type {
   ChartTone,
   ColumnChartSpec,
@@ -928,6 +932,23 @@ describe("the platform", () => {
       "highest memory the platform used",
     );
     assert.equal(lineChart(bare, "memory").reference, null);
+  });
+});
+
+describe("chartOutline", () => {
+  it("names the charts the model draws, in its order, for an app and for the platform", () => {
+    const app = series(buildDashboardModel(response([row(30)]), SALES));
+    const platform = series(
+      buildDashboardModel(response([row(30, PLATFORM_FIELDS)]), PLATFORM),
+    );
+    assert.deepEqual(
+      chartOutline(SALES).map((chart) => chart.id),
+      app.charts.map((chart) => chart.id),
+    );
+    assert.deepEqual(
+      chartOutline(PLATFORM).map((chart) => chart.id),
+      platform.charts.map((chart) => chart.id),
+    );
   });
 });
 

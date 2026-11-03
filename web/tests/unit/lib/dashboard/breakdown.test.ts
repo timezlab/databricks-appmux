@@ -4,6 +4,7 @@ import { describe, it } from "vitest";
 import { MetricsBreakdown } from "@/lib/api/schemas";
 import type { MetricsPoint } from "@/lib/api/schemas";
 import {
+  BREAKDOWN_OUTLINE,
   OTHER_APPS_LABEL,
   buildBreakdownModel,
 } from "@/lib/dashboard/breakdown";
@@ -141,6 +142,13 @@ describe("the breakdown of the contract example", () => {
     assert.deepEqual(memory.columns[0], [412, 690, 520]);
     assert.match(memory.tips[0] ?? "", /\nSum of peaks: 1,622 MB$/);
     assert.equal(memory.table.headers[1], "Docs Portal (MB)");
+  });
+
+  it("draws the charts its outline names, in that order", () => {
+    assert.deepEqual(
+      model.charts.map((spec) => spec.id),
+      BREAKDOWN_OUTLINE.map((outline) => outline.id),
+    );
   });
 
   it("stacks the server errors of each app", () => {

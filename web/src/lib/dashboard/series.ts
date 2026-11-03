@@ -119,7 +119,7 @@ function rowMinuteMs(row: MetricsRow): number | null {
 export function rowsInDomain(
   rows: readonly MetricsRow[],
   domain: Domain,
-  stepMinutes: number = 1,
+  stepMinutes = 1,
 ): MetricsRow[] {
   const firstMs = domain.startMs - stepMinutes * MINUTE_MS;
   const inside: { row: MetricsRow; ms: number }[] = [];
@@ -173,7 +173,7 @@ function layoutFor(domain: Domain, bucketMinutes: number): BucketLayout {
 export function chooseBucketMinutes(
   domain: Domain,
   maxColumns: number = MAX_COLUMNS,
-  stepMinutes: number = 1,
+  stepMinutes = 1,
 ): number {
   const choices = BUCKET_MINUTE_CHOICES.filter(
     (size) => size % stepMinutes === 0,
@@ -188,7 +188,7 @@ export function chooseBucketMinutes(
 export function bucketLayout(
   domain: Domain,
   maxColumns: number = MAX_COLUMNS,
-  stepMinutes: number = 1,
+  stepMinutes = 1,
 ): BucketLayout {
   return layoutFor(
     domain,
@@ -308,7 +308,7 @@ export function bucketRows(
   rows: readonly MetricsRow[],
   domain: Domain,
   maxColumns: number = MAX_COLUMNS,
-  stepMinutes: number = 1,
+  stepMinutes = 1,
 ): BucketedSeries {
   const layout = bucketLayout(domain, maxColumns, stepMinutes);
   const buckets: MetricBucket[] = bucketSlots(layout).map((slot) => ({
@@ -413,7 +413,7 @@ function addOrNull(current: number | null, next: number | null): number | null {
 /** Totals and peaks of the rows; each row is one step of `stepMinutes`. */
 export function summarizeRows(
   rows: readonly MetricsRow[],
-  stepMinutes: number = 1,
+  stepMinutes = 1,
 ): SeriesSummary {
   const summary: SeriesSummary = {
     reportedMinutes: 0,

@@ -194,6 +194,30 @@ export interface ModelOptions {
   span?: string;
 }
 
+/** A chart before its answer: what its frame is called while it loads, or when the answer could not be read. */
+export interface ChartOutline {
+  id: string;
+  name: string;
+}
+
+/**
+ * The charts `buildDashboardModel` draws for a scope, in order, by a name that
+ * holds whatever the step (the titles add it: "Requests per 5 minutes"). The
+ * frames take their place before the answer, so the page does not jump.
+ */
+export function chartOutline(scope: DashboardScope): ChartOutline[] {
+  const outline: ChartOutline[] = [
+    { id: "requests", name: "Requests" },
+    { id: "latency", name: "Response time of requests" },
+    { id: "memory", name: "Memory peak" },
+    { id: "egress", name: "Egress drops" },
+  ];
+  if (scope.kind === "platform") {
+    outline.push({ id: "apps-running", name: "Apps running" });
+  }
+  return outline;
+}
+
 // ----------------------------------------------------------------- tuning
 
 /** The most time labels under a chart of the window. */
@@ -207,7 +231,6 @@ const P99_PERCENT = 99;
 // --------------------------------------------------------------- wording
 
 export const NO_DATA_TEXT = "no data";
-const NO_REQUESTS_TEXT = "no requests";
 
 /** "minute" or "5 minutes", as in "Requests per 5 minutes". */
 export function perText(bucketMinutes: number): string {
