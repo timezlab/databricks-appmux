@@ -44,6 +44,7 @@ export type ReleaseSummary = z.infer<typeof ReleaseSummary>;
 export const ReleaseDetail = ReleaseSummary.extend({
   snapshot_digest: z.string(),
   build_log_tail: z.string().nullable(),
+  failure_hint: z.string().nullable(),
   detected: z.object({
     runtime: Runtime,
     framework: z.string().nullable(),

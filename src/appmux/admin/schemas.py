@@ -664,6 +664,8 @@ class ReleaseDetail(ReleaseSummary):
     # holds that form, and a response is built from a row it has already validated.
     snapshot_digest: str
     build_log_tail: str | None
+    # One sentence on what to change for a failed release (``reconciler/start_failure.py``).
+    failure_hint: str | None
     detected: DetectedManifest
     config: ReleaseConfigView
     wheels: list[WheelEntry]

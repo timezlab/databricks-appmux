@@ -456,7 +456,8 @@ Returned by `GET /apps/{app}/releases/{id}` and by the release writes (`activate
 | `created_by` | string | always | Who pressed Update, or changed the config |
 | `created_at` | time | always | |
 | `snapshot_digest` | string | always | `sha256:` and 64 hex digits |
-| `build_log_tail` | string or null | always | The last 40 lines of the build, kept for failed releases |
+| `build_log_tail` | string or null | always | The last 40 lines of the build, or the last 50 lines of the child's output for a failed start, kept for failed releases |
+| `failure_hint` | string or null | always | One sentence on what to change for a failed release (addendum below); `null` when none applies |
 | `detected` | object | always | What appmux found in the snapshot ([design 5.4](../../../docs/product/v1-design.md#54-appyaml-requirements-and-start)) |
 | `detected.runtime` | string | always | `python` or `node`; a release whose snapshot recorded no runtime (detection failed) shows `python`, so that its `status_reason` can still be read |
 | `detected.framework` | string or null | always | A hint such as `fastapi`; never a gate |
@@ -819,6 +820,11 @@ usual, and no audit row except where a row says so.
   exits instead of at the deadline, and `build_log_tail` holds the child's last 50 lines of output for a failed start.
   `failure_hint` is one sentence the person can act on, for example that the memory budget is below what the runtime
   needs (the address-space limit is twice the budget, and Node.js needs about 768 MB); `null` when none applies.
+  It is judged when the release is read, with the app's budget then, and only for a `failed` release: a known
+  out-of-memory text in the tail of an exit at start; an end at start by `SIGSEGV`, `SIGABRT`, `SIGKILL`,
+  `SIGTRAP`, `SIGBUS` or `SIGILL` (or an exit code of 128 + one of them) under the runtime's minimum (768 MB for
+  Node.js, 256 MB otherwise); and a Node.js app under 768 MB that printed nothing before the health deadline (Node.js 22
+  at a 64 MB budget hangs at start: a thread stack cannot be mapped under the limit and the main thread waits for it).
 
 ### New schemas
 

@@ -7,8 +7,9 @@ without "the app", are the line appmux writes into the app's output when a proce
 
 The hint is one sentence a person can act on. It is judged when a release is read, from what the
 registry kept (the reason, the tail of the output, the detected runtime) and the app's memory
-budget now, so a budget raised since the failure takes the hint away. Three rules, each a shape
-measured on 2026-11-03 (``runtime_limits.py``), and anything else gets no hint:
+budget now: rules 2 and 3 rest on the budget alone, so raising it to the runtime's minimum takes
+those hints away. Three rules, each a shape measured on 2026-11-03 (``runtime_limits.py``), and
+anything else gets no hint:
 
 1. the app exited at start and its output holds a known out-of-memory text;
 2. the app was ended at start by a fatal signal (or exited with 128 + one, as a shell reports it)
