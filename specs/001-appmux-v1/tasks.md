@@ -478,7 +478,7 @@ when its tests pass; the lane that writes a route writes its tests first.
 
 - [ ] T201 [F1] Launcher, the app shell and its Overview, Deployments (releases, row menu, failure reason and output), Logs and Environment sections; the node-at-64-MB case shows the reason and the hint.
 - [ ] T202 [F2] Authorization (the principal combobox, level select, service principals, identity delegation), Resources (the Databricks add flow with suggestions) and Requests sections.
-- [ ] T203 [F3] The Platform sidebar areas, the register and edit forms with the folder browser, the app's Security and Settings sections.
+- [x] T203 [F3] The Platform sidebar areas, the register and edit forms with the folder browser, the app's Security and Settings sections. (Proven on the mock fixtures; a real workspace listing and the `workspace.workspace:read` scope need the dev App.)
 - [ ] T204 [F4] Dashboard and Insights: the figures strip, the platform view with the same charts as an app, the breakdown by app, the ranges up to 7 days, skeletons.
 
 ### Integration
