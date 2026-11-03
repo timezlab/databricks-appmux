@@ -249,9 +249,10 @@ function InboxCard({
   }
 
   return (
-    // What is asked on the left, the answer on the right where there is room, so
-    // three requests do not make a page of forms. Ruled, not boxed: the panel is the only card.
-    <article className="grid gap-4 border-t pt-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-6">
+    // What is asked first, the answer below it at the forms' width: beside the platform
+    // sidebar the panel never has room for the change table and the form side by side.
+    // Ruled, not boxed: the panel is the only card.
+    <article className="flex flex-col gap-4 border-t pt-4">
       <div className="flex min-w-0 flex-col gap-4">
         <h3 className="wrap-break-word">
           Request #{item.id}: {item.kindLabel}, {item.appText}
@@ -321,7 +322,7 @@ function InboxCard({
         )}
       </div>
 
-      <div className="flex min-w-0 flex-col gap-4 border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+      <div className="flex max-w-140 min-w-0 flex-col gap-4 border-t pt-4">
         <FormSummary errors={errors} />
         <Field
           label="Reason"
