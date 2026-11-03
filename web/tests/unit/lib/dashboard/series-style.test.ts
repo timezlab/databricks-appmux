@@ -13,7 +13,11 @@ const GLOBALS_CSS = readFileSync(
   "utf8",
 );
 
-/** The text of the blocks that declare `--chart-N` in globals.css: the light `:root` and the dark one. */
+/**
+ * The lines that declare `--chart-N` in globals.css: the light `:root`, the
+ * Dark choice and System on a dark OS (ADR 0019; the contrast test checks that
+ * the two dark blocks hold the same values).
+ */
 function chartTokenDeclarations(variable: string): string[] {
   return GLOBALS_CSS.split("\n").filter((line) =>
     line.trim().startsWith(`${variable}:`),
@@ -41,8 +45,8 @@ describe("seriesStyle", () => {
       );
       assert.equal(
         chartTokenDeclarations(match[1]).length,
-        2,
-        `${match[1]} must be declared in :root and in the dark block`,
+        3,
+        `${match[1]} must be declared in :root and in both dark blocks`,
       );
     }
   });

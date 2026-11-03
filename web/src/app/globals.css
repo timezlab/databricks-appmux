@@ -22,8 +22,12 @@
  *    export). The edge serves the page under a strict CSP (spike 19:
  *    style-src, img-src and font-src are 'self'). For the same reason no
  *    component sets a style attribute or injects a <style> element.
- *  - Dark mode follows the operating system (prefers-color-scheme), and every
- *    dark colour is in the one block below.
+ *  - The theme is Light, Dark or System (docs/decisions/0019). public/theme.js
+ *    writes the choice as `data-theme` on <html> before the first paint; System
+ *    (or no attribute, when the script is blocked) follows the OS through
+ *    prefers-color-scheme alone, live. Dark is written for two selectors, the
+ *    Dark choice and System on a dark OS, with the same values in both: the
+ *    contrast test fails when they differ.
  *  - Every animation has a behaviour for both values of prefers-reduced-motion,
  *    and the reduced one still moves: it changes the animation, it never
  *    removes it (a spinner that stops says nothing is happening).
@@ -32,8 +36,21 @@
 
 @import "tailwindcss" source("..");
 
-/* `dark:` follows the OS, like the token overrides below. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* `dark:` follows the same rule as the token overrides below: the Dark choice,
+   or a dark OS unless Light was chosen. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(
+      :root:not([data-theme="light"]),
+      :root:not([data-theme="light"]) *
+    ) {
+      @slot;
+    }
+  }
+}
 
 /* ----------------------------------------------------------------- theme
    `--color-*`, `--text-*`, `--font-*` and `--radius-*` are wiped and declared
@@ -146,9 +163,71 @@
   --chart-6: #be185d;
 }
 
-/* The one dark block: every colour above, and nothing else. */
+/* The Light choice: the colours above, and light native controls on a dark OS. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* The Dark choice: every colour above, and nothing else. The block after it
+   holds the same values (System on a dark OS); change both together. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0e1316;
+  --foreground: #e4eaed;
+  --card: #151c20;
+  --card-foreground: #e4eaed;
+  --popover: #182025;
+  --popover-foreground: #e4eaed;
+  --primary: #4cc3e2;
+  --primary-hover: #79d3ea;
+  --primary-foreground: #06181e;
+  --secondary: #1f282d;
+  --secondary-foreground: #e4eaed;
+  --muted: #1f282d;
+  --muted-foreground: #9aa7af;
+  --accent: #263137;
+  --accent-foreground: #e4eaed;
+  --destructive: #ff8077;
+  --destructive-hover: #ffa099;
+  --destructive-foreground: #2a0705;
+  --border: #2a343a;
+  --input: #7d8a92;
+  --ring: #4cc3e2;
+  --link: #4cc3e2;
+
+  --strip: #2d2812;
+  --strip-foreground: #ede0a8;
+  --strip-border: #5a4e22;
+
+  --tone-neutral-text: #d5dae3;
+  --tone-neutral-bg: #2a303b;
+  --tone-neutral-border: #8892a3;
+  --tone-info-text: #b4d3ff;
+  --tone-info-bg: #15305a;
+  --tone-info-border: #6ea3f0;
+  --tone-success-text: #a8e6bf;
+  --tone-success-bg: #11382a;
+  --tone-success-border: #4fb37d;
+  --tone-warning-text: #f4d58a;
+  --tone-warning-bg: #46310a;
+  --tone-warning-border: #d8962f;
+  --tone-danger-text: #ffbab4;
+  --tone-danger-bg: #55191a;
+  --tone-danger-border: #ff8077;
+
+  --chart-1: #8bb8ff;
+  --chart-2: #ff9a6c;
+  --chart-3: #5fd08a;
+  --chart-4: #c79bff;
+  --chart-5: #e5b94a;
+  --chart-6: #ff8fb8;
+}
+
+/* System (or no choice) on a dark OS: the values of the block above. CSS
+   alone decides here, so it follows the OS live and needs no script. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0e1316;
     --foreground: #e4eaed;
     --card: #151c20;
@@ -202,7 +281,7 @@
 }
 
 /* `inline` makes `bg-background` read `var(--background)` at the point of use,
-   so the dark block above changes every utility without a second stylesheet. */
+   so the dark blocks above change every utility without a second stylesheet. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

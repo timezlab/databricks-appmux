@@ -81,25 +81,44 @@ const css = readFileSync(GLOBALS_CSS_PATH, "utf8");
 // The header comment names what the file avoids; only the rules are checked.
 const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
 const lightBlock = /:root\s*\{([^}]*)\}/.exec(rules)?.[1];
-const darkBlock =
-  /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(
+// Dark is written for two selectors (docs/decisions/0019): the Dark choice,
+// and System (or no choice, or a blocked theme script) while the OS is dark.
+// They are one theme written twice, so the tests below hold them equal.
+const chosenDarkBlock = /:root\[data-theme="dark"\]\s*\{([^}]*)\}/.exec(
+  rules,
+)?.[1];
+const systemDarkBlock =
+  /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{([^}]*)\}/.exec(
     rules,
   )?.[1];
+const chosenLightBlock = /:root\[data-theme="light"\]\s*\{([^}]*)\}/.exec(
+  rules,
+)?.[1];
 
 assert.ok(lightBlock, "globals.css has a :root block for the light theme");
 assert.ok(
-  darkBlock,
-  "globals.css overrides the colours in @media (prefers-color-scheme: dark)",
+  chosenDarkBlock,
+  'globals.css overrides the colours in :root[data-theme="dark"] (the Dark choice)',
+);
+assert.ok(
+  systemDarkBlock,
+  'globals.css overrides the colours in @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) } (System on a dark OS)',
+);
+assert.ok(
+  chosenLightBlock,
+  'globals.css has a :root[data-theme="light"] block (the Light choice)',
 );
 
 // `:root` holds colours only: the radius scale and the fonts are theme values.
 const lightTokens = declarations(lightBlock);
-const darkTokens = declarations(darkBlock);
+const chosenDarkTokens = declarations(chosenDarkBlock);
+const systemDarkTokens = declarations(systemDarkBlock);
 const lightColourNames = [...lightTokens.keys()];
 
 const THEMES = {
   light: lightTokens,
-  dark: new Map([...lightTokens, ...darkTokens]),
+  "dark, chosen": new Map([...lightTokens, ...chosenDarkTokens]),
+  "dark, System on a dark OS": new Map([...lightTokens, ...systemDarkTokens]),
 };
 
 const TONES = ["neutral", "info", "success", "warning", "danger"] as const;
@@ -206,16 +225,40 @@ describe("globals.css consistency", () => {
     for (const name of lightColourNames) {
       assert.doesNotThrow(() => parseHexColor(colour(lightTokens, name)), name);
     }
-    for (const [name, value] of darkTokens) {
-      assert.doesNotThrow(() => parseHexColor(value), name);
+    for (const darkTokens of [chosenDarkTokens, systemDarkTokens]) {
+      for (const [name, value] of darkTokens) {
+        assert.doesNotThrow(() => parseHexColor(value), name);
+      }
     }
   });
 
-  it("the dark theme overrides exactly the colour tokens of the light theme", () => {
+  it("each dark block overrides exactly the colour tokens of the light theme", () => {
+    for (const darkTokens of [chosenDarkTokens, systemDarkTokens]) {
+      assert.deepEqual(
+        [...darkTokens.keys()].toSorted(),
+        lightColourNames.toSorted(),
+      );
+    }
+  });
+
+  it("the two dark blocks hold the same values, so dark is one theme however it was reached", () => {
     assert.deepEqual(
-      [...darkTokens.keys()].toSorted(),
-      lightColourNames.toSorted(),
+      Object.fromEntries(chosenDarkTokens),
+      Object.fromEntries(systemDarkTokens),
     );
+  });
+
+  it("the Light choice changes no colour: the light values are written once, in :root", () => {
+    assert.deepEqual([...declarations(chosenLightBlock).keys()], []);
+  });
+
+  it("sets color-scheme for each choice, so scrollbars and native controls match the page", () => {
+    const colorScheme = (block: string) =>
+      /(?:^|[\s;])color-scheme\s*:\s*([^;]+);/.exec(block)?.[1]?.trim();
+    // No choice, or System: both, and the OS picks through the media query.
+    assert.equal(colorScheme(lightBlock), "light dark");
+    assert.equal(colorScheme(chosenLightBlock), "light");
+    assert.equal(colorScheme(chosenDarkBlock), "dark");
   });
 
   it("every colour token has a Tailwind colour, and the palette is closed to everything else", () => {
