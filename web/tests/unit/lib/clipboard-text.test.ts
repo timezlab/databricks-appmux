@@ -20,6 +20,17 @@ describe("clipboardText", () => {
     );
   });
 
+  it("drops the C1 controls too, so a lone CSI (U+009B) cannot start a terminal sequence", () => {
+    assert.equal(
+      clipboardText("a\u0080b\u009b31mc\u009d0;title\u009cd\u009fe"),
+      "ab31mc0;titlede",
+    );
+  });
+
+  it("keeps U+00A0 and the first printable Latin-1 characters", () => {
+    assert.equal(clipboardText("a\u00a0b\u00a1\u00e9"), "a\u00a0b\u00a1\u00e9");
+  });
+
   it("keeps tab, line feed and carriage return, alone or before a line feed", () => {
     assert.equal(clipboardText("a\tb\nc\r\nd\re"), "a\tb\nc\r\nd\re");
   });
