@@ -48,7 +48,6 @@ const PAGES: Readonly<Record<AppSection, ComponentType>> = {
 /** The sections not built yet. Remove a section from here when its page replaces the placeholder. */
 const STILL_PLACEHOLDERS: readonly AppSection[] = [
   "logs",
-  "security",
   "environment",
   "insights",
 ];

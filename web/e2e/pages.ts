@@ -121,7 +121,8 @@ export const PAGES: readonly PageEntry[] = [
     path: `${BASE_PATH}/app/security/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
     heading: "Sales dashboard",
-    dataText: PLACEHOLDER_TEXT,
+    // The caption of the stored global rules, which only a platform admin's `GET /platform` fills.
+    dataText: "The global rules, as stored",
     apiCall: APP_API_CALL,
   },
   {
@@ -161,7 +162,8 @@ export const PAGES: readonly PageEntry[] = [
     path: `${BASE_PATH}/app/settings/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
     heading: "Sales dashboard",
-    dataText: PLACEHOLDER_TEXT,
+    // The platform admin's form, once `/me` has said who is looking.
+    dataText: "Nothing changed yet",
     apiCall: APP_API_CALL,
   },
   {

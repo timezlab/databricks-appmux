@@ -5,7 +5,7 @@ import { AppSecurityPage } from "@/components/app/pages/security-page";
 export const metadata: Metadata = {
   title: "Security",
   description:
-    "The egress rules and sandbox of one app (this section is being built).",
+    "The egress rules of one app, where its connections may go, and what its sandbox forbids.",
 };
 
 // A thin shell: the layout above reads the slug and the app, this page puts one area of it on screen.

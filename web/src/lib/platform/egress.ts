@@ -267,7 +267,8 @@ export function validateEgressDraft(
 
 // ---------------------------------------------------------------- warnings
 
-function isDenyAll(rule: RuleFields): boolean {
+/** `deny 0.0.0.0/0` on any port: what closes an allow-list (design 6.3). */
+export function isDenyAll(rule: RuleFields): boolean {
   return (
     rule.action === "deny" &&
     rule.cidr === ANY_ADDRESS &&
