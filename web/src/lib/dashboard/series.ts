@@ -243,15 +243,36 @@ export function bucketSlots(layout: BucketLayout): BucketSlot[] {
 const MINUTES_PER_HOUR = 60;
 const MINUTES_PER_DAY = 1440;
 
-/** "5-minute", "3-hour", "1-day": the width of a bucket, as in "5-minute totals". */
-export function stepText(minutes: number): string {
+/** A bucket's length in its largest whole unit: 180 minutes is 3 hours. */
+function wholeUnits(minutes: number): {
+  count: number;
+  unit: "minute" | "hour" | "day";
+} {
   if (minutes % MINUTES_PER_DAY === 0) {
-    return `${minutes / MINUTES_PER_DAY}-day`;
+    return { count: minutes / MINUTES_PER_DAY, unit: "day" };
   }
   if (minutes % MINUTES_PER_HOUR === 0) {
-    return `${minutes / MINUTES_PER_HOUR}-hour`;
+    return { count: minutes / MINUTES_PER_HOUR, unit: "hour" };
   }
-  return `${minutes}-minute`;
+  return { count: minutes, unit: "minute" };
+}
+
+/** "5-minute", "3-hour", "1-day": the width of a bucket, as in "5-minute totals". */
+export function stepText(minutes: number): string {
+  const { count, unit } = wholeUnits(minutes);
+  return `${count}-${unit}`;
+}
+
+/** "20 minutes", "3 hours", "1 day": the length of a bucket, as in a tooltip. */
+export function lengthText(minutes: number): string {
+  const { count, unit } = wholeUnits(minutes);
+  return `${formatCount(count)} ${count === 1 ? unit : `${unit}s`}`;
+}
+
+/** "minute", "5 minutes", "3 hours", as in "Requests per 3 hours". */
+export function perText(minutes: number): string {
+  const { count, unit } = wholeUnits(minutes);
+  return count === 1 ? unit : lengthText(minutes);
 }
 
 /** The figures of the rows that fall in one bucket: counts added, peaks maxed. */

@@ -21,6 +21,8 @@ import {
   describeLatency,
   dropsByRule,
   latencyBucketLabel,
+  lengthText,
+  perText,
   percentileBucket,
   rowsInDomain,
   stepText,
@@ -231,11 +233,6 @@ const P99_PERCENT = 99;
 // --------------------------------------------------------------- wording
 
 export const NO_DATA_TEXT = "no data";
-
-/** "minute" or "5 minutes", as in "Requests per 5 minutes". */
-export function perText(bucketMinutes: number): string {
-  return bucketMinutes === 1 ? "minute" : `${bucketMinutes} minutes`;
-}
 
 /** The range of a latency bucket: "Up to 5 ms", "Over 500 ms up to 1 s", "Over 5 s". */
 function latencyRangeText(index: number): string {
@@ -516,7 +513,7 @@ export function bucketTime(bucket: BucketSlot, frame: BucketFrame): string {
   if (bucket.isPartial) return `${start} (partial)`;
   return frame.bucketMinutes === 1
     ? start
-    : `${start}, ${frame.bucketMinutes} minutes`;
+    : `${start}, ${lengthText(frame.bucketMinutes)}`;
 }
 
 /** The first table cell does not repeat the length of the bucket: the title says it. */

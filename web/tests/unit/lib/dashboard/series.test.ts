@@ -13,6 +13,8 @@ import {
   describeLatency,
   dropsByRule,
   latencyBucketLabel,
+  lengthText,
+  perText,
   percentileBucket,
   rowsInDomain,
   stepText,
@@ -158,6 +160,22 @@ describe("stepText", () => {
     assert.equal(stepText(60), "1-hour");
     assert.equal(stepText(180), "3-hour");
     assert.equal(stepText(1440), "1-day");
+  });
+});
+
+describe("lengthText and perText", () => {
+  it("say a bucket's length in its largest whole unit, for a tooltip and a title", () => {
+    assert.equal(lengthText(1), "1 minute");
+    assert.equal(lengthText(20), "20 minutes");
+    assert.equal(lengthText(60), "1 hour");
+    assert.equal(lengthText(180), "3 hours");
+    assert.equal(lengthText(1440), "1 day");
+    assert.equal(perText(1), "minute");
+    assert.equal(perText(20), "20 minutes");
+    assert.equal(perText(60), "hour");
+    // 7 days in 72 columns at most: 3-hour buckets, never "180 minutes".
+    assert.equal(perText(180), "3 hours");
+    assert.equal(perText(1440), "day");
   });
 });
 
