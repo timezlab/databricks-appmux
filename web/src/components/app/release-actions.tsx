@@ -1,136 +1,178 @@
 "use client";
 
+import { EllipsisIcon, LoaderCircleIcon } from "lucide-react";
+import { Fragment, useRef } from "react";
+import type { Ref } from "react";
+
 import type { AppDetail, ReleaseSummary } from "@/lib/api";
-import {
-  canViewSource,
-  hasManualLock,
-  releaseActionAvailability,
-} from "@/lib/app/actions";
 import type { Actor, ReleaseAction } from "@/lib/app/actions";
-import { unavailableReasons } from "@/lib/app/reasons";
-import { Button } from "@/components/button";
-import { ConfirmButton } from "@/components/confirm-button";
+import { releaseMenuItems } from "@/lib/app/releases";
+import type { ReleaseMenuAction } from "@/lib/app/releases";
+import type { WriteState } from "@/lib/app/writes";
+import { Button as UiButton } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { AppActions } from "./use-app-actions";
 
 /** The actions that call the server at once; Edit and Source only open a panel. */
 export type ReleaseWrite = Exclude<ReleaseAction, "edit">;
 
-export interface ReleaseActionsProps {
+/** The menu action whose call can be running, and the words for it. */
+const BUSY_LABELS: Partial<Record<ReleaseMenuAction, string>> = {
+  activate: "Activating",
+  lock: "Locking",
+  unlock: "Unlocking",
+  delete: "Deleting",
+  rename: "Saving",
+  tag: "Saving",
+};
+
+/**
+ * The actions that open a panel under the table, which takes the focus; after
+ * the others the menu gives it back to its trigger.
+ */
+const OPENS_A_PANEL: ReadonlySet<ReleaseMenuAction> = new Set([
+  "rename",
+  "tag",
+  "view-source",
+  "delete",
+]);
+
+/**
+ * Where a menu action stands in the page's one write queue. Rename and Tag are
+ * the one edit call; View source is a read, which a running write does not hold.
+ */
+function writeStateOfAction(
+  actions: AppActions,
+  action: ReleaseMenuAction,
+  releaseNo: number,
+): WriteState {
+  if (action === "view-source") return "idle";
+  const call = action === "rename" || action === "tag" ? "edit" : action;
+  return actions.stateOf(`${call}:${String(releaseNo)}`);
+}
+
+export interface ReleaseRowMenuProps {
   app: AppDetail;
   release: ReleaseSummary;
   actor: Actor | null;
   actions: AppActions;
-  isEditing: boolean;
   isViewingSource: boolean;
-  onWrite: (action: ReleaseWrite, release: ReleaseSummary) => void;
-  onToggleEdit: (release: ReleaseSummary) => void;
-  onToggleSource: (release: ReleaseSummary) => void;
+  /** The trigger, so the section can put focus back on it after a panel closes. */
+  triggerRef: Ref<HTMLButtonElement>;
+  onSelect: (action: ReleaseMenuAction, release: ReleaseSummary) => void;
 }
 
-/** The buttons of one release row, with the reason for every one that is off written under them. */
-export function ReleaseActions({
+/**
+ * The "…" menu of one release row. An action that cannot be used stays in the
+ * menu, reachable with the arrow keys, with its reason written under it; choosing
+ * it does nothing. While a call of this row runs, the trigger turns into a
+ * spinner with the words beside it.
+ */
+export function ReleaseRowMenu({
   app,
   release,
   actor,
   actions,
-  isEditing,
   isViewingSource,
-  onWrite,
-  onToggleEdit,
-  onToggleSource,
-}: ReleaseActionsProps) {
+  triggerRef,
+  onSelect,
+}: ReleaseRowMenuProps) {
   const releaseNo = release.release_no;
-  const availability = (action: ReleaseAction) =>
-    releaseActionAvailability(action, release, app, actor);
-  const lockAction = hasManualLock(release) ? "unlock" : "lock";
-  const activate = availability("activate");
-  const lock = availability(lockAction);
-  const remove = availability("delete");
-  const edit = availability("edit");
-  const source = canViewSource(actor);
-
-  const keyOf = (action: ReleaseWrite) => `${action}:${releaseNo}`;
-  const stateOf = (action: ReleaseWrite) => actions.stateOf(keyOf(action));
-  const spokenName = (
-    <>
-      {" "}
-      <span className="sr-only">release {releaseNo}</span>
-    </>
+  const chosenRef = useRef<ReleaseMenuAction | null>(null);
+  const items = releaseMenuItems(release, app, actor);
+  const busyItem = items.find(
+    (item) => writeStateOfAction(actions, item.action, releaseNo) === "busy",
   );
-
-  const reasons = unavailableReasons([
-    { label: "Activate", availability: activate },
-    { label: lockAction === "lock" ? "Lock" : "Unlock", availability: lock },
-    { label: "Delete", availability: remove },
-    { label: "Edit", availability: edit },
-    { label: "View source", availability: source },
-  ]);
+  const busyLabel =
+    busyItem === undefined ? null : (BUSY_LABELS[busyItem.action] ?? null);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="small"
-          isBusy={stateOf("activate") === "busy"}
-          busyLabel="Activating"
-          disabled={!activate.isAllowed || stateOf("activate") === "blocked"}
-          onClick={() => {
-            onWrite("activate", release);
+    <div className="flex items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <UiButton
+            ref={triggerRef}
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Actions for release ${String(releaseNo)}`}
+          >
+            <EllipsisIcon aria-hidden="true" />
+          </UiButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="w-64"
+          onCloseAutoFocus={(event) => {
+            const chosen = chosenRef.current;
+            chosenRef.current = null;
+            // The panel the action opened focuses itself; the trigger must not take it back.
+            if (chosen !== null && OPENS_A_PANEL.has(chosen)) {
+              event.preventDefault();
+            }
           }}
         >
-          Activate{spokenName}
-        </Button>
-        <Button
-          size="small"
-          isBusy={stateOf(lockAction) === "busy"}
-          busyLabel={lockAction === "lock" ? "Locking" : "Unlocking"}
-          disabled={!lock.isAllowed || stateOf(lockAction) === "blocked"}
-          onClick={() => {
-            onWrite(lockAction, release);
-          }}
-        >
-          {lockAction === "lock" ? "Lock" : "Unlock"}
-          {spokenName}
-        </Button>
-        <Button
-          size="small"
-          aria-expanded={isEditing}
-          disabled={!edit.isAllowed}
-          onClick={() => {
-            onToggleEdit(release);
-          }}
-        >
-          Edit{spokenName}
-        </Button>
-        <Button
-          size="small"
-          aria-expanded={isViewingSource}
-          disabled={!source.isAllowed}
-          onClick={() => {
-            onToggleSource(release);
-          }}
-        >
-          View source{spokenName}
-        </Button>
-        <ConfirmButton
-          size="small"
-          label="Delete"
-          prompt={`Delete release ${releaseNo}? Its snapshot is removed and it cannot be activated again.`}
-          confirmLabel={`Yes, delete release ${releaseNo}`}
-          isBusy={stateOf("delete") === "busy"}
-          busyLabel="Deleting"
-          isDisabled={!remove.isAllowed || stateOf("delete") === "blocked"}
-          onConfirm={() => {
-            onWrite("delete", release);
-          }}
-        />
-      </div>
-      {reasons.length === 0 ? null : (
-        <ul className="text-sm text-muted-foreground">
-          {reasons.map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
+          <DropdownMenuLabel>Release {releaseNo}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {items.map((item) => {
+            const state = writeStateOfAction(actions, item.action, releaseNo);
+            const isUsable = item.availability.isAllowed && state === "idle";
+            const label =
+              item.action === "view-source" && isViewingSource
+                ? "Hide source"
+                : item.label;
+            const note = !item.availability.isAllowed
+              ? item.availability.reason
+              : state === "blocked"
+                ? "Another change is being saved; wait for it."
+                : state === "busy"
+                  ? `${BUSY_LABELS[item.action] ?? "Working"}…`
+                  : item.hint;
+            return (
+              <Fragment key={item.action}>
+                {item.isDestructive ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuItem
+                  variant={item.isDestructive ? "destructive" : "default"}
+                  // Not Radix's `disabled`: that would skip the item, and its reason, on the keyboard.
+                  aria-disabled={isUsable ? undefined : true}
+                  data-unavailable={isUsable ? undefined : ""}
+                  className="flex-col items-start gap-0.5 data-unavailable:text-muted-foreground"
+                  onSelect={(event) => {
+                    if (!isUsable) {
+                      event.preventDefault();
+                      return;
+                    }
+                    chosenRef.current = item.action;
+                    onSelect(item.action, release);
+                  }}
+                >
+                  <span>{label}</span>
+                  {note === null ? null : (
+                    <span className="text-xs whitespace-normal text-muted-foreground">
+                      {note}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              </Fragment>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {busyLabel === null ? null : (
+        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+          <LoaderCircleIcon
+            className="size-4 animate-spinner"
+            aria-hidden="true"
+          />
+          {busyLabel}
+        </span>
       )}
     </div>
   );

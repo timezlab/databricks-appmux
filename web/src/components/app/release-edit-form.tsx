@@ -30,6 +30,8 @@ export interface ReleaseEditFormProps {
   app: AppDetail;
   release: ReleaseSummary;
   actions: AppActions;
+  /** The field the keyboard starts in: the one the person chose (Rename or Tag). Default `name`. */
+  focusField?: "name" | "tags";
   onClose: () => void;
   onReload: () => void;
 }
@@ -39,6 +41,7 @@ export function ReleaseEditForm({
   app,
   release,
   actions,
+  focusField = "name",
   onClose,
   onReload,
 }: ReleaseEditFormProps) {
@@ -50,11 +53,12 @@ export function ReleaseEditForm({
   const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
   const { formRef, reportInvalid } = useFocusFirstInvalid();
   const nameRef = useRef<HTMLInputElement>(null);
+  const tagsRef = useRef<HTMLInputElement>(null);
 
-  // The form opens from a button press: the keyboard goes to its first field.
+  // The form opens from a menu choice: the keyboard goes to the field that was chosen.
   useEffect(() => {
-    nameRef.current?.focus();
-  }, []);
+    (focusField === "tags" ? tagsRef : nameRef).current?.focus();
+  }, [focusField]);
 
   const state = actions.stateOf(`edit:${releaseNo}`);
 
@@ -132,6 +136,7 @@ export function ReleaseEditForm({
           {(control) => (
             <Input
               {...control}
+              ref={tagsRef}
               name="tags"
               type="text"
               value={values.tags}

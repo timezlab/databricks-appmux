@@ -4,9 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AppDetail } from "@/lib/api";
 import type { ReleaseSummary } from "@/lib/api";
+import { REASON_NOT_MANAGER } from "@/lib/app/actions";
 import type { Actor } from "@/lib/app/actions";
-import { ReleaseActions } from "@/components/app/release-actions";
-import type { ReleaseActionsProps } from "@/components/app/release-actions";
+import { ReleaseRowMenu } from "@/components/app/release-actions";
+import type { ReleaseRowMenuProps } from "@/components/app/release-actions";
+import type { AppActions } from "@/components/app/use-app-actions";
 import { readExample } from "../../support/contract-examples";
 
 const app = AppDetail.parse(readExample("AppDetail"));
@@ -29,127 +31,143 @@ const USER_ONLY: Actor = {
   canManage: false,
 };
 
+const IDLE: AppActions = {
+  stateOf: () => "idle",
+  run: () => Promise.reject(new Error("not used by this component")),
+};
+
 function setup(
   no: number,
-  overrides: Partial<Pick<ReleaseActionsProps, "actor" | "isEditing">> = {},
+  overrides: Partial<
+    Pick<ReleaseRowMenuProps, "actor" | "actions" | "isViewingSource">
+  > = {},
 ) {
   const release = releaseNo(no);
-  const onWrite = vi.fn();
-  const onToggleEdit = vi.fn();
-  const onToggleSource = vi.fn();
+  const onSelect = vi.fn();
   const user = userEvent.setup();
   render(
-    <ReleaseActions
+    <ReleaseRowMenu
       app={app}
       release={release}
       actor={MANAGER}
-      actions={{
-        stateOf: () => "idle",
-        run: () => Promise.reject(new Error("not used by this component")),
-      }}
-      isEditing={false}
+      actions={IDLE}
       isViewingSource={false}
-      onWrite={onWrite}
-      onToggleEdit={onToggleEdit}
-      onToggleSource={onToggleSource}
+      triggerRef={null}
+      onSelect={onSelect}
       {...overrides}
     />,
   );
-  return { release, onWrite, onToggleEdit, onToggleSource, user };
+  const trigger = screen.getByRole("button", {
+    name: `Actions for release ${String(no)}`,
+  });
+  return { release, onSelect, user, trigger };
 }
 
-describe("ReleaseActions", () => {
-  it("does not delete on the first press: it asks, and only the confirm button deletes", async () => {
-    // Release 6: superseded, not the target, not locked.
-    const { release, onWrite, user } = setup(6);
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    expect(onWrite).not.toHaveBeenCalled();
+function item(name: RegExp): HTMLElement {
+  return within(screen.getByRole("menu")).getByRole("menuitem", { name });
+}
 
-    const question = screen.getByRole("group", {
-      name: /^Delete release 6\?/,
-    });
-    await user.click(
-      within(question).getByRole("button", { name: "Yes, delete release 6" }),
-    );
-    expect(onWrite).toHaveBeenCalledExactlyOnceWith("delete", release);
-  });
+describe("ReleaseRowMenu", () => {
+  it("opens on a click and lists the actions of the release, Delete last", async () => {
+    const { user, trigger } = setup(6);
+    await user.click(trigger);
 
-  it("cancelling the question deletes nothing", async () => {
-    const { onWrite, user } = setup(6);
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onWrite).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
-  });
-
-  it.each([
-    [5, "Locked; unlock this release first."],
-    [7, "The active release cannot be deleted."],
-    [8, "This release is the target; activate another release first."],
-  ])("turns Delete off for release %i and says why in words", (no, reason) => {
-    setup(no);
-    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
-    expect(screen.getByText(`Delete: ${reason}`)).toBeInTheDocument();
-  });
-
-  it("names every button by its release and offers Unlock, not Lock, on a release locked by hand", async () => {
-    const { release, onWrite, user } = setup(5);
-    expect(
-      screen.queryByRole("button", { name: "Lock release 5" }),
-    ).not.toBeInTheDocument();
-    for (const name of [
-      "Activate release 5",
-      "Edit release 5",
-      "View source release 5",
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeEnabled();
-    }
-    await user.click(screen.getByRole("button", { name: "Unlock release 5" }));
-    expect(onWrite).toHaveBeenCalledExactlyOnceWith("unlock", release);
-  });
-
-  it("opens the edit and source panels through callbacks and reports which one is open", async () => {
-    const { release, onToggleEdit, onToggleSource, user } = setup(6, {
-      isEditing: true,
-    });
-    const edit = screen.getByRole("button", { name: "Edit release 6" });
-    expect(edit).toHaveAttribute("aria-expanded", "true");
-    const source = screen.getByRole("button", {
-      name: "View source release 6",
-    });
-    expect(source).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(edit);
-    await user.click(source);
-    expect(onToggleEdit).toHaveBeenCalledExactlyOnceWith(release);
-    expect(onToggleSource).toHaveBeenCalledExactlyOnceWith(release);
-  });
-
-  it("turns every button off for someone who cannot manage the app, with one shared reason", () => {
-    setup(6, { actor: USER_ONLY });
-    for (const name of [
-      "Activate release 6",
-      "Lock release 6",
-      "Edit release 6",
-      "View source release 6",
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByText("Release 6")).toBeInTheDocument();
+    const names = within(menu)
+      .getAllByRole("menuitem")
+      .map((entry) => entry.firstElementChild?.textContent);
+    expect(names).toEqual([
+      "Activate",
+      "Rename",
+      "Tag",
+      "Lock",
+      "View source",
       "Delete",
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeDisabled();
-    }
-    expect(
-      screen.getByText(
-        "Activate, Lock, Delete, Edit and View source: Only an admin of this app can do this.",
-      ),
-    ).toBeInTheDocument();
+    ]);
+    expect(item(/^Activate/)).toHaveTextContent(/rolls back/i);
   });
 
-  it("turns every button off while it is not yet known who the person is", () => {
-    setup(6, { actor: null });
+  it("hands the chosen action and its release to the section, and closes", async () => {
+    const { release, onSelect, user, trigger } = setup(6);
+    await user.click(trigger);
+    await user.click(item(/^Delete/));
+
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("delete", release);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("gives the keyboard back to the trigger after an action that opens no panel", async () => {
+    const { release, onSelect, user, trigger } = setup(6);
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    // Activate, Rename, Tag, Lock.
+    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("lock", release);
+    expect(trigger).toHaveFocus();
+  });
+
+  it("keeps an action it refuses reachable on the keyboard, says why, and does nothing when chosen", async () => {
+    // Release 7 is the active release.
+    const { onSelect, user, trigger } = setup(7);
+    trigger.focus();
+    await user.keyboard("{Enter}{End}");
+
+    const remove = item(/^Delete/);
+    expect(remove).toHaveFocus();
+    expect(remove).toHaveAttribute("aria-disabled", "true");
+    expect(remove).toHaveTextContent("The active release cannot be deleted.");
+
+    await user.keyboard("{Enter}");
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("offers Unlock instead of Lock on a release locked by hand", async () => {
+    const { release, onSelect, user, trigger } = setup(5);
+    await user.click(trigger);
     expect(
-      screen.getByRole("button", { name: "Activate release 6" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByText(/Checking what you may do here/),
-    ).toBeInTheDocument();
+      within(screen.getByRole("menu")).queryByRole("menuitem", {
+        name: /^Lock/,
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(item(/^Unlock/));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("unlock", release);
+  });
+
+  it("refuses every action to someone who cannot manage the app, with the reason on each", async () => {
+    const { user, trigger } = setup(6, { actor: USER_ONLY });
+    await user.click(trigger);
+    for (const entry of within(screen.getByRole("menu")).getAllByRole(
+      "menuitem",
+    )) {
+      expect(entry).toHaveAttribute("aria-disabled", "true");
+      expect(entry).toHaveTextContent(REASON_NOT_MANAGER);
+    }
+  });
+
+  it("names the source item Hide source while the viewer shows this release", async () => {
+    const { user, trigger } = setup(6, { isViewingSource: true });
+    await user.click(trigger);
+    expect(item(/^Hide source/)).toBeInTheDocument();
+  });
+
+  it("shows a running call beside the trigger and holds the other actions until it ends", async () => {
+    const { user, trigger } = setup(6, {
+      actions: {
+        ...IDLE,
+        stateOf: (key) => (key === "lock:6" ? "busy" : "blocked"),
+      },
+    });
+    expect(screen.getByText("Locking")).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(item(/^Lock/)).toHaveAttribute("aria-disabled", "true");
+    expect(item(/^Activate/)).toHaveTextContent(
+      "Another change is being saved; wait for it.",
+    );
+    // Reading the source writes nothing, so a running write does not hold it.
+    expect(item(/^View source/)).not.toHaveAttribute("aria-disabled");
   });
 });

@@ -165,6 +165,7 @@ function JsonView({ environment }: { environment: AppEnvironment }) {
       </div>
       <pre
         id={id}
+        role="region"
         tabIndex={0}
         aria-label="Environment as JSON"
         className="max-h-[min(32rem,70vh)] overflow-auto rounded-control border bg-card p-3 font-mono text-xs leading-5 whitespace-pre-wrap wrap-anywhere"

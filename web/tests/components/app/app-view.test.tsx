@@ -107,7 +107,7 @@ describe("AppView", () => {
     pathname = "/app/deployments/";
     setup(<AppDeploymentsPage />);
     expect(
-      await screen.findByRole("heading", { level: 2, name: "Releases" }),
+      await screen.findByRole("heading", { level: 2, name: "Deployments" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { level: 2, name: "Status" }),

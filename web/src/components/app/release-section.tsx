@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { LockIcon } from "lucide-react";
+import { useRef, useState } from "react";
 
 import {
   activateRelease,
@@ -9,8 +10,11 @@ import {
   unlockRelease,
 } from "@/lib/api";
 import type { AppDetail, ReleaseSummary } from "@/lib/api";
+import { appActionAvailability } from "@/lib/app/actions";
 import type { Actor } from "@/lib/app/actions";
 import { releaseActionMessage } from "@/lib/app/outcomes";
+import { unavailableReasons } from "@/lib/app/reasons";
+import type { ReleaseMenuAction } from "@/lib/app/releases";
 import {
   reconcileSelection,
   releaseLockLabel,
@@ -24,9 +28,12 @@ import { ErrorNotice } from "@/components/error-notice";
 import { RelativeTime } from "@/components/relative-time";
 import { Section } from "@/components/section";
 import { ReleaseStatusBadge } from "@/components/status-badge";
-import { ReleaseActions } from "./release-actions";
+import { UpdateButton, useAppControls } from "./app-controls";
+import { ReleaseRowMenu } from "./release-actions";
 import type { ReleaseWrite } from "./release-actions";
+import { ReleaseDeleteConfirm } from "./release-delete-confirm";
 import { ReleaseEditForm } from "./release-edit-form";
+import { ReleaseFailure } from "./release-failure";
 import { SourceViewerPanel } from "./source-viewer-panel";
 import type { AppActions } from "./use-app-actions";
 import { useSourceViewer } from "./use-source-viewer";
@@ -55,26 +62,81 @@ function writeCall(
   }
 }
 
-/** The release list with its actions, and the edit and source panels that open under it. */
+/** Which release's name and tags are open for editing, and the field the person chose. */
+interface EditTarget {
+  releaseNo: number;
+  field: "name" | "tags";
+}
+
+/** The number, the name, the target mark and the lock, as the row's header. */
+function ReleaseName({ release }: { release: ReleaseSummary }) {
+  const markers = releaseMarkers(release);
+  const lock = releaseLockLabel(release);
+  return (
+    <div className="flex flex-col gap-1">
+      <div>
+        <span className="whitespace-nowrap">#{release.release_no}</span>
+        {release.name === null ? null : (
+          <span className="wrap-break-word">, {release.name}</span>
+        )}
+      </div>
+      {markers.length === 0 ? null : (
+        <div className="text-sm text-muted-foreground">
+          {markers.join(", ")}
+        </div>
+      )}
+      {lock === null ? null : (
+        <div className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+          <LockIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="wrap-break-word">{lock}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The Deployments section: the releases with a row menu each, Update, and the
+ * panels a menu choice opens under the table (edit, delete question, source).
+ * A failed release explains itself on its row; the one the app was moving to
+ * opens with its output.
+ */
 export function ReleaseSection({
   app,
   actor,
   actions,
   onReload,
 }: ReleaseSectionProps) {
-  const [editingNo, setEditingNo] = useState<number | null>(null);
+  const [editing, setEditing] = useState<EditTarget | null>(null);
+  const [deletingNo, setDeletingNo] = useState<number | null>(null);
   const [failure, setFailure] = useState<{
     context: string;
     error: unknown;
   } | null>(null);
+  const triggers = useRef(new Map<number, HTMLButtonElement>());
+  const controls = useAppControls(app, actions);
   const releases = releasesNewestFirst(app.releases);
   const releaseNos = app.releases.map((release) => release.release_no);
   const source = useSourceViewer(app.slug, releaseNos);
+  const update = appActionAvailability("update", app, actor);
+  const updateReasons = unavailableReasons([
+    { label: "Update", availability: update },
+  ]);
 
   // A poll can delete the release a panel is open on; the panel goes with it.
-  const openEditNo = reconcileSelection(editingNo, app.releases);
+  const openEditNo = reconcileSelection(
+    editing?.releaseNo ?? null,
+    app.releases,
+  );
   const editedRelease =
     app.releases.find((release) => release.release_no === openEditNo) ?? null;
+  const openDeleteNo = reconcileSelection(deletingNo, app.releases);
+
+  /** Puts the keyboard back on the menu a panel was opened from. */
+  function focusTrigger(releaseNo: number | null): void {
+    if (releaseNo === null) return;
+    triggers.current.get(releaseNo)?.focus();
+  }
 
   async function write(
     action: ReleaseWrite,
@@ -83,15 +145,43 @@ export function ReleaseSection({
     setFailure(null);
     const releaseNo = release.release_no;
     const result = await actions.run(
-      `${action}:${releaseNo}`,
+      `${action}:${String(releaseNo)}`,
       () => writeCall(action, app.slug, releaseNo),
       releaseActionMessage(action, releaseNo),
     );
     if (!result.ok) {
       setFailure({
-        context: `Could not ${action} release ${releaseNo}`,
+        context: `Could not ${action} release ${String(releaseNo)}`,
         error: result.error,
       });
+    }
+  }
+
+  function choose(action: ReleaseMenuAction, release: ReleaseSummary): void {
+    const releaseNo = release.release_no;
+    switch (action) {
+      case "activate":
+      case "lock":
+      case "unlock":
+        void write(action, release);
+        return;
+      case "rename":
+        setEditing({ releaseNo, field: "name" });
+        return;
+      case "tag":
+        setEditing({ releaseNo, field: "tags" });
+        return;
+      case "delete":
+        setDeletingNo(releaseNo);
+        return;
+      case "view-source":
+        if (source.state.releaseNo === releaseNo) {
+          source.close();
+          focusTrigger(releaseNo);
+        } else {
+          source.open(releaseNo);
+        }
+        return;
     }
   }
 
@@ -100,33 +190,20 @@ export function ReleaseSection({
       key: "release",
       header: "Release",
       isRowHeader: true,
-      cell: (release) => {
-        const markers = releaseMarkers(release);
-        return (
-          <div className="flex flex-col gap-1">
-            <div>
-              <span className="whitespace-nowrap">#{release.release_no}</span>
-              {release.name === null ? null : (
-                <span className="wrap-break-word">, {release.name}</span>
-              )}
-            </div>
-            {markers.length === 0 ? null : (
-              <div className="text-muted-foreground">{markers.join(", ")}</div>
-            )}
-          </div>
-        );
-      },
+      cell: (release) => <ReleaseName release={release} />,
     },
     {
-      key: "status",
-      header: "Status",
+      key: "state",
+      header: "State",
       cell: (release) => (
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <div>
             <ReleaseStatusBadge status={release.status} />
           </div>
-          {release.status_reason === null ? null : (
-            <div className="text-muted-foreground wrap-break-word">
+          {release.status === "failed" ? (
+            <ReleaseFailure slug={app.slug} release={release} />
+          ) : release.status_reason === null ? null : (
+            <div className="text-sm text-muted-foreground wrap-break-word">
               {release.status_reason}
             </div>
           )}
@@ -146,24 +223,12 @@ export function ReleaseSection({
         ),
     },
     {
-      key: "lock",
-      header: "Lock",
-      cell: (release) => {
-        const label = releaseLockLabel(release);
-        return label === null ? (
-          <span className="text-muted-foreground">None</span>
-        ) : (
-          <span className="wrap-break-word">{label}</span>
-        );
-      },
-    },
-    {
       key: "created",
       header: "Created",
       cell: (release) => (
         <div className="flex flex-col gap-1">
           <RelativeTime value={release.created_at} />
-          <span className="text-muted-foreground wrap-break-word">
+          <span className="text-sm text-muted-foreground wrap-break-word">
             by {release.created_by}
           </span>
         </div>
@@ -174,36 +239,47 @@ export function ReleaseSection({
       header: "Actions",
       isLabelHiddenWhenStacked: true,
       cell: (release) => (
-        <ReleaseActions
+        <ReleaseRowMenu
           app={app}
           release={release}
           actor={actor}
           actions={actions}
-          isEditing={openEditNo === release.release_no}
           isViewingSource={source.state.releaseNo === release.release_no}
-          onWrite={(action, target) => {
-            void write(action, target);
-          }}
-          onToggleEdit={(target) => {
-            setEditingNo(
-              openEditNo === target.release_no ? null : target.release_no,
-            );
-          }}
-          onToggleSource={(target) => {
-            if (source.state.releaseNo === target.release_no) {
-              source.close();
+          triggerRef={(element) => {
+            if (element === null) {
+              triggers.current.delete(release.release_no);
             } else {
-              source.open(target.release_no);
+              triggers.current.set(release.release_no, element);
             }
           }}
+          onSelect={choose}
         />
       ),
     },
   ];
 
   return (
-    <Section title="Releases">
+    <Section
+      title="Deployments"
+      actions={
+        <UpdateButton
+          availability={update}
+          actions={actions}
+          onUpdate={controls.runUpdate}
+        />
+      }
+    >
       <div className="flex flex-col gap-4">
+        {updateReasons.length === 0 ? null : (
+          <p className="text-sm text-muted-foreground">{updateReasons[0]}</p>
+        )}
+        {controls.failure === null ? null : (
+          <ErrorNotice
+            error={controls.failure.error}
+            context="Could not create a release"
+            onReload={onReload}
+          />
+        )}
         {failure === null ? null : (
           <ErrorNotice
             error={failure.error}
@@ -224,15 +300,35 @@ export function ReleaseSection({
             </EmptyState>
           }
         />
-        {editedRelease === null ? null : (
+        {openDeleteNo === null ? null : (
+          <ReleaseDeleteConfirm
+            key={openDeleteNo}
+            releaseNo={openDeleteNo}
+            onCancel={() => {
+              setDeletingNo(null);
+              focusTrigger(openDeleteNo);
+            }}
+            onConfirm={() => {
+              const target = app.releases.find(
+                (release) => release.release_no === openDeleteNo,
+              );
+              setDeletingNo(null);
+              focusTrigger(openDeleteNo);
+              if (target !== undefined) void write("delete", target);
+            }}
+          />
+        )}
+        {editedRelease === null || editing === null ? null : (
           <ReleaseEditForm
-            // A new release gets a fresh form; a poll of the same one does not reset it.
-            key={editedRelease.release_no}
+            // Another release, or the other field, gets a fresh form; a poll of the same one does not reset it.
+            key={`${String(editedRelease.release_no)}:${editing.field}`}
             app={app}
             release={editedRelease}
             actions={actions}
+            focusField={editing.field}
             onClose={() => {
-              setEditingNo(null);
+              setEditing(null);
+              focusTrigger(editedRelease.release_no);
             }}
             onReload={onReload}
           />
@@ -240,7 +336,14 @@ export function ReleaseSection({
         {source.state.releaseNo === null ? null : (
           <SourceViewerPanel
             slug={app.slug}
-            viewer={source}
+            viewer={{
+              ...source,
+              close: () => {
+                const releaseNo = source.state.releaseNo;
+                source.close();
+                focusTrigger(releaseNo);
+              },
+            }}
             onReloadApp={onReload}
           />
         )}
