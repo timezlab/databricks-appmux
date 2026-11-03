@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { AppResourcesPage } from "@/components/app/app-pages";
+import { AppResourcesPage } from "@/components/app/pages/resources-page";
 
 export const metadata: Metadata = {
   title: "Resources",

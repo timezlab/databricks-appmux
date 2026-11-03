@@ -34,6 +34,13 @@ export const EXAMPLE_APP_SLUG = "sales";
 const APP_API_CALL = `${API_PREFIX}/apps/${EXAMPLE_APP_SLUG}`;
 const PLATFORM_API_CALL = `${API_PREFIX}/platform`;
 
+/**
+ * What a section of the app that is not built yet shows (section-placeholder.tsx),
+ * once the shell has the app. A lane that builds the section puts its own data
+ * text in place of this one.
+ */
+const PLACEHOLDER_TEXT = "This section is being built.";
+
 /** The settings the two "settings" entries edit (current values: 120, 100, 64). */
 const EDITED_SETTINGS: Readonly<Record<string, string>> = {
   request_timeout_s: "150",
@@ -74,21 +81,55 @@ export const PAGES: readonly PageEntry[] = [
     dataText: "Sales dashboard",
     apiCall: `${API_PREFIX}/apps`,
   },
+  // The ten sections of one app, in sidebar order. The heading is the display
+  // name, so it is data too; every section reads the app through the shell,
+  // the placeholders included.
   {
-    name: "app-status",
+    name: "app-overview",
     path: `${BASE_PATH}/app/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
-    // The heading is the display name, so it is data too.
     heading: "Sales dashboard",
     dataText: `${EXAMPLE_APP_SLUG}, owned by alice@example.com`,
     apiCall: APP_API_CALL,
   },
   {
-    name: "app-releases",
-    path: `${BASE_PATH}/app/releases/?slug=${EXAMPLE_APP_SLUG}`,
+    name: "app-authorization",
+    path: `${BASE_PATH}/app/authorization/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: "carol@example.com",
+    apiCall: APP_API_CALL,
+  },
+  {
+    name: "app-deployments",
+    path: `${BASE_PATH}/app/deployments/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
     heading: "Sales dashboard",
     dataText: "fix pagination",
+    apiCall: APP_API_CALL,
+  },
+  {
+    name: "app-logs",
+    path: `${BASE_PATH}/app/logs/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: PLACEHOLDER_TEXT,
+    apiCall: APP_API_CALL,
+  },
+  {
+    name: "app-security",
+    path: `${BASE_PATH}/app/security/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: PLACEHOLDER_TEXT,
+    apiCall: APP_API_CALL,
+  },
+  {
+    name: "app-environment",
+    path: `${BASE_PATH}/app/environment/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: PLACEHOLDER_TEXT,
     apiCall: APP_API_CALL,
   },
   {
@@ -100,11 +141,11 @@ export const PAGES: readonly PageEntry[] = [
     apiCall: APP_API_CALL,
   },
   {
-    name: "app-sharing",
-    path: `${BASE_PATH}/app/sharing/?slug=${EXAMPLE_APP_SLUG}`,
+    name: "app-insights",
+    path: `${BASE_PATH}/app/insights/?slug=${EXAMPLE_APP_SLUG}`,
     status: 200,
     heading: "Sales dashboard",
-    dataText: "carol@example.com",
+    dataText: PLACEHOLDER_TEXT,
     apiCall: APP_API_CALL,
   },
   {
@@ -113,6 +154,14 @@ export const PAGES: readonly PageEntry[] = [
     status: 200,
     heading: "Sales dashboard",
     dataText: "Requests to a platform admin",
+    apiCall: APP_API_CALL,
+  },
+  {
+    name: "app-settings",
+    path: `${BASE_PATH}/app/settings/?slug=${EXAMPLE_APP_SLUG}`,
+    status: 200,
+    heading: "Sales dashboard",
+    dataText: PLACEHOLDER_TEXT,
     apiCall: APP_API_CALL,
   },
   {

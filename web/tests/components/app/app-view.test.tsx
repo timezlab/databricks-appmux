@@ -3,11 +3,18 @@ import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AppReleasesPage, AppStatusPage } from "@/components/app/app-pages";
+import { AppDeploymentsPage } from "@/components/app/pages/deployments-page";
+import { AppOverviewPage } from "@/components/app/pages/overview-page";
 import { AppView } from "@/components/app/app-view";
 import { jsonResponse, stubFetch } from "../../support/fake-fetch";
 import type { RecordedCall } from "../../support/fake-fetch";
 import { readExample } from "../../support/contract-examples";
+
+// The path on screen, as `usePathname()` gives it (no base path).
+let pathname = "/app/";
+vi.mock("next/navigation", () => ({
+  usePathname: () => pathname,
+}));
 
 // The four polls of the page answer by route; `appAnswer` is the one under test.
 let appAnswer: () => Response;
@@ -34,7 +41,7 @@ function errorBody(code: string, message: string) {
   return { error: { code, message } };
 }
 
-function setup(page: ReactElement = <AppStatusPage />): void {
+function setup(page: ReactElement = <AppOverviewPage />): void {
   appCalls = 0;
   stubFetch(route);
   render(<AppView slug="sales">{page}</AppView>);
@@ -42,10 +49,11 @@ function setup(page: ReactElement = <AppStatusPage />): void {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  pathname = "/app/";
 });
 
 describe("AppView", () => {
-  it("shows the app's name, its tabs and the page that was asked for, once the app answers", async () => {
+  it("shows the app's name, its sections and the page that was asked for, once the app answers", async () => {
     appAnswer = () => jsonResponse(200, readExample("AppDetail"));
     setup();
     expect(
@@ -54,26 +62,50 @@ describe("AppView", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Status" }),
     ).toBeInTheDocument();
-    const tabs = screen.getByRole("navigation", {
+    const sidebar = screen.getByRole("navigation", {
       name: "Sales dashboard sections",
     });
     // next/link adds the export's trailing slash only inside a Next build.
     expect(
-      within(tabs)
+      within(sidebar)
         .getAllByRole("link")
         .map((link) => link.getAttribute("href")?.replace("/?", "?")),
     ).toEqual([
+      "/",
       "/app?slug=sales",
-      "/app/releases?slug=sales",
+      "/app/authorization?slug=sales",
+      "/app/deployments?slug=sales",
+      "/app/logs?slug=sales",
+      "/app/security?slug=sales",
+      "/app/environment?slug=sales",
       "/app/resources?slug=sales",
-      "/app/sharing?slug=sales",
+      "/app/insights?slug=sales",
       "/app/requests?slug=sales",
+      "/app/settings?slug=sales",
     ]);
+    expect(
+      within(sidebar).getByRole("link", { name: "All apps" }),
+    ).toHaveAttribute("href", "/");
   });
 
-  it("puts only the page that was asked for on screen, so the other areas wait on their own tabs", async () => {
+  it("marks the section on screen as the current one, with or without the trailing slash", async () => {
     appAnswer = () => jsonResponse(200, readExample("AppDetail"));
-    setup(<AppReleasesPage />);
+    pathname = "/app/deployments";
+    setup(<AppDeploymentsPage />);
+    const sidebar = await screen.findByRole("navigation", {
+      name: "Sales dashboard sections",
+    });
+    expect(
+      within(sidebar)
+        .getAllByRole("link", { current: "page" })
+        .map((link) => link.textContent),
+    ).toEqual(["Deployments"]);
+  });
+
+  it("puts only the page that was asked for on screen, so the other areas wait in their own sections", async () => {
+    appAnswer = () => jsonResponse(200, readExample("AppDetail"));
+    pathname = "/app/deployments/";
+    setup(<AppDeploymentsPage />);
     expect(
       await screen.findByRole("heading", { level: 2, name: "Releases" }),
     ).toBeInTheDocument();

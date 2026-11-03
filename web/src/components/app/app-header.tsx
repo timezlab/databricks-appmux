@@ -55,8 +55,8 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 
 /**
  * The top of every page of an app: its name, slug and owner, its state, and the
- * way to open it. The name is the page's `<h1>` on every tab; the tab bar
- * under it says which page this is.
+ * way to open it. The name is the page's `<h1>` in every section; the sidebar
+ * under it says which section this is.
  */
 export function AppTitle({ app }: { app: AppDetail }) {
   return (
@@ -83,7 +83,7 @@ export function AppTitle({ app }: { app: AppDetail }) {
   );
 }
 
-/** The status page: what needs attention first, then the app-level buttons and the facts. */
+/** The Overview section (the earlier Status page): what needs attention first, then the app-level buttons and the facts. */
 export function AppStatus({ app, actor, actions, onReload }: AppHeaderProps) {
   const [failure, setFailure] = useState<{ error: unknown } | null>(null);
 
