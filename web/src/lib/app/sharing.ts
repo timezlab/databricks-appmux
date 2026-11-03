@@ -134,9 +134,18 @@ export interface GrantLevelChange {
   request: GrantRequest;
 }
 
-/** The other level for a user or group grant; the owner and `everyone` have none. */
+/**
+ * The other level for a user or group grant; the owner, `everyone` and a
+ * service principal (CAN_USE only, ADR 0020) have none.
+ */
 export function grantLevelChange(row: GrantRow): GrantLevelChange | null {
-  if (row.isOwner || row.type === "everyone") return null;
+  if (
+    row.isOwner ||
+    row.type === "everyone" ||
+    row.type === "service_principal"
+  ) {
+    return null;
+  }
   const isAdmin = row.permission === "CAN_MANAGE";
   return {
     label: isAdmin ? "Make user" : "Make admin",

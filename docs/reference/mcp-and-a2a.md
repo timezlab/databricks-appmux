@@ -95,7 +95,12 @@ A child has no SP of its own. To let one call the model or another App:
    tried.
 
 An `everyone` grant admits every identity the proxy accepts, people included. That is the cost of
-letting an SP caller in.
+letting an SP caller in with it.
+
+Since [ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md) (proposed,
+2026-11-03) a narrower grant exists: `{"type": "service_principal", "name": "<the SP's application
+ID, lower case>", "permission": "CAN_USE"}` admits that one SP and nobody else. It is in the code
+and its tests; a call through the Apps proxy with it has **not been measured yet** (below).
 
 ## Not measured
 
@@ -103,6 +108,7 @@ letting an SP caller in.
   stream, not for MCP or A2A), and whether a stream that sends nothing for a while survives.
 - A user bearer passed on to a child by OBO, and an agent that calls on behalf of the visitor.
 - A `group` grant admitting an SP, and the identity of an SP in appmux's audit and metrics.
+- A `service_principal` grant (ADR 0020) admitting an SP's call through the Apps proxy.
 - Load: the cost of the extra hop through appmux, and what the free model's limit does to several
   agents sharing the workspace.
 - Streamable HTTP with a session id or a server-sent stream from the MCP server (the example is

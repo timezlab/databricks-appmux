@@ -49,6 +49,9 @@ SLUG_PATTERN: Final = r"^[a-z0-9][a-z0-9-]{0,30}$"
 SCOPE_KEY_PATTERN: Final = r"^[a-z0-9][a-z0-9._-]{0,62}$"
 PLATFORM_METRICS_SLUG: Final = "_platform"
 LATENCY_BUCKET_COUNT: Final = 11
+# How a service principal is named in ``app_grants``: its application id, a UUID in lower case
+# (ADR 0020). Migration 0003 repeats it as a CHECK; the admin schema imports it from here.
+APPLICATION_ID_PATTERN: Final = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
 
 def _require_lower_case(text: str) -> str:
@@ -236,7 +239,7 @@ class AppConfig(RowModel):
 
 class AppGrant(RowModel):
     app_slug: str
-    principal_type: Literal["user", "group", "everyone"]
+    principal_type: Literal["user", "group", "everyone", "service_principal"]
     principal: str
     permission: Literal["CAN_USE", "CAN_MANAGE"]
     granted_by: str
@@ -248,6 +251,14 @@ class AppGrant(RowModel):
             raise ValueError("the principal is '*' exactly for the type 'everyone'")
         if self.principal_type == "user" and self.principal != self.principal.lower():
             raise ValueError("a user principal is an email in lower case")
+        # A stored CAN_MANAGE is not refused here: like `everyone`, the policy reads it as CAN_USE.
+        if (
+            self.principal_type == "service_principal"
+            and re.fullmatch(APPLICATION_ID_PATTERN, self.principal) is None
+        ):
+            raise ValueError(
+                "a service principal is named by its application id, a UUID in lower case"
+            )
         return self
 
 

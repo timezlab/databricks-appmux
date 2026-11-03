@@ -43,7 +43,13 @@ from pydantic import (
     model_validator,
 )
 
-from appmux.registry.models import LATENCY_BUCKET_COUNT, SecretKey, Slug, WheelEntry
+from appmux.registry.models import (
+    APPLICATION_ID_PATTERN,
+    LATENCY_BUCKET_COUNT,
+    SecretKey,
+    Slug,
+    WheelEntry,
+)
 from appmux.sandbox.rules import (
     APPMUX_PORT_PLACEHOLDER,
     CONTAINER_IP_PLACEHOLDER,
@@ -171,7 +177,7 @@ ReleaseStatus = Literal[
     "pending", "building", "starting", "healthy", "active", "failed", "superseded"
 ]
 AccessAs = Literal["obo", "own_sp", "shared_sp"]
-GrantType = Literal["user", "group", "everyone"]
+GrantType = Literal["user", "group", "everyone", "service_principal"]
 RequestKind = Literal["register", "delegation", "settings"]
 RequestStatus = Literal["pending", "approved", "denied", "withdrawn"]
 PackageMode = Literal["index", "wheelhouse", "wheelhouse+index"]
@@ -209,7 +215,7 @@ class _RequestBody(_Body):
 class Principal(_Body):
     """Who a list names, as a response returns it (``AdminList``, ``PlatformView.admins``)."""
 
-    type: GrantType
+    type: Literal["user", "group", "everyone"]  # no service principal is a platform admin
     name: str
 
 
@@ -400,6 +406,13 @@ class GrantRequest(_RequestBody):
                 raise ValueError("everyone is CAN_USE only")
         elif self.type == "user":
             _require_lower_case_email(self.name)
+        elif self.type == "service_principal":  # ADR 0020
+            if re.fullmatch(APPLICATION_ID_PATTERN, self.name) is None:
+                raise ValueError(
+                    "a service principal is named by its application id (a UUID in lower case)"
+                )
+            if self.permission != "CAN_USE":
+                raise ValueError("a service principal is CAN_USE only")
         else:
             _require_not_blank(self.name)
             if self.name == EVERYONE_NAME:

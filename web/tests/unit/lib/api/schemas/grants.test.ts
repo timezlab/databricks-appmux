@@ -75,6 +75,40 @@ describe("grants", () => {
     });
   });
 
+  it("a service principal is its lower-case application id and takes CAN_USE only", () => {
+    const applicationId = "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab";
+    accepts(api.GrantRequest, {
+      type: "service_principal",
+      name: applicationId,
+      permission: "CAN_USE",
+    });
+    rejects(api.GrantRequest, {
+      type: "service_principal",
+      name: applicationId,
+      permission: "CAN_MANAGE",
+    });
+    for (const name of [
+      applicationId.toUpperCase(),
+      applicationId.replaceAll("-", ""),
+      "sales-bot",
+      `${applicationId}\n`,
+      "*",
+    ]) {
+      rejects(api.GrantRequest, {
+        type: "service_principal",
+        name,
+        permission: "CAN_USE",
+      });
+    }
+    accepts(api.AppGrant, {
+      type: "service_principal",
+      name: applicationId,
+      permission: "CAN_USE",
+      granted_by: "alice@example.com",
+      granted_at: "2026-11-03T10:05:00Z",
+    });
+  });
+
   it("refuses a field it does not list", () => {
     rejects(api.GrantRequest, {
       type: "group",

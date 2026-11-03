@@ -318,15 +318,15 @@ The three composite keys are not in this `CREATE TABLE`: they refer to `releases
 
 ### 4.5 `app_grants`
 
-**Purpose and rules.** Who may open or manage each app. `CAN_MANAGE` includes `CAN_USE`. A principal has one level per app. The owner is not a row: it is `apps.owner`, always `CAN_MANAGE`. Neither is a platform admin's implicit `CAN_MANAGE` on every app: it is derived from the `platform_admins` setting ([design 9.1](v1-design.md#91-the-model)), so it is not in the sharing list and cannot be removed from an app. `everyone` mirrors Databricks' "Anyone in my organization can use". **Groups are resolved from Databricks**, not from appmux ([design 9.1](v1-design.md#91-the-model)).
+**Purpose and rules.** Who may open or manage each app. `CAN_MANAGE` includes `CAN_USE`. A principal has one level per app. The owner is not a row: it is `apps.owner`, always `CAN_MANAGE`. Neither is a platform admin's implicit `CAN_MANAGE` on every app: it is derived from the `platform_admins` setting ([design 9.1](v1-design.md#91-the-model)), so it is not in the sharing list and cannot be removed from an app. `everyone` mirrors Databricks' "Anyone in my organization can use". **Groups are resolved from Databricks**, not from appmux ([design 9.1](v1-design.md#91-the-model)). A `service_principal` row lets another Databricks App's service principal open the app: it names the application id that the Apps proxy forwards in `X-Forwarded-Email`, and it is `CAN_USE` only; a stored `CAN_MANAGE` counts as `CAN_USE`, as for `everyone` ([ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md)). An application id has no `@`, so it can never equal a user's email.
 
 **Columns.**
 
 | Column | Type | Null / default | Example | Meaning |
 |---|---|---|---|---|
 | `app_slug` | `text` | part of the key | `sales` | the app; deleted and renamed with it |
-| `principal_type` | `text` | part of the key | `group` | `user`, `group` or `everyone` |
-| `principal` | `text` | part of the key | `sales-team` | an email in lower case, a Databricks group name, or `*` for `everyone` |
+| `principal_type` | `text` | part of the key | `group` | `user`, `group`, `everyone` or `service_principal` |
+| `principal` | `text` | part of the key | `sales-team` | an email in lower case, a Databricks group name, `*` for `everyone`, or the application id of a service principal (a UUID in lower case) |
 | `permission` | `text` | no | `CAN_USE` | `CAN_USE` or `CAN_MANAGE` |
 | `granted_by` | `text` | no | `alice@example.com` | an app admin |
 | `granted_at` | `timestamptz` | no, `now()` | 2026-10-30T08:52Z | |
@@ -337,8 +337,9 @@ The three composite keys are not in this `CREATE TABLE`: they refer to `releases
 |---|---|---|---|---|---|
 | `sales` | `user` | `carol@example.com` | `CAN_MANAGE` | `alice@example.com` | 2026-10-30T08:53Z |
 | `docs` | `everyone` | `*` | `CAN_USE` | `frank@example.com` | 2026-10-29T16:10Z |
+| `sales` | `service_principal` | `4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab` | `CAN_USE` | `alice@example.com` | 2026-11-03T10:05Z |
 
-**DDL.**
+**DDL.** The baseline below; `migrations/0003_service_principal_grants.sql` then replaces the `principal_type` check with one that also admits `service_principal`, and adds `app_grants_service_principal_check`: `principal_type <> 'service_principal' OR principal ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`. A registry loaded before 0003 existed gets it applied by hand ([TD-008](../tech-debt.md)).
 
 ```sql
 CREATE TABLE app_grants (

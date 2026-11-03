@@ -809,11 +809,14 @@ usual, and no audit row except where a row says so.
 
 ### Changed schemas
 
-- `Principal`, `GrantRequest`, `AppGrant`: `type` also takes `service_principal`. Its `name` is the service
-  principal's application id, a lower-case UUID. It holds `CAN_USE` only (`400` for `CAN_MANAGE`, as for `everyone`).
-  The edge matches it when the forwarded identity of the request equals that id (an App's service principal reaches a
-  child with its application id as the identity, measured 2026-11-03, [reference](../../../docs/reference/mcp-and-a2a.md)).
-  `DELETE /apps/{app}/grants/service_principal/{id}` removes it. Platform admins stay `user` or `group` only.
+- `GrantRequest`, `AppGrant`: `type` also takes `service_principal`. Its `name` is the service
+  principal's application id, a lower-case UUID (`400` for any other form). It holds `CAN_USE` only (`400` for
+  `CAN_MANAGE`, as for `everyone`). The edge matches it, in any case, when the forwarded identity of the request equals
+  that id (an App's service principal reaches a child with its application id as the identity, measured 2026-11-03,
+  [reference](../../../docs/reference/mcp-and-a2a.md)); an id no grant names gets the same `404` as an unknown app.
+  `DELETE /apps/{app}/grants/service_principal/{id}` removes it, and the audit row names it
+  `service_principal:<id>`. Platform admins stay `user` or `group` only, so `Principal` (the platform-admin lists)
+  does not change.
 - `ReleaseDetail`: new `failure_hint` (string or null). `reason` names how a started child ended when it did
   (`the app exited with code 1 after 2.3 s`, `was stopped by signal SIGKILL`), the health wait ends when the process
   exits instead of at the deadline, and `build_log_tail` holds the child's last 50 lines of output for a failed start.

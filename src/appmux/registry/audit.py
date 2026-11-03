@@ -83,13 +83,16 @@ ACTOR_PATTERN: Final = rf"^(appmux|db:[a-z_][a-z0-9_]{{0,62}}|{EMAIL_PATTERN})$"
 # ``audit_log.app_slug`` has no foreign key, so ``SLUG_PATTERN`` (imported from the row models,
 # where ``apps.slug`` is defined) is all that keeps a stray value out of the column.
 
-# A principal is "user:<email>", "everyone:*" or "group:<name>". A Databricks group name may hold
-# spaces and any other printable character ("Data Platform"), so only a control character, a
-# newline (including U+0085, U+2028 and U+2029) or a length outside 1 to 255 is refused there; a
-# name shaped like a credential is refused by the check that every principal goes through. The
-# user and everyone forms keep their no-whitespace shape.
+# A principal is "user:<email>", "everyone:*", "group:<name>" or "service_principal:<application
+# id>" (ADR 0020). A Databricks group name may hold spaces and any other printable character
+# ("Data Platform"), so only a control character, a newline (including U+0085, U+2028 and U+2029)
+# or a length outside 1 to 255 is refused there; a name shaped like a credential is refused by the
+# check that every principal goes through. The user, everyone and service principal forms keep
+# their no-whitespace shape.
 _PRINTABLE_GROUP_NAME: Final = r"[^\x00-\x1f\x7f-\x9f\u2028\u2029]{1,255}"
-PRINCIPAL_PATTERN: Final = rf"^((user|everyone):\S{{1,255}}|group:{_PRINTABLE_GROUP_NAME})$"
+PRINCIPAL_PATTERN: Final = (
+    rf"^((user|everyone|service_principal):\S{{1,255}}|group:{_PRINTABLE_GROUP_NAME})$"
+)
 
 _MAX_EMAIL_LENGTH: Final = 254  # the longest address SMTP carries
 _MAX_TEXT_LENGTH: Final = 512

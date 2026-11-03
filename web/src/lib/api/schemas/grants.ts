@@ -3,10 +3,14 @@ import { z } from "./zod.ts";
 import { AppPermission, GrantType } from "./enums.ts";
 import { LowerCaseEmail, NotBlank, Time } from "./primitives.ts";
 
+/** An App's service principal is named by its application id (ADR 0020). */
+const APPLICATION_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 /**
- * Who a grant names. `everyone` is `*` and `CAN_USE` only (FR-022). That the
- * owner cannot be named with a lower level needs the app, so the server checks
- * it.
+ * Who a grant names. `everyone` is `*` and `CAN_USE` only (FR-022), and so is
+ * a service principal. That the owner cannot be named with a lower level needs
+ * the app, so the server checks it.
  */
 export const GrantRequest = z.discriminatedUnion("type", [
   z.strictObject({
@@ -25,6 +29,16 @@ export const GrantRequest = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("everyone"),
     name: z.literal("*"),
+    permission: z.literal("CAN_USE"),
+  }),
+  z.strictObject({
+    type: z.literal("service_principal"),
+    name: z
+      .string()
+      .regex(
+        APPLICATION_ID,
+        "a service principal is named by its application id (a UUID in lower case)",
+      ),
     permission: z.literal("CAN_USE"),
   }),
 ]);
