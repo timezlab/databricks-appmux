@@ -1,6 +1,6 @@
 # Split the admin UI into sub-pages and use Databricks red
 
-**Status:** accepted — the owner asked for this redesign on 2026-10-31; extends
+**Status:** accepted (the Databricks red, the dark chrome band and the Databricks logo are superseded by [ADR 0019](0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md), proposed 2026-11-03; the sub-page split stays) — the owner asked for this redesign on 2026-10-31; extends
 [ADR 0016](0016-build-the-admin-ui-with-tailwind-shadcn-and-tests-outside-src.md),
 which fixed the stack and the CSP guards and is not changed, and
 [ADR 0012](0012-build-services-in-python-and-the-admin-ui-in-nextjs.md).

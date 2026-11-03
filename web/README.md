@@ -10,17 +10,17 @@ The stack (Tailwind, shadcn/ui, Recharts, tests outside `src/`) is recorded in
 
 Run them in `web/` after `npm ci` (`.npmrc` turns install scripts off).
 
-| Command                            | Does                                                                                                                                                                    |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run build`                    | writes the export to `web/out/` (git-ignored)                                                                                                                           |
-| `npm run typecheck`                | `tsc --noEmit`                                                                                                                                                          |
-| `npm run lint`                     | ESLint (typescript-eslint, type-checked tiers, react-hooks, the style/HTML bans)                                                                                        |
-| `npm run format:check`             | Prettier (`npm run format` writes)                                                                                                                                      |
-| `npm test`                         | vitest, `unit` (Node) and `dom` (jsdom + Testing Library) projects                                                                                                      |
-| `npm run test:export`              | vitest `export` project: CSS and HTML guards over `out/` (run `npm run build` first)                                                                                    |
-| `npm run test:e2e`                 | Playwright: the built export in Chromium under the reference CSP (run `npm run build` first)                                                                            |
-| `npm run e2e:screenshots -- <dir>` | PNGs of every page at 1280 and 390 px, light and dark, into `<dir>` outside the repo; a page that needs a click or a world of its own also gets a `-first-screen` image |
-| `npm run check`                    | typecheck, lint, format:check and test                                                                                                                                  |
+| Command                                                  | Does                                                                                                                                                                                                                                            |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run build`                                          | writes the export to `web/out/` (git-ignored)                                                                                                                                                                                                   |
+| `npm run typecheck`                                      | `tsc --noEmit`                                                                                                                                                                                                                                  |
+| `npm run lint`                                           | ESLint (typescript-eslint, type-checked tiers, react-hooks, the style/HTML bans)                                                                                                                                                                |
+| `npm run format:check`                                   | Prettier (`npm run format` writes)                                                                                                                                                                                                              |
+| `npm test`                                               | vitest, `unit` (Node) and `dom` (jsdom + Testing Library) projects                                                                                                                                                                              |
+| `npm run test:export`                                    | vitest `export` project: CSS and HTML guards over `out/` (run `npm run build` first)                                                                                                                                                            |
+| `npm run test:e2e`                                       | Playwright: the built export in Chromium under the reference CSP (run `npm run build` first)                                                                                                                                                    |
+| `npm run e2e:screenshots -- <dir> [light\|dark\|system]` | PNGs of every page at 1280 and 390 px, OS light and dark, into `<dir>` outside the repo; the optional theme is stored as the choice first and ends each name; a page that needs a click or a world of its own also gets a `-first-screen` image |
+| `npm run check`                                          | typecheck, lint, format:check and test                                                                                                                                                                                                          |
 
 ## Layout
 
@@ -29,11 +29,12 @@ src/app/            pages (layout.tsx owns the only <main>), globals.css (tokens
 src/components/     the kit (PageHeader, Section, SectionPanel, AppSidebar, RouteStrip, Lamp, skeletons, CopyButton, Button, DataTable, Field, Notice, …)
 src/components/ui/  shadcn primitives, patched for the CSP (see below)
 src/components/{launcher,app,platform,dashboard}/   one folder per page
-src/hooks/          React hooks (usePoll, useStoredFlag)
+src/hooks/          React hooks (usePoll, useStoredFlag, useThemeChoice, useAppDisplayName)
 src/lib/api/        the API client, one file per route group, schemas/ (Zod)
 src/lib/<feature>/  pure logic per page, no React
 tests/              unit/ (mirrors src/lib), components/ (RTL), contract/ and csp/ (guards), export/
-e2e/                the browser tests: server.ts (edge stand-in with the CSP and a mock API), fixtures.ts (scenarios), pages.ts, csp.spec.ts, fonts.spec.ts, motion.spec.ts, screenshots.ts
+public/theme.js     the theme script, copied to the root of out/ (see Theme below)
+e2e/                the browser tests: server.ts (edge stand-in with the CSP and a mock API), fixtures.ts (scenarios), pages.ts, page-watch.ts, csp.spec.ts, fonts.spec.ts, motion.spec.ts, theme.spec.ts, shell.spec.ts, screenshots.ts
 e2e/primitives/     a page of every interactive primitive, built and prerendered by Playwright's global setup (build.ts), never part of out/
 ```
 
@@ -58,6 +59,34 @@ section names, icons and counts are in `src/lib/app/sections.ts` and `src/lib/pl
 A new sub-page is a route, an entry in `e2e/pages.ts` and a sidebar or tab item; the e2e run and
 the screenshots then cover it. The earlier `/app/releases/` and `/app/sharing/` are gone: a static
 export has no redirects, so an old link there gets the 404 page.
+
+## Shell
+
+`src/app/layout.tsx` renders the top bar (`TopBar`) and the main navigation (`MainNav`) around
+every page. The top bar is the wordmark, then on the pages of one app the breadcrumb
+`/ <app> ▾`, then the theme switch. The `▾` is `AppSwitcher`: a `Popover` with a `Command` list
+of the apps, fetched when it opens, filtered by name or slug, that goes to the same section of the
+chosen app (`appSectionAt` and `appPagePath` in `src/lib/app/params.ts`) or to its Overview. The
+breadcrumb shows the route strip until a list of apps has given it the display name
+(`useAppDisplayName`; a page that already has the app can call `rememberAppDisplayNames`).
+
+Below 768 px `AppSidebar` hides its column and shows one button, "Section: <label>", that opens
+the same items in a non-modal popover. An item's optional `countDescription` is the count in
+words, read by a screen reader and shown on hover.
+
+### Theme
+
+Light, Dark or System (the default), chosen with `ThemeToggle` and kept in `localStorage`
+under `appmux.theme`. `public/theme.js` is a classic script of this origin that the layout loads
+blocking in `<head>`, so `data-theme` is on `<html>` before the first paint and no hash is
+needed. CSS resolves System: `globals.css` gives the dark tokens to `[data-theme="dark"]` and,
+inside `@media (prefers-color-scheme: dark)`, to every `<html>` that is not
+`[data-theme="light"]`, so System follows the OS while the page is open and a blocked script still
+leaves the OS scheme. The two dark blocks hold the same values; `tests/contract/contrast.test.ts`
+fails when they differ. The script is the only copy of the rule and exposes it as
+`window.appmuxTheme`; `useThemeChoice` reads it through `useSyncExternalStore`, and the switch is
+disabled, and says so, when the script did not load. See
+[ADR 0019](../docs/decisions/0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md).
 
 ## Writing a page
 
@@ -86,8 +115,8 @@ export has no redirects, so an old link there gets the 404 page.
   `prompt` are banned. State is never shown by colour alone: `status-presentation.ts`
   pairs every tone with a mark.
 - **Styles.** Tailwind utilities on the token colours of `src/app/globals.css`, through
-  the primitives in `src/components/ui/`. Dark mode follows `prefers-color-scheme` through
-  the tokens. No CSS modules, no `style` attribute or prop, no `data:` URI. Colours come
+  the primitives in `src/components/ui/`. Dark mode is the theme switch's (see
+  [Theme](#theme)) through the tokens. No CSS modules, no `style` attribute or prop, no `data:` URI. Colours come
   only from tokens: no opacity modifier on a colour, no arbitrary colour value, no
   default-palette colour (`tests/contract/color-utilities.test.ts`); every token pair is
   contrast-checked (`tests/contract/contrast.test.ts`).
@@ -171,7 +200,7 @@ paper page, one blue-teal action colour (`--primary`, `--link`, `--ring`), and t
 own, the route strip and the lamp. Red is only danger (`--destructive`), so a destructive control
 is no longer one hue away from the primary button; it still stays outlined until its confirm
 step, and its label says what it does. The header is the page colour with one hairline under it,
-in both colour schemes. Dark follows the OS (`prefers-color-scheme`).
+in both colour schemes.
 
 The interface face is IBM Plex Sans (variable) and routes, paths and code are IBM Plex Mono,
 both self-hosted from npm by `src/app/fonts.css` (latin and latin-ext only, woff2), so the CSP's
@@ -187,7 +216,8 @@ name appears only to say that appmux runs as a Databricks App.
 ## The CSP
 
 The page runs under `default-src 'none'; style-src 'self'; script-src 'self'` plus the
-SHA-256 of each page's inline scripts (the edge computes them from the export): no `eval`,
+SHA-256 of each page's inline scripts (the edge computes them from the export; `theme.js` is a
+file of this origin and needs none): no `eval`,
 no `style=""` in prerendered HTML, no runtime `<style>`, no request to another origin. Four
 layers hold it: the ESLint ban on `style` and `dangerouslySetInnerHTML`, the AST scan
 (`tests/contract/markup-rules.test.ts`), the rendered-markup test over every primitive and
@@ -215,11 +245,15 @@ violation, a console error or an uncaught error. Five negative controls (an inli
 inline script outside the hash list, a missing hash, an overflow, and Radix's own Tabs and
 ToggleGroup prerendered) prove the harness can fail.
 
-Two more specs use the same server. `fonts.spec.ts` checks that both Plex families load from
+Four more specs use the same server. `fonts.spec.ts` checks that both Plex families load from
 the export's media folder as woff2 with no CSP violation. `motion.spec.ts` holds the launcher's
 app list call open and asks Chromium what the spinner and the skeleton animate, once with
 `reducedMotion: "no-preference"` and once with `"reduce"`; the names and durations must match
-the Motion table of the design.
+the Motion table of the design. `theme.spec.ts` picks each theme on each OS scheme (light, dark,
+no preference) and checks the attribute, the page colour and the reload; it also changes the OS
+scheme under an open page and blocks `theme.js`. `shell.spec.ts` opens, filters, chooses from
+and closes (Escape) the app switcher at 1280 and 390 px, and does the same with the phone menu at
+390 px, row heights included. `page-watch.ts` collects the CSP violations and errors for both.
 
 Dependency vetting (npm versions, publish dates, OSV result, why the `overrides` exist) is
 recorded in [research.md D2](../specs/001-appmux-v1/research.md#d2-layout-and-tooling); for the

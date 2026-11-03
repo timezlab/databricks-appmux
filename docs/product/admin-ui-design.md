@@ -32,8 +32,9 @@ the one under a floating menu.
 
 ## Tokens (the shipped values; `tests/contract/contrast.test.ts` is the judge)
 
-Hex only, in `:root` and overridden for dark in one `prefers-color-scheme: dark` block
-([globals.css](../../web/src/app/globals.css)). Danger is the only red: the old brand red is gone, so a destructive
+Hex only, in `:root` and overridden for dark in two blocks with the same values, one for the Dark choice and one
+for System on a dark OS (see the theme switch below; [globals.css](../../web/src/app/globals.css)). The contrast
+test fails when the two differ. Danger is the only red: the old brand red is gone, so a destructive
 control is no longer one hue away from the primary button. The contrast test lists the pairs that meet and their
 thresholds, in both schemes: 4.5:1 for text, 3:1 for control edges, bars and the focus ring.
 
@@ -100,7 +101,7 @@ resource. So the information architecture is copied from that console; colour, t
 appmux's.
 
 ```
- appmux  / Sales dashboard ▾                                   [☼ theme ▾]  alice@example.com ▾
+ appmux  / Sales dashboard ▾                                                          [☼]
  Apps  Platform  Dashboard      (top bar: page colour, one hairline under it)
  ┌───────────────┬────────────────────────────────────────────────────────────────────────┐
  │ ‹ All apps    │  Environment                                                           │
@@ -118,11 +119,21 @@ appmux's.
  └───────────────┴────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **The sidebar** appears inside one app and inside Platform; Apps and Dashboard are full-width pages. It has a
-  "‹ All apps" link on top, icon plus label per item, a count only where it means something to do (Requests), and a
-  collapse button that leaves icons only (kept in `localStorage`, guarded). Below 768 px it becomes one menu button
-  in the page header ("Section: Environment") that opens a non-modal popover list. The top bar carries the breadcrumb
-  `/ <app> ▾`, a switcher that opens a searchable list of apps (`Command` in a `Popover`).
+- **The top bar** (`TopBar`) is the wordmark, then on the pages of one app the breadcrumb `/ <app> ▾`, then the theme
+  switch at the right, with the main navigation on the line below. The wordmark is the plain text "appmux"; a glyph
+  is the owner's decision. The breadcrumb shows the app's display name once the switcher has loaded the list, and its
+  route strip until then; the `▾` opens the switcher (`AppSwitcher`): a `Popover` with a `Command` list of the apps,
+  fetched when it opens (and every 30 s while open), filtered by name or slug as one types, each row the name, the
+  route strip and the lamp. Choosing one goes to the same section of that app, or to its Overview from a page that is
+  no section. Loading shows skeleton lines, a failure an error with "Try again", no apps a link to the launcher. At
+  390 px the bar wraps without a sideways scroll.
+- **The sidebar** (`AppSidebar`) appears inside one app and inside Platform; Apps and Dashboard are full-width pages.
+  It has a "‹ All apps" link on top, icon plus label per item, a count only where it means something to do
+  (Requests, with words for a screen reader and on hover: `countDescription`), and a collapse button that leaves
+  icons only (kept in `localStorage`, guarded). Below 768 px the column gives way to one button, "Section:
+  Environment" with a chevron and `aria-expanded`, that opens the same items and the back link in a non-modal popover
+  (a modal one would inject the `<style>` the CSP refuses). Choosing an item, Escape and a click outside close it;
+  every row is at least 40 px tall.
 - **The content** is one inset panel (`card`, 12 px radius, hairline border) on the page colour, 1120 px at most, left
   aligned; forms stop at 560 px. Inside it sections are ruled, not boxed into further cards.
 - **One geometry for every bar** (point 8): the top navigation, the sidebar items and the Variables/Packages tabs share
@@ -160,9 +171,14 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
   Select is built on `Popover` and `Command` with shadcn's markup and classes; `DropdownMenu` runs with `modal={false}`;
   anything portalled renders only on the client (`use-is-client`). Each primitive gets a sample in
   `tests/csp/rendered-markup.test.tsx` and is opened in real Chromium under the reference CSP in `e2e/csp.spec.ts`.
-- **Theme switch (point 7).** shadcn's theme button: an icon button with a sun and a moon, a menu of Light, Dark and
-  System. The choice is kept in `localStorage` (guarded), applied as `data-theme` on `<html>` by a small same-origin
-  script in the head, so there is no flash and no inline script to hash. System follows the OS and stays the default.
+- **Theme switch (point 7).** shadcn's theme button (`ThemeToggle`): an icon button with a sun and a moon, named for
+  the current choice ("Theme: System"), and a menu of Light, Dark and System as radio items. The choice is kept in
+  `localStorage` (`appmux.theme`, guarded) and written as `data-theme` on `<html>` by `web/public/theme.js`, a
+  same-origin classic script loaded blocking from `<head>`, so the page never paints in the other theme first and
+  there is no inline script to hash. System is the default and is resolved by CSS (`prefers-color-scheme`), so it
+  follows the OS live while the page is open and still works when the script is blocked; a choice made in another
+  tab applies here too. With the script blocked the button is disabled and says so. The script holds the one copy of
+  the rule (ADR 0019).
 - **Skeletons.** Every data-dependent block has a skeleton with the shape of what will arrive (table rows, the
   header, a chart frame); a spinner is for an action in progress, not for a page. The parts are `SkeletonLines`,
   `SkeletonTable` and `SkeletonFigure` (`web/src/components/skeletons.tsx`). Until a page draws its own shaped
