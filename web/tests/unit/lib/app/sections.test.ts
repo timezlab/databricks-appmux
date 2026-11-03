@@ -100,6 +100,36 @@ describe("appNavItems", () => {
     assert.equal(counted[1]?.count, 1);
   });
 
+  it("says in words what each count means, and only beside a count", () => {
+    const crashed: api.AppDetail = { ...healthyApp(), state: "crashed" };
+    const items = appNavItems(crashed, EXAMPLE_REQUESTS);
+    const overview = items.find((item) => item.label === "Overview");
+    const requests = items.find((item) => item.label === "Requests");
+    const noticeCount = overview?.count ?? 0;
+    assert.equal(
+      overview?.countDescription,
+      noticeCount === 1
+        ? "1 thing needs attention"
+        : `${noticeCount} things need attention`,
+    );
+    assert.equal(requests?.countDescription, "1 waiting");
+    for (const item of items.filter(
+      (candidate) => candidate.count === undefined,
+    )) {
+      assert.equal(item.countDescription, undefined, item.label);
+    }
+  });
+
+  it("uses the singular for exactly one notice", () => {
+    // A crash alone is one notice on this fixture.
+    const overview = appNavItems(
+      { ...healthyApp(), state: "crashed" },
+      [],
+    ).find((item) => item.label === "Overview");
+    assert.equal(overview?.count, 1);
+    assert.equal(overview?.countDescription, "1 thing needs attention");
+  });
+
   it("shows no requests count until the requests have been fetched", () => {
     const items = appNavItems(healthyApp(), null);
     assert.equal(

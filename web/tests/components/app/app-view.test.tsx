@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDeploymentsPage } from "@/components/app/pages/deployments-page";
 import { AppOverviewPage } from "@/components/app/pages/overview-page";
 import { AppView } from "@/components/app/app-view";
+import { useAppDisplayName } from "@/hooks/use-app-display-name";
+import { AppDetail } from "@/lib/api";
 import { jsonResponse, stubFetch } from "../../support/fake-fetch";
 import type { RecordedCall } from "../../support/fake-fetch";
 import { readExample } from "../../support/contract-examples";
@@ -52,7 +54,37 @@ afterEach(() => {
   pathname = "/app/";
 });
 
+/** Reads the name the top bar's breadcrumb would show for the app. */
+function BreadcrumbNameProbe() {
+  const name = useAppDisplayName("sales");
+  return <p data-testid="breadcrumb-name">{name ?? "unknown"}</p>;
+}
+
 describe("AppView", () => {
+  it("hands the app's display name to the top bar's breadcrumb once the app answers", async () => {
+    // A name no other test uses, so only this answer can have set it.
+    const renamed = {
+      ...AppDetail.parse(readExample("AppDetail")),
+      display_name: "Sales, renamed by this answer",
+    };
+    appAnswer = () => jsonResponse(200, renamed);
+    appCalls = 0;
+    stubFetch(route);
+    render(
+      <>
+        <AppView slug="sales">
+          <AppOverviewPage />
+        </AppView>
+        <BreadcrumbNameProbe />
+      </>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("breadcrumb-name")).toHaveTextContent(
+        "Sales, renamed by this answer",
+      );
+    });
+  });
+
   it("shows the app's name, its sections and the page that was asked for, once the app answers", async () => {
     appAnswer = () => jsonResponse(200, readExample("AppDetail"));
     setup();

@@ -58,7 +58,23 @@ export interface AppNavItem {
   icon: LucideIcon;
   /** Left out when there is nothing to do there. */
   count?: number;
+  /** What the count means in words, for screen readers; present exactly when `count` is. */
+  countDescription?: string;
 }
+
+/** "1 thing needs attention", "3 things need attention": the Overview count in words. */
+function attentionDescription(count: number): string {
+  return count === 1
+    ? "1 thing needs attention"
+    : `${count} things need attention`;
+}
+
+const COUNT_DESCRIPTION: Partial<
+  Record<AppSection, (count: number) => string>
+> = {
+  overview: attentionDescription,
+  requests: (count) => `${count} waiting`,
+};
 
 /** Requests of this app that wait for an answer (settings and delegation; the register request is the launcher's). */
 export function pendingChangeRequestCount(
@@ -94,6 +110,12 @@ export function appNavItems(
       icon: APP_SECTION_ICON[section],
     };
     const count = counts[section] ?? 0;
-    return [count === 0 ? item : { ...item, count }];
+    if (count === 0) return [item];
+    const describe = COUNT_DESCRIPTION[section];
+    return [
+      describe === undefined
+        ? { ...item, count }
+        : { ...item, count, countDescription: describe(count) },
+    ];
   });
 }

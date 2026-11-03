@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { getApp, getMe, listApps, listRequests } from "@/lib/api";
@@ -10,6 +10,7 @@ import { appPagePath, appSectionAt } from "@/lib/app/params";
 import { appNavItems } from "@/lib/app/sections";
 import { appLoadView, pollData } from "@/lib/app/view";
 import type { WriteNotice } from "@/lib/app/writes";
+import { rememberAppDisplayNames } from "@/hooks/use-app-display-name";
 import { usePoll } from "@/hooks/use-poll";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ErrorNotice } from "@/components/error-notice";
@@ -67,6 +68,16 @@ export function AppView({ slug, children }: AppViewProps) {
     intervalMs: REQUESTS_POLL_INTERVAL_MS,
     enabled: view.kind === "ready",
   });
+
+  // The top bar's breadcrumb says "Sales dashboard" instead of the slug once
+  // this page has read the name. An effect, not the render: handing the name
+  // over wakes the top bar, which must not happen while this one renders.
+  const readName = view.kind === "ready" ? view.app.display_name : null;
+  useEffect(() => {
+    if (readName !== null) {
+      rememberAppDisplayNames([{ slug, display_name: readName }]);
+    }
+  }, [slug, readName]);
 
   const [notice, setNotice] = useState<WriteNotice | null>(null);
   const section = appSectionAt(usePathname());
