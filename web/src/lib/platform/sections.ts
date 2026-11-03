@@ -21,6 +21,8 @@ export interface PlatformSidebarItem {
   icon: LucideIcon;
   /** Left out when there is nothing to do there. */
   count?: number;
+  /** What the count means in words, for screen readers and the hover title; present exactly when `count` is. */
+  countDescription?: string;
 }
 
 /** Where a deleted app's Settings page sends the person: the list of apps. */
@@ -45,7 +47,9 @@ export const PLATFORM_PAGES: readonly {
  * The sidebar of the platform area. Overview carries the number of requests
  * that wait for an answer, so an admin on any page sees that the inbox is not
  * empty; there is no count while the request list has not loaded (`null`) or
- * at zero, so a count always means something to do.
+ * at zero, so a count always means something to do. The count comes with its
+ * words, as an app's Requests count does (lib/app/sections.ts), so a screen
+ * reader hears "Overview, 3 requests waiting" and not "Overview 3".
  */
 export function platformSidebarItems(
   pendingRequests: number | null,
@@ -54,7 +58,14 @@ export function platformSidebarItems(
     page.href === PLATFORM_OVERVIEW_PATH &&
     pendingRequests !== null &&
     pendingRequests > 0
-      ? { ...page, count: pendingRequests }
+      ? {
+          ...page,
+          count: pendingRequests,
+          countDescription:
+            pendingRequests === 1
+              ? "1 request waiting"
+              : `${String(pendingRequests)} requests waiting`,
+        }
       : { ...page },
   );
 }

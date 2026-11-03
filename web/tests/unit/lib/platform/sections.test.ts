@@ -23,6 +23,12 @@ describe("platformSidebarItems", () => {
   it("counts the requests waiting on Overview, and nothing else", () => {
     const items = platformSidebarItems(3);
     assert.equal(items[0]?.count, 3);
+    // A screen reader hears the words, not "Overview 3".
+    assert.equal(items[0]?.countDescription, "3 requests waiting");
+    assert.equal(
+      platformSidebarItems(1)[0]?.countDescription,
+      "1 request waiting",
+    );
     assert.deepEqual(
       items.slice(1).map((item) => item.count),
       [undefined, undefined, undefined, undefined],
@@ -33,6 +39,10 @@ describe("platformSidebarItems", () => {
     assert.equal(platformSidebarItems(null)[0]?.count, undefined);
     assert.equal(platformSidebarItems(0)[0]?.count, undefined);
     assert.equal("count" in (platformSidebarItems(0)[0] ?? {}), false);
+    assert.equal(
+      "countDescription" in (platformSidebarItems(0)[0] ?? {}),
+      false,
+    );
   });
 });
 

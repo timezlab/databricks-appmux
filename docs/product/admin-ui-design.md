@@ -128,8 +128,9 @@ appmux's.
   no section. Loading shows skeleton lines, a failure an error with "Try again", no apps a link to the launcher. At
   390 px the bar wraps without a sideways scroll.
 - **The sidebar** (`AppSidebar`) appears inside one app and inside Platform; Apps and Dashboard are full-width pages.
-  It has a "‹ All apps" link on top, icon plus label per item, a count only where it means something to do
-  (Requests, with words for a screen reader and on hover: `countDescription`), and a collapse button that leaves
+  It has a "‹ All apps" link on top, icon plus label per item, a count only where it means something to do (an
+  app's Overview and Requests, Platform's Overview), each with its words for a screen reader and on hover
+  (`countDescription`: "3 requests waiting", never a bare "Overview 3"), and a collapse button that leaves
   icons only (kept in `localStorage`, guarded). Collapsed, the back link stacks over the collapse button and a count
   is a dot on its icon (the number stays for a screen reader and in the hover title), so nothing reaches past the
   56 px column, whatever the count (`e2e/shell.spec.ts`, "the sidebar column"). Below 768 px the column gives way to one button, "Section:
