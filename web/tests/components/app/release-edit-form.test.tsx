@@ -124,7 +124,11 @@ describe("ReleaseEditForm", () => {
 
   it("keeps the form open and offers a reload when the server answers 409", async () => {
     updateRelease.mockRejectedValue(
-      new ApiError(409, "conflict", "release 7 was deleted"),
+      new ApiError(
+        409,
+        "changed_by_others",
+        "changed by someone else, reload and retry",
+      ),
     );
     const { onClose, onReload, user } = setup();
     const name = screen.getByRole("textbox", { name: "Name" });

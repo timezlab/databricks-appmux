@@ -157,7 +157,7 @@ describe("RegisterForm", () => {
     });
   });
 
-  it("shows what the server refused, keeps the typed values and offers a reload after a conflict", async () => {
+  it("shows what the server refused and keeps the typed values; a taken slug offers no reload, since another slug is the way out", async () => {
     stubFetch(() =>
       jsonResponse(409, {
         error: { code: "slug_taken", message: "slug 'wiki' is already taken" },
@@ -173,9 +173,9 @@ describe("RegisterForm", () => {
     expect(alert).toHaveTextContent("slug 'wiki' is already taken");
     expect(screen.getByRole("textbox", { name: /^Slug/ })).toHaveValue("wiki");
     expect(onSent).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Reload" }));
-    expect(onReload).toHaveBeenCalledTimes(1);
+    expect(alert).not.toHaveTextContent(/Reload/);
+    expect(within(alert).queryByRole("button")).not.toBeInTheDocument();
+    expect(onReload).not.toHaveBeenCalled();
   });
 
   it("asks a person who cannot list the workspace to type the folder, and offers no Browse", () => {

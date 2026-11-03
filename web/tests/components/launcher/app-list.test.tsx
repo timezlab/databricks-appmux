@@ -348,7 +348,7 @@ describe("AppsSection", () => {
   it("shows the failure of the first load and reloads on request", async () => {
     const { user, onReload } = renderApps({
       status: "failed",
-      error: new ApiError(409, "conflict", "The list changed."),
+      error: new ApiError(409, "changed_by_others", "The list changed."),
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(

@@ -13,6 +13,7 @@ import {
   INVALID_RESPONSE,
   NETWORK_ERROR,
 } from "@/lib/api";
+import { RELOAD_CONFLICT_CODES } from "@/lib/app/actions";
 
 export type ErrorKind =
   | "conflict"
@@ -50,15 +51,23 @@ const LAST_SERVER_ERROR = 599;
 // admin-api.md, Conventions: a stale `version` answers 409 with this message.
 const STALE_VERSION = /changed by someone else/i;
 
+/**
+ * A 409 offers a reload only when its code says the page was stale (the codes
+ * after which the app page reads the app again). Any other 409 refuses the
+ * write as it stands (a taken slug, a protected release, an Update that
+ * already retried): fresh data would show the same refusal, so the server's
+ * reason is the whole message.
+ */
 function conflict(error: ApiError): ErrorMessage {
+  const isStale = RELOAD_CONFLICT_CODES.has(error.code);
   return {
     kind: "conflict",
     heading: STALE_VERSION.test(error.message)
       ? "Changed by someone else"
       : "Not possible in the current state",
     detail: error.message,
-    hint: "Reload to see the current state, then retry.",
-    action: "reload-data",
+    hint: isStale ? "Reload to see the current state, then retry." : null,
+    action: isStale ? "reload-data" : "none",
   };
 }
 

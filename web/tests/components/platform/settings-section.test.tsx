@@ -198,7 +198,7 @@ describe("SettingsGroups", () => {
         return Promise.reject(
           new ApiError(
             409,
-            "conflict",
+            "changed_by_others",
             "memory_reserve_mb was changed by someone else",
           ),
         );

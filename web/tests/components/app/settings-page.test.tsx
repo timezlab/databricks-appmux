@@ -339,7 +339,7 @@ describe("AppSettingsPage, for a platform admin", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the server's refusal of a taken slug and keeps what was typed", async () => {
+  it("shows the server's refusal of a taken slug, offers no reload, and keeps what was typed", async () => {
     const { user } = await setup({
       patch: () =>
         errorBody(409, "slug_taken", "slug 'reports' is already taken"),
@@ -353,9 +353,17 @@ describe("AppSettingsPage, for a platform admin", () => {
       screen.getByRole("button", { name: "Yes, move to /reports/" }),
     );
 
+    const reason = await screen.findByText(/slug 'reports' is already taken/);
+    const alert = reason.closest<HTMLElement>("[role=alert]");
+    expect(alert).not.toBeNull();
+    expect(alert).toHaveTextContent(
+      "The settings were not saved: Not possible in the current state",
+    );
+    // A reload cannot free the slug: the way out is another slug.
+    expect(alert).not.toHaveTextContent(/Reload/);
     expect(
-      await screen.findByText(/slug 'reports' is already taken/),
-    ).toBeInTheDocument();
+      within(alert ?? reason).queryByRole("button"),
+    ).not.toBeInTheDocument();
     expect(slug).toHaveValue("reports");
     expect(router.replace).not.toHaveBeenCalled();
     expect(screen.queryByText(RELOAD_NOTICE_TEXT)).not.toBeInTheDocument();

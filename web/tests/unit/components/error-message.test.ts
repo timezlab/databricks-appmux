@@ -7,8 +7,10 @@ import { describeError } from "@/components/error-message";
 const STALE = "changed by someone else, reload and retry";
 
 describe("describeError: the API's statuses", () => {
-  it("409 with the stale-version message is a reload prompt", () => {
-    const message = describeError(new ApiError(409, "version_conflict", STALE));
+  it("409 with the stale-version code is a reload prompt", () => {
+    const message = describeError(
+      new ApiError(409, "changed_by_others", STALE),
+    );
     assert.equal(message.kind, "conflict");
     assert.equal(message.heading, "Changed by someone else");
     assert.equal(message.detail, STALE);
@@ -16,18 +18,74 @@ describe("describeError: the API's statuses", () => {
     assert.match(message.hint ?? "", /reload/i);
   });
 
-  it("409 for a state that forbids the action also asks for a reload, and says what the server said", () => {
+  it("409 for a state that forbids the action says what the server said, and offers no reload that could not fix it", () => {
     const message = describeError(
       new ApiError(
         409,
-        "release_active",
+        "release_protected",
         "release 3 is active and cannot be deleted",
       ),
     );
     assert.equal(message.kind, "conflict");
     assert.equal(message.heading, "Not possible in the current state");
     assert.equal(message.detail, "release 3 is active and cannot be deleted");
+    assert.equal(message.hint, null);
+    assert.equal(message.action, "none");
+  });
+
+  // The codes after which the page reads the app again (`RELOAD_CONFLICT_CODES`):
+  // the page held something the server no longer does, so a reload is the fix.
+  it.each([
+    "changed_by_others",
+    "app_missing",
+    "not_pending",
+    "request_pending",
+  ])("409 %s offers a reload of the page's data", (code) => {
+    const message = describeError(new ApiError(409, code, "refused"));
     assert.equal(message.action, "reload-data");
+    assert.equal(message.hint, "Reload to see the current state, then retry.");
+  });
+
+  // A 409 that refuses the write as it stands (contracts/admin-api.md): fresh
+  // data would show the same refusal, so the notice offers no reload.
+  it.each([
+    "slug_taken",
+    "too_many_pending",
+    "lock_limit_reached",
+    "in_use",
+    "no_release",
+    "release_protected",
+    "release_in_progress",
+    "requirements_missing",
+    "shared_sp_not_allowed",
+    "already_delegated",
+    "not_delegated",
+    "requester_not_admin",
+    "row_exists",
+    "conflict",
+  ])(
+    "409 %s shows the server's reason with no reload hint and no action",
+    (code) => {
+      const message = describeError(
+        new ApiError(409, code, "refused as it stands"),
+      );
+      assert.equal(message.kind, "conflict");
+      assert.equal(message.detail, "refused as it stands");
+      assert.equal(message.hint, null);
+      assert.equal(message.action, "none");
+    },
+  );
+
+  it("keeps the Changed by someone else heading for an Update conflict, without a reload", () => {
+    const message = describeError(
+      new ApiError(
+        409,
+        "conflict",
+        "'sales' was changed by someone else while this Update was saved; press Update again",
+      ),
+    );
+    assert.equal(message.heading, "Changed by someone else");
+    assert.equal(message.action, "none");
   });
 
   it("recognises the stale message whatever the code and the case", () => {
