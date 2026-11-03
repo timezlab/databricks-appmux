@@ -4,7 +4,7 @@
 the source folder of an app instead of typing its path. It is read with the person's own token
 (scope ``workspace.workspace:read``), exactly as the Update flow reads the folder later, so the
 browser shows what the Update will be able to read and nothing more. It writes nothing and records
-nothing (``workspace.browse``: any visitor with a token).
+nothing (``workspace.browse``: a platform admin or a manager of some app, with a token).
 
 **Roots.** Without a ``path`` the answer is the two places a person starts from, ``My folder``
 (``/Workspace/Users/<their e-mail>``) and ``Shared``, and nothing is called upstream.

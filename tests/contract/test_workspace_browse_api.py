@@ -4,7 +4,9 @@ The route runs behind the real guard and authorizer on the in-memory registry, a
 is an ``httpx.MockTransport`` behind the real ``WorkspaceHttpApi``, so the call it makes (path,
 query, bearer token) is the one the platform would receive. What is pinned:
 
-* who may browse: any visitor with a token, a person with no grant included; nobody without an
+* who may browse: a platform admin or a person who manages at least one app (a visitor who manages
+  none is refused before anything is called: a child's page script runs with the visitor's
+  identity, so the wider the route, the wider what a malicious child can list); nobody without an
   identity; a request with no token is ``403 user_token_missing``, the roots included;
 * the roots, which call nothing upstream;
 * a folder: the call is made with the visitor's own token, and the entries, markers and hints
@@ -89,13 +91,25 @@ def assert_leaks_nothing(response: httpx.Response) -> None:
 # --- who may browse -------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("email", [ALICE, BOB, CAROL, DANA, NOBODY])
-def test_any_visitor_with_a_token_may_browse_even_with_no_grant_on_any_app(email: str) -> None:
+@pytest.mark.parametrize("email", [ALICE, CAROL, DANA])
+def test_a_platform_admin_or_a_manager_of_some_app_with_a_token_may_browse(email: str) -> None:
     browser = Browser()
 
     response = browser.browse(SHARED, email)
 
     assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("email", [BOB, NOBODY])
+def test_a_person_who_manages_no_app_is_refused_and_nothing_is_called(email: str) -> None:
+    browser = Browser()
+
+    folder = browser.browse(SHARED, email)
+    roots = browser.browse(None, email)
+
+    assert (folder.status_code, roots.status_code) == (403, 403)
+    assert browser.requests == []
+    assert_leaks_nothing(folder)
 
 
 def test_a_request_with_no_identity_is_refused_and_nothing_is_called() -> None:
@@ -134,14 +148,14 @@ def test_the_roots_too_need_the_token() -> None:
 def test_no_path_returns_the_roots_of_the_visitor_and_calls_nothing(query: str) -> None:
     browser = Browser()
 
-    response = browser.browse(query=query, email=BOB)
+    response = browser.browse(query=query, email=CAROL)
 
     assert response.status_code == 200, response.text
     assert response.json() == {
         "path": None,
         "parent": None,
         "roots": [
-            {"label": "My folder", "path": f"/Workspace/Users/{BOB}"},
+            {"label": "My folder", "path": f"/Workspace/Users/{CAROL}"},
             {"label": "Shared", "path": SHARED},
         ],
         "entries": [],

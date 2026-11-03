@@ -160,8 +160,9 @@ ROWS: dict[Action, frozenset[Kind]] = {
     Action.PLATFORM_ADMIN_REMOVE: PLATFORM_ONLY,
     Action.SETTINGS_EDIT: PLATFORM_ONLY,
     Action.EGRESS_EDIT: PLATFORM_ONLY,
-    # Any signed-in visitor; the route itself needs the visitor's token (T194).
-    Action.WORKSPACE_BROWSE: EVERY_KIND,
+    # Anyone who manages some app, like the suggestions: a child's page script runs with the
+    # visitor's identity, so a visitor who manages nothing gets no listing of their folders (T194).
+    Action.WORKSPACE_BROWSE: CAN_MANAGE,
     # Anyone who can attach a resource somewhere: CAN_MANAGE on at least one app (T195).
     Action.RESOURCE_SUGGEST: CAN_MANAGE,
     # The admin UI overhaul (contracts/admin-api.md, addendum): CAN_MANAGE on any app will do.
@@ -257,11 +258,16 @@ def test_platform_actions_decide_on_the_platform_admin_not_on_the_app(action: Ac
     )
 
 
-def test_workspace_browse_allows_any_visitor_whatever_the_app_slug() -> None:
-    for kind in Kind:
+def test_workspace_browse_reads_every_app_not_the_slug_it_is_given() -> None:
+    for kind in (Kind.CAN_MANAGE, Kind.GROUP_MANAGER, Kind.OWNER, Kind.PLATFORM_ADMIN):
+        assert decide(kind, Action.WORKSPACE_BROWSE, app="nope").allowed, kind
+
+
+def test_workspace_browse_denies_a_visitor_who_manages_no_app() -> None:
+    for kind in (Kind.NO_GRANT, Kind.CAN_USE, Kind.EVERYONE, Kind.GROUP_MEMBER):
         for app in (None, SALES, "nope"):
             assert decide(kind, Action.WORKSPACE_BROWSE, app=app) == Decision(
-                True, Reason.ANY_VISITOR, None
+                False, Reason.NO_MANAGED_APP, None
             ), (kind, app)
 
 

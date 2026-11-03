@@ -256,8 +256,6 @@ def _decide(
 
     if requirement is Requirement.PLATFORM_CAN_MANAGE:
         return _platform_decision(email, data, groups)
-    if requirement is Requirement.ANY_VISITOR:
-        return Decision(True, Reason.ANY_VISITOR, None)
     if requirement is Requirement.ANY_APP_MANAGER:
         return _any_app_manager_decision(email, data, groups)
     if requirement is Requirement.APP_CAN_MANAGE_OR_NO_APP and app is None:

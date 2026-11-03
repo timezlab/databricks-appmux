@@ -82,8 +82,6 @@ class Requirement(StrEnum):
     # The request kinds: CAN_MANAGE on the app named, or any visitor when no app is named
     # (a `register` request has no app yet).
     APP_CAN_MANAGE_OR_NO_APP = "app_can_manage_or_no_app"
-    # Any visitor the proxy identified. A route that also needs the visitor's token checks that.
-    ANY_VISITOR = "any_visitor"
     # CAN_MANAGE on at least one app (a platform admin holds it on every app): the people who can
     # attach a resource somewhere. The slug passed with the action is not read.
     ANY_APP_MANAGER = "any_app_manager"
@@ -128,7 +126,7 @@ ACTION_REQUIREMENTS: Final[Mapping[Action, Requirement]] = MappingProxyType(
         Action.PLATFORM_ADMIN_REMOVE: Requirement.PLATFORM_CAN_MANAGE,
         Action.SETTINGS_EDIT: Requirement.PLATFORM_CAN_MANAGE,
         Action.EGRESS_EDIT: Requirement.PLATFORM_CAN_MANAGE,
-        Action.WORKSPACE_BROWSE: Requirement.ANY_VISITOR,
+        Action.WORKSPACE_BROWSE: Requirement.ANY_APP_MANAGER,
         Action.RESOURCE_SUGGEST: Requirement.ANY_APP_MANAGER,
     }
 )
