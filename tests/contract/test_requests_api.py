@@ -49,8 +49,10 @@ REGISTER_PAYLOAD: Final[Mapping[str, object]] = {
     "slug": "reports",
     "display_name": "Weekly reports",
     "source_path": "/Workspace/Shared/apps/reports",
-    "memory_budget_mb": 256,
 }
+# A ``register`` row stored before the visitor stopped typing the budget.
+LEGACY_REGISTER_PAYLOAD: Final[Mapping[str, object]] = {**REGISTER_PAYLOAD, "memory_budget_mb": 256}
+CODE_DEFAULT_BUDGET_MB: Final = 512
 
 
 class FakeRename:
@@ -75,6 +77,7 @@ class Inbox:
         shared_sp_allowed: bool = True,
         platform_writer_tokens: set[str] | None = None,
         wire_rename: bool = True,
+        default_memory_budget_mb: int | None = None,
     ) -> None:
         self.registry: StubRegistry = seeded_registry(platform_writer_tokens=platform_writer_tokens)
         self.registry.seed(
@@ -86,6 +89,16 @@ class Inbox:
                 "updated_at": NOW,
             },
         )
+        if default_memory_budget_mb is not None:
+            self.registry.seed(
+                "platform_settings",
+                {
+                    "key": "default_memory_budget_mb",
+                    "value": default_memory_budget_mb,
+                    "updated_by": DANA,
+                    "updated_at": NOW,
+                },
+            )
         self.rename = FakeRename()
         self.api = AdminApi(
             self.registry,
@@ -205,6 +218,13 @@ def test_an_invalid_request_is_refused_and_nothing_sent_comes_back() -> None:
         {"kind": "delete", "app": "sales", "payload": {}, "reason": "r"},
         {"kind": "settings", "app": "sales", "payload": {"owner": ALICE}, "reason": "r"},
         {"kind": "register", "app": "other", "payload": REGISTER_PAYLOAD, "reason": "r"},
+        # The platform sets a new app's budget: a request that names one carries an unknown field.
+        {
+            "kind": "register",
+            "app": "reports",
+            "payload": LEGACY_REGISTER_PAYLOAD,
+            "reason": "r",
+        },
     ):
         response = inbox.call("POST", "/requests", CAROL, body)
         assert error_code(response, 400) == "bad_request"
@@ -401,6 +421,36 @@ def test_approving_a_new_app_creates_it_for_the_asker_stopped_with_no_release() 
         WriteKind.APP_CONFIG_INSERT,
         WriteKind.REQUEST_ANSWER,
     )
+
+
+def test_an_approved_new_app_gets_the_budget_the_platform_default_names() -> None:
+    unset = Inbox()
+    unset.seed(1, kind="register", payload=REGISTER_PAYLOAD, app_slug=None, requested_by=GRACE)
+    row_of(unset.call("POST", "/requests/1/approve", DANA, {"reason": "the team asked"}))
+    assert unset.app("reports").memory_budget_mb == CODE_DEFAULT_BUDGET_MB
+    (unset_audit,) = unset.registry.audit_rows
+    assert unset_audit.detail["budget_mb"] == CODE_DEFAULT_BUDGET_MB
+
+    raised = Inbox(default_memory_budget_mb=768)
+    raised.seed(1, kind="register", payload=REGISTER_PAYLOAD, app_slug=None, requested_by=GRACE)
+    row_of(raised.call("POST", "/requests/1/approve", DANA, {"reason": "the team asked"}))
+    assert raised.app("reports").memory_budget_mb == 768
+    (raised_audit,) = raised.registry.audit_rows
+    assert raised_audit.detail["budget_mb"] == 768
+
+
+def test_a_pending_register_row_stored_before_the_change_is_approved_at_the_platform_default() -> (
+    None
+):
+    inbox = Inbox(default_memory_budget_mb=768)
+    inbox.seed(
+        1, kind="register", payload=LEGACY_REGISTER_PAYLOAD, app_slug=None, requested_by=GRACE
+    )
+
+    row = row_of(inbox.call("POST", "/requests/1/approve", DANA, {"reason": "the team asked"}))
+
+    assert (row.status, row.app_slug) == ("approved", "reports")
+    assert inbox.app("reports").memory_budget_mb == 768  # not the 256 its asker typed
 
 
 def test_a_slug_taken_at_approval_closes_the_request_as_denied_under_the_approving_admin() -> None:

@@ -45,6 +45,7 @@ OPTIONAL_VARIABLES = ("APPMUX_BOOTSTRAP_ADMINS", "APPMUX_UI_DIR")
 PLATFORM_SETTING_KEYS = (
     "platform_admins",
     "memory_reserve_mb",
+    "default_memory_budget_mb",
     "package_mode",
     "default_wheel_sources",
     "shared_sp_delegation_allowed",
@@ -335,6 +336,8 @@ def test_the_schema_has_exactly_the_keys_of_the_data_model() -> None:
         ("max_processes_per_child", 256),
         ("child_cpu_pin", True),
         ("attach_check_warehouse_id", None),
+        # The capacity example of the design gives each app 512 MB.
+        ("default_memory_budget_mb", 512),
         # Defaults stated in data model 4.1.
         ("shared_sp_delegation_allowed", False),
         ("max_releases_per_app", 10),
@@ -544,6 +547,18 @@ def test_warehouse_id_when_given_is_not_empty() -> None:
     )
     with pytest.raises(ValidationError):
         PlatformSettings.model_validate({"attach_check_warehouse_id": ""})
+
+
+@pytest.mark.parametrize("budget", [64, 512, 16384])
+def test_the_default_memory_budget_takes_the_range_of_an_apps_budget(budget: int) -> None:
+    settings = PlatformSettings.model_validate({"default_memory_budget_mb": budget})
+    assert settings.default_memory_budget_mb == budget
+
+
+@pytest.mark.parametrize("budget", [0, 63, 16385, 512.5, "512", True, None])
+def test_the_default_memory_budget_refuses_what_an_apps_budget_refuses(budget: object) -> None:
+    with pytest.raises(ValidationError):
+        PlatformSettings.model_validate({"default_memory_budget_mb": budget})
 
 
 def test_every_key_states_its_level_of_effect() -> None:

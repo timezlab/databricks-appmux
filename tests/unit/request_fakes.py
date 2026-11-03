@@ -81,15 +81,31 @@ def make_snapshot(
     apps: Iterable[App] = (),
     requests: Iterable[PermissionRequest] = (),
     shared_sp_allowed: bool = True,
+    default_memory_budget_mb: int | None = None,
 ) -> RegistrySnapshot:
-    settings = PlatformSetting(
-        key="shared_sp_delegation_allowed", value=shared_sp_allowed, updated_by=DANA, updated_at=NOW
-    )
+    """A snapshot of the rows; ``default_memory_budget_mb`` left out means the setting is unset."""
+    settings = [
+        PlatformSetting(
+            key="shared_sp_delegation_allowed",
+            value=shared_sp_allowed,
+            updated_by=DANA,
+            updated_at=NOW,
+        )
+    ]
+    if default_memory_budget_mb is not None:
+        settings.append(
+            PlatformSetting(
+                key="default_memory_budget_mb",
+                value=default_memory_budget_mb,
+                updated_by=DANA,
+                updated_at=NOW,
+            )
+        )
     return build_snapshot(
         {
             "apps": list(apps),
             "permission_requests": list(requests),
-            "platform_settings": [settings],
+            "platform_settings": settings,
         },
         loaded_at=NOW,
     )
