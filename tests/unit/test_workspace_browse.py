@@ -214,6 +214,29 @@ def test_an_object_that_is_not_a_path_under_the_workspace_tree_is_left_out() -> 
     assert [entry.name for entry in listing.entries] == ["app.py"]
 
 
+def test_an_entry_the_next_browse_would_refuse_is_not_listed() -> None:
+    at = f"{HOME}/sales"
+    too_long = "d" * (MAX_PATH_LENGTH - len(at))  # its path is one character over the limit
+    objects = [folder(f"{at}/src"), folder(f"{at}/bad\x07name"), folder(f"{at}/{too_long}")]
+    objects += [file(f"{at}/notes\x1b[31m.txt")]
+
+    listing = listing_of(at, objects, EMAIL)
+
+    assert [entry.name for entry in listing.entries] == ["src"]
+    for entry in listing.entries:
+        assert clean_browse_path(entry.path) == entry.path
+
+
+def test_a_marker_whose_path_is_over_the_limit_still_says_what_the_folder_is() -> None:
+    # The folder itself can be opened and used as a source; only the file's own path is long.
+    at = "/Workspace/" + "d" * (MAX_PATH_LENGTH - len("/Workspace/") - len("/app.py"))
+
+    listing = listing_of(at, listing_of_names(["app.yaml"], at=at), EMAIL)
+
+    assert listing.entries == []
+    assert listing.markers == ["app.yaml"]
+
+
 def test_exactly_the_cap_is_not_truncated_and_one_more_is() -> None:
     at = f"{HOME}/sales"
 

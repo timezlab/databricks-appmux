@@ -96,16 +96,26 @@ class FolderLister(Protocol):
 
 def clean_browse_path(raw: str) -> str:
     """The folder ``raw`` names, without one trailing slash, or ``BadRequest`` ``invalid_path``."""
-    if len(raw) > MAX_PATH_LENGTH or any(
-        unicodedata.category(character) == _CONTROL_CATEGORY for character in raw
-    ):
-        raise _invalid_path()
     path = raw.removesuffix("/")
-    if not path.startswith(WORKSPACE_PATH_PREFIX):
-        raise _invalid_path()
-    if any(part in _FORBIDDEN_SEGMENTS for part in path[len(WORKSPACE_PATH_PREFIX) :].split("/")):
+    if len(raw) > MAX_PATH_LENGTH or not _is_browsable(path):
         raise _invalid_path()
     return path
+
+
+def _is_browsable(path: str) -> bool:
+    """Whether a browse accepts ``path``, given without its trailing slash.
+
+    The request's check, and the one an entry passes to be listed, so that no entry names a folder
+    the next call would refuse.
+    """
+    return (
+        len(path) <= MAX_PATH_LENGTH
+        and not any(unicodedata.category(character) == _CONTROL_CATEGORY for character in path)
+        and path.startswith(WORKSPACE_PATH_PREFIX)
+        and not any(
+            part in _FORBIDDEN_SEGMENTS for part in path[len(WORKSPACE_PATH_PREFIX) :].split("/")
+        )
+    )
 
 
 def _invalid_path() -> BadRequest:
@@ -143,12 +153,17 @@ def roots_listing(email: str) -> WorkspaceListing:
 
 
 def listing_of(path: str, objects: Iterable[WorkspaceObject], email: str) -> WorkspaceListing:
-    """The answer for the folder ``path`` holding ``objects`` (the platform's listing of it)."""
+    """The answer for the folder ``path`` holding ``objects`` (the platform's listing of it).
+
+    An object whose own path a browse would refuse (too long, a control character) is not listed,
+    but its name still counts as a marker: the folder holds it, and the folder can be used.
+    """
+    named = [entry for item in objects if (entry := _entry_of(item)) is not None]
     entries = sorted(
-        (entry for item in objects if (entry := _entry_of(item)) is not None),
+        (entry for entry in named if _is_browsable(entry.path)),
         key=lambda entry: (entry.kind != "folder", entry.name.casefold(), entry.name),
     )
-    file_names = {entry.name for entry in entries if entry.kind == "file"}
+    file_names = {entry.name for entry in named if entry.kind == "file"}
     markers = [marker for marker in _MARKER_FILES if marker in file_names]
     runtime_hint = _runtime_hint_of(markers)
     return WorkspaceListing(
