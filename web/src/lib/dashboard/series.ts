@@ -1,15 +1,17 @@
 /**
- * Turns the rows of `GET /metrics` into what the dashboard shows: one slot per
- * minute of the window, buckets of several minutes when a long window has more
- * minutes than a chart has columns, sums and peaks over the window, and
- * percentiles read from the latency histogram. Pure functions over the
- * `MetricsRow` of the contract (admin-api.md, design 10.2, data model 4.8).
+ * Turns the rows of `GET /metrics` into what the dashboard shows: buckets on
+ * UTC boundaries, as many as a chart has columns (one per minute or per step
+ * while they fit, wider ones for a long window), sums and peaks over the
+ * window, and percentiles read from the latency histogram. Pure functions over
+ * the `MetricsRow` of the contract (admin-api.md, design 10.2, data model 4.8).
+ * A row is one step (1, 5 or 15 minutes, `minute` its start); a step the window
+ * cuts keeps its start, so it may begin before the window.
  *
  * Rows of one series (one app, or `_platform`) go in; mixing series in one call
  * would add them together.
  */
 import type { MetricsRow } from "@/lib/api/schemas";
-import { MAX_WINDOW_MINUTES, PLATFORM_APP_SLUG } from "./scope";
+import { MAX_WINDOW_MINUTES } from "./scope";
 import { formatCount, formatDurationMs, parseTime } from "@/lib/format";
 
 export const MINUTE_MS = 60_000;
@@ -90,8 +92,8 @@ export interface Domain {
 /**
  * The window the answer says it applied (`from` moves forward when the answer
  * was cut, so this is the window to draw, not the one asked for). `null` when
- * the answer has no usable window. A window longer than the API allows keeps
- * its newest minutes: a chart of more columns than that could not be read.
+ * the answer has no usable window. A window longer than the API allows (7 days)
+ * keeps its newest minutes.
  */
 export function windowDomain(from: string, to: string): Domain | null {
   const fromMs = parseTime(from);
@@ -110,73 +112,153 @@ function rowMinuteMs(row: MetricsRow): number | null {
   return ms === null ? null : floorToMinute(ms);
 }
 
-/** The rows whose minute lies in the domain, oldest first. */
+/**
+ * The rows whose step reaches into the domain, oldest first: a step that
+ * starts before the window but ends inside it is the cut first step.
+ */
 export function rowsInDomain(
   rows: readonly MetricsRow[],
   domain: Domain,
+  stepMinutes: number = 1,
 ): MetricsRow[] {
+  const firstMs = domain.startMs - stepMinutes * MINUTE_MS;
   const inside: { row: MetricsRow; ms: number }[] = [];
   for (const row of rows) {
     const ms = rowMinuteMs(row);
-    if (ms !== null && ms >= domain.startMs && ms < domain.endMs) {
+    if (ms !== null && ms > firstMs && ms < domain.endMs) {
       inside.push({ row, ms });
     }
   }
   return inside.toSorted((a, b) => a.ms - b.ms).map((entry) => entry.row);
 }
 
-/**
- * The rows of each series, oldest first. A `Map`, because a slug comes from the
- * network and an object keyed by it would treat `__proto__` as more than text.
- */
-export function groupBySlug(
-  rows: readonly MetricsRow[],
-): Map<string, MetricsRow[]> {
-  const groups = new Map<string, MetricsRow[]>();
-  for (const row of rows) {
-    const group = groups.get(row.app_slug);
-    if (group === undefined) groups.set(row.app_slug, [row]);
-    else group.push(row);
-  }
-  for (const [slug, group] of groups) {
-    groups.set(
-      slug,
-      group.toSorted((a, b) => (rowMinuteMs(a) ?? 0) - (rowMinuteMs(b) ?? 0)),
-    );
-  }
-  return groups;
-}
-
 // --------------------------------------------------------------- buckets
 
-/** Bucket widths, in minutes, a long window may use; each divides an hour. */
-export const BUCKET_MINUTE_CHOICES = [1, 2, 5, 10, 15, 20, 30, 60] as const;
-/** The most columns a chart draws: a column stays about 8 px wide in the 640 px chart. */
+/**
+ * Bucket widths, in minutes, a chart may use. Each divides a day, so a bucket
+ * on a UTC boundary holds whole steps of 1, 5 or 15 minutes when its width is a
+ * multiple of the step.
+ */
+export const BUCKET_MINUTE_CHOICES = [
+  1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 360, 720, 1440,
+] as const;
+/** The most columns a chart draws: a column stays about 7 px wide in the 512 px chart. */
 export const MAX_COLUMNS = 72;
 
-/** One minute per column while they fit, else the narrowest bucket that makes them fit. */
-export function chooseBucketMinutes(
-  slotCount: number,
-  maxColumns: number = MAX_COLUMNS,
-): number {
-  const choices = BUCKET_MINUTE_CHOICES;
-  for (const size of choices) {
-    if (Math.ceil(slotCount / size) <= maxColumns) return size;
-  }
-  return choices[choices.length - 1] ?? 1;
+/** Where the buckets of a domain lie: `count` buckets of `bucketMinutes`, the first starting at `firstStartMs`. */
+export interface BucketLayout {
+  domain: Domain;
+  bucketMinutes: number;
+  firstStartMs: number;
+  count: number;
 }
 
-/** The figures of the rows that fall in one bucket: counts added, peaks maxed. */
-export interface MetricBucket {
-  /** Start of the bucket. The first bucket may start before the window (`isPartial`). */
+function layoutFor(domain: Domain, bucketMinutes: number): BucketLayout {
+  const bucketMs = bucketMinutes * MINUTE_MS;
+  const firstStartMs = Math.floor(domain.startMs / bucketMs) * bucketMs;
+  const endMs = Math.ceil(domain.endMs / bucketMs) * bucketMs;
+  return {
+    domain,
+    bucketMinutes,
+    firstStartMs,
+    count: Math.round((endMs - firstStartMs) / bucketMs),
+  };
+}
+
+/**
+ * The narrowest width, a whole number of steps, whose buckets on UTC
+ * boundaries number at most `maxColumns`: one per minute (or per step) while
+ * they fit.
+ */
+export function chooseBucketMinutes(
+  domain: Domain,
+  maxColumns: number = MAX_COLUMNS,
+  stepMinutes: number = 1,
+): number {
+  const choices = BUCKET_MINUTE_CHOICES.filter(
+    (size) => size % stepMinutes === 0,
+  );
+  for (const size of choices) {
+    if (layoutFor(domain, size).count <= maxColumns) return size;
+  }
+  return choices[choices.length - 1] ?? BUCKET_MINUTE_CHOICES[0];
+}
+
+/** The buckets of a domain for a chart of at most `maxColumns`. */
+export function bucketLayout(
+  domain: Domain,
+  maxColumns: number = MAX_COLUMNS,
+  stepMinutes: number = 1,
+): BucketLayout {
+  return layoutFor(
+    domain,
+    chooseBucketMinutes(domain, maxColumns, stepMinutes),
+  );
+}
+
+/**
+ * The bucket a row of `minuteMs` belongs to, or `null` outside the domain. A
+ * step the window cuts at its start lies in the first bucket: buckets hold
+ * whole steps.
+ */
+export function bucketIndexOf(
+  layout: BucketLayout,
+  minuteMs: number,
+): number | null {
+  if (minuteMs < layout.firstStartMs || minuteMs >= layout.domain.endMs) {
+    return null;
+  }
+  const index = Math.floor(
+    (minuteMs - layout.firstStartMs) / (layout.bucketMinutes * MINUTE_MS),
+  );
+  return index < layout.count ? index : null;
+}
+
+/** Where one bucket lies against the window. */
+export interface BucketSlot {
+  /** Start of the bucket, on a UTC boundary; the first may start before the window. */
   startMs: number;
   /** Minutes of the bucket that lie inside the window. */
   coveredMinutes: number;
+  /** The window cuts the bucket: the first starts before it, or the newest is still filling. */
+  isPartial: boolean;
+}
+
+export function bucketSlots(layout: BucketLayout): BucketSlot[] {
+  const bucketMs = layout.bucketMinutes * MINUTE_MS;
+  return Array.from({ length: layout.count }, (_, index) => {
+    const startMs = layout.firstStartMs + index * bucketMs;
+    const coveredMs =
+      Math.min(startMs + bucketMs, layout.domain.endMs) -
+      Math.max(startMs, layout.domain.startMs);
+    const coveredMinutes = Math.round(coveredMs / MINUTE_MS);
+    return {
+      startMs,
+      coveredMinutes,
+      isPartial: coveredMinutes < layout.bucketMinutes,
+    };
+  });
+}
+
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 1440;
+
+/** "5-minute", "3-hour", "1-day": the width of a bucket, as in "5-minute totals". */
+export function stepText(minutes: number): string {
+  if (minutes % MINUTES_PER_DAY === 0) {
+    return `${minutes / MINUTES_PER_DAY}-day`;
+  }
+  if (minutes % MINUTES_PER_HOUR === 0) {
+    return `${minutes / MINUTES_PER_HOUR}-hour`;
+  }
+  return `${minutes}-minute`;
+}
+
+/** The figures of the rows that fall in one bucket: counts added, peaks maxed. */
+export interface MetricBucket extends BucketSlot {
   /** Rows found: 0 means no data (a stopped app, or a minute that was never written). */
   reportedMinutes: number;
   hasData: boolean;
-  /** The bucket reaches before the window starts, so it holds fewer minutes than the others. */
-  isPartial: boolean;
   requests: number;
   r2xx: number;
   r3xx: number;
@@ -190,6 +272,9 @@ export interface MetricBucket {
   /** `_platform` rows only; `null` in a bucket of an app's rows. */
   memUsedMbMax: number | null;
   memLimitMb: number | null;
+  /** `_platform` rows only: the newest counts in the bucket (gauges, like the server's steps). */
+  childrenRunning: number | null;
+  childrenRegistered: number | null;
   latHist: number[];
 }
 
@@ -215,58 +300,47 @@ function emptyHistogram(): number[] {
 }
 
 /**
- * One bucket per `bucketMinutes` of the domain, ending at the domain's end so
- * the newest bucket is always whole. Minutes with no row stay empty buckets
- * (`hasData: false`): a gap is not drawn as a zero. A row outside the domain is
- * ignored.
+ * One bucket per `bucketMinutes` on UTC boundaries over the domain. Minutes
+ * with no row stay empty buckets (`hasData: false`): a gap is not drawn as a
+ * zero. A row outside the domain is ignored.
  */
 export function bucketRows(
   rows: readonly MetricsRow[],
   domain: Domain,
   maxColumns: number = MAX_COLUMNS,
+  stepMinutes: number = 1,
 ): BucketedSeries {
-  const slotCount = Math.round((domain.endMs - domain.startMs) / MINUTE_MS);
-  const bucketMinutes = chooseBucketMinutes(slotCount, maxColumns);
-  const bucketMs = bucketMinutes * MINUTE_MS;
-  const bucketCount = Math.ceil(slotCount / bucketMinutes);
-  const firstStartMs = domain.endMs - bucketCount * bucketMs;
-
-  const buckets: MetricBucket[] = Array.from(
-    { length: bucketCount },
-    (_, index) => {
-      const startMs = firstStartMs + index * bucketMs;
-      const coveredMs =
-        Math.min(startMs + bucketMs, domain.endMs) -
-        Math.max(startMs, domain.startMs);
-      const coveredMinutes = Math.round(coveredMs / MINUTE_MS);
-      return {
-        startMs,
-        coveredMinutes,
-        reportedMinutes: 0,
-        hasData: false,
-        isPartial: coveredMinutes < bucketMinutes,
-        requests: 0,
-        r2xx: 0,
-        r3xx: 0,
-        r4xx: 0,
-        r5xx: 0,
-        upstreamErrors: 0,
-        limited: 0,
-        egressDropped: 0,
-        restarts: 0,
-        rssMbMax: 0,
-        memUsedMbMax: null,
-        memLimitMb: null,
-        latHist: emptyHistogram(),
-      };
-    },
+  const layout = bucketLayout(domain, maxColumns, stepMinutes);
+  const buckets: MetricBucket[] = bucketSlots(layout).map((slot) => ({
+    ...slot,
+    reportedMinutes: 0,
+    hasData: false,
+    requests: 0,
+    r2xx: 0,
+    r3xx: 0,
+    r4xx: 0,
+    r5xx: 0,
+    upstreamErrors: 0,
+    limited: 0,
+    egressDropped: 0,
+    restarts: 0,
+    rssMbMax: 0,
+    memUsedMbMax: null,
+    memLimitMb: null,
+    childrenRunning: null,
+    childrenRegistered: null,
+    latHist: emptyHistogram(),
+  }));
+  const newestChildrenMs = new Array<number>(buckets.length).fill(
+    Number.NEGATIVE_INFINITY,
   );
 
   for (const row of rows) {
     const minuteMs = rowMinuteMs(row);
     if (minuteMs === null) continue;
-    if (minuteMs < domain.startMs || minuteMs >= domain.endMs) continue;
-    const bucket = buckets[Math.floor((minuteMs - firstStartMs) / bucketMs)];
+    const index = bucketIndexOf(layout, minuteMs);
+    if (index === null) continue;
+    const bucket = buckets[index];
     if (bucket === undefined) continue;
     bucket.reportedMinutes += 1;
     bucket.hasData = true;
@@ -282,9 +356,15 @@ export function bucketRows(
     bucket.rssMbMax = Math.max(bucket.rssMbMax, row.rss_mb_max);
     bucket.memUsedMbMax = maxOrNull(bucket.memUsedMbMax, row.mem_used_mb);
     bucket.memLimitMb = maxOrNull(bucket.memLimitMb, row.mem_limit_mb);
+    const newestMs = newestChildrenMs[index] ?? Number.NEGATIVE_INFINITY;
+    if (row.children_running !== null && minuteMs >= newestMs) {
+      newestChildrenMs[index] = minuteMs;
+      bucket.childrenRunning = row.children_running;
+      bucket.childrenRegistered = row.children_registered;
+    }
     addHistogram(bucket.latHist, row.lat_hist);
   }
-  return { bucketMinutes, buckets };
+  return { bucketMinutes: layout.bucketMinutes, buckets };
 }
 
 // --------------------------------------------------------------- summary
@@ -294,7 +374,7 @@ export interface SeriesSummary {
   reportedMinutes: number;
   firstMinuteMs: number | null;
   lastMinuteMs: number | null;
-  /** Minutes with no row between the first and the last row. Minutes before the first or after the last are not gaps: the app was not running yet, or its newest row is not written yet. */
+  /** Minutes of the steps with no row between the first and the last row. Steps before the first or after the last are not gaps: the app was not running yet, or its newest row is not written yet. */
   gapMinutes: number;
   requests: number;
   r2xx: number;
@@ -330,7 +410,11 @@ function addOrNull(current: number | null, next: number | null): number | null {
   return (current ?? 0) + next;
 }
 
-export function summarizeRows(rows: readonly MetricsRow[]): SeriesSummary {
+/** Totals and peaks of the rows; each row is one step of `stepMinutes`. */
+export function summarizeRows(
+  rows: readonly MetricsRow[],
+  stepMinutes: number = 1,
+): SeriesSummary {
   const summary: SeriesSummary = {
     reportedMinutes: 0,
     firstMinuteMs: null,
@@ -408,14 +492,20 @@ export function summarizeRows(rows: readonly MetricsRow[]): SeriesSummary {
     }
   }
 
-  summary.reportedMinutes = minutes.size;
+  summary.reportedMinutes = minutes.size * stepMinutes;
   if (minutes.size > 0) {
-    const first = Math.min(...minutes);
-    const last = Math.max(...minutes);
+    // A loop, not `Math.min(...minutes)`: a week of rows is a lot of arguments.
+    let first = Number.POSITIVE_INFINITY;
+    let last = Number.NEGATIVE_INFINITY;
+    for (const minute of minutes) {
+      first = Math.min(first, minute);
+      last = Math.max(last, minute);
+    }
+    const stepMs = stepMinutes * MINUTE_MS;
     summary.firstMinuteMs = first;
     summary.lastMinuteMs = last;
     summary.gapMinutes =
-      Math.round((last - first) / MINUTE_MS) + 1 - minutes.size;
+      (Math.round((last - first) / stepMs) + 1 - minutes.size) * stepMinutes;
   }
   return summary;
 }
@@ -444,46 +534,4 @@ export function dropsByRule(rows: readonly MetricsRow[]): RuleDrops[] {
       (a, b) =>
         b.count - a.count || (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0),
     );
-}
-
-// ------------------------------------------------------------ comparison
-
-/** One app over the window, for the comparison table. */
-export interface AppComparisonRow {
-  slug: string;
-  requests: number;
-  r5xx: number;
-  upstreamErrors: number;
-  p50Bucket: number | null;
-  p95Bucket: number | null;
-  rssMbMax: number;
-  egressDropped: number;
-  restarts: number;
-  reportedMinutes: number;
-}
-
-/** Every app's totals, busiest first and then by slug; the platform row is not an app. */
-export function appComparison(rows: readonly MetricsRow[]): AppComparisonRow[] {
-  const table: AppComparisonRow[] = [];
-  for (const [slug, group] of groupBySlug(rows)) {
-    if (slug === PLATFORM_APP_SLUG) continue;
-    const summary = summarizeRows(group);
-    table.push({
-      slug,
-      requests: summary.requests,
-      r5xx: summary.r5xx,
-      upstreamErrors: summary.upstreamErrors,
-      p50Bucket: percentileBucket(summary.latHist, 50),
-      p95Bucket: percentileBucket(summary.latHist, 95),
-      rssMbMax: summary.rssMbMax,
-      egressDropped: summary.egressDropped,
-      restarts: summary.restarts,
-      reportedMinutes: summary.reportedMinutes,
-    });
-  }
-  return table.toSorted(
-    (a, b) =>
-      b.requests - a.requests ||
-      (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0),
-  );
 }

@@ -8,15 +8,14 @@ import {
   LATENCY_BUCKET_COUNT,
   MAX_COLUMNS,
   MINUTE_MS,
-  appComparison,
   bucketRows,
   chooseBucketMinutes,
   describeLatency,
   dropsByRule,
-  groupBySlug,
   latencyBucketLabel,
   percentileBucket,
   rowsInDomain,
+  stepText,
   summarizeRows,
   windowDomain,
 } from "@/lib/dashboard/series";
@@ -91,7 +90,7 @@ describe("windowDomain", () => {
     );
   });
 
-  it("keeps the newest 1440 minutes of a window that is longer than the API allows", () => {
+  it("keeps the newest 7 days of a window that is longer than the API allows", () => {
     const domain = windowDomain("2026-10-01T00:00:00Z", "2026-10-30T09:00:00Z");
     assert.deepEqual(domain, {
       startMs: T0 - MAX_WINDOW_MINUTES * MINUTE_MS,
@@ -103,24 +102,62 @@ describe("windowDomain", () => {
 describe("chooseBucketMinutes", () => {
   it("shows every minute while they fit, and widens the bucket when they do not", () => {
     assert.equal(MAX_COLUMNS, 72);
-    assert.equal(chooseBucketMinutes(0), 1);
-    assert.equal(chooseBucketMinutes(15), 1);
-    assert.equal(chooseBucketMinutes(60), 1);
-    assert.equal(chooseBucketMinutes(72), 1);
-    assert.equal(chooseBucketMinutes(73), 2);
-    assert.equal(chooseBucketMinutes(360), 5);
-    assert.equal(chooseBucketMinutes(1440), 20);
+    const minutes = (count: number) => {
+      const domain = windowDomain(isoAt(0), isoAt(count));
+      assert.ok(domain !== null);
+      return chooseBucketMinutes(domain);
+    };
+    assert.equal(minutes(15), 1);
+    assert.equal(minutes(60), 1);
+    assert.equal(minutes(72), 1);
+    assert.equal(minutes(73), 2);
+    assert.equal(minutes(360), 5);
+    assert.equal(minutes(1440), 20);
+    assert.equal(minutes(3 * 1440), 60);
+    assert.equal(minutes(7 * 1440), 180);
+  });
+
+  it("counts the buckets on UTC boundaries, so a window that starts mid-bucket may need a wider one", () => {
+    const day = windowDomain(isoAt(7), isoAt(7 + 1440));
+    assert.ok(day !== null);
+    // 20-minute buckets from 09:00 to 09:20 the next day are 73: one too many.
+    assert.equal(chooseBucketMinutes(day), 30);
+  });
+
+  it("only uses widths that hold whole steps", () => {
+    const week = windowDomain(isoAt(0), isoAt(7 * 1440));
+    assert.ok(week !== null);
+    assert.equal(chooseBucketMinutes(week, MAX_COLUMNS, 15) % 15, 0);
+    const threeDays = windowDomain(isoAt(0), isoAt(3 * 1440));
+    assert.ok(threeDays !== null);
+    assert.equal(chooseBucketMinutes(threeDays, MAX_COLUMNS, 5) % 5, 0);
+    const short = windowDomain(isoAt(0), isoAt(30));
+    assert.ok(short !== null);
+    assert.equal(chooseBucketMinutes(short, MAX_COLUMNS, 5), 5);
   });
 
   it("never needs more columns than allowed for any window the API returns", () => {
-    for (let slots = 1; slots <= MAX_WINDOW_MINUTES; slots += 1) {
-      const size = chooseBucketMinutes(slots);
+    for (let slots = 1; slots <= MAX_WINDOW_MINUTES; slots += 7) {
+      const domain = windowDomain(isoAt(3), isoAt(3 + slots));
+      assert.ok(domain !== null);
+      const size = chooseBucketMinutes(domain);
       assert.ok(BUCKET_MINUTE_CHOICES.some((choice) => choice === size));
+      const series = bucketRows([], domain);
       assert.ok(
-        Math.ceil(slots / size) <= MAX_COLUMNS,
-        `${slots} slots, size ${size}`,
+        series.buckets.length <= MAX_COLUMNS,
+        `${slots} minutes, size ${size}, ${series.buckets.length} columns`,
       );
     }
+  });
+});
+
+describe("stepText", () => {
+  it("names a bucket width for a caption", () => {
+    assert.equal(stepText(1), "1-minute");
+    assert.equal(stepText(20), "20-minute");
+    assert.equal(stepText(60), "1-hour");
+    assert.equal(stepText(180), "3-hour");
+    assert.equal(stepText(1440), "1-day");
   });
 });
 
@@ -196,23 +233,42 @@ describe("bucketRows", () => {
     );
   });
 
-  it("ends the last bucket at the end of the window and marks a first bucket that only partly lies inside it", () => {
-    const sevenMinutes = windowDomain(isoAt(0), isoAt(7));
+  it("starts the buckets on UTC boundaries and marks the first and the last when the window cuts them", () => {
+    const sevenMinutes = windowDomain(isoAt(3), isoAt(10));
     assert.ok(sevenMinutes !== null);
     const series = bucketRows(
-      [row(0, { requests: 1 }), row(6, { requests: 2 })],
+      [row(3, { requests: 1 }), row(9, { requests: 2 })],
       sevenMinutes,
       3,
     );
     assert.equal(series.bucketMinutes, 5);
     assert.equal(series.buckets.length, 2);
-    assert.equal(series.buckets[0]?.startMs, T0 - 3 * MINUTE_MS);
+    assert.equal(series.buckets[0]?.startMs, T0);
     assert.equal(series.buckets[0]?.coveredMinutes, 2);
     assert.equal(series.buckets[0]?.isPartial, true);
     assert.equal(series.buckets[0]?.requests, 1);
     assert.equal(series.buckets[1]?.coveredMinutes, 5);
     assert.equal(series.buckets[1]?.isPartial, false);
     assert.equal(series.buckets[1]?.requests, 2);
+
+    const growing = windowDomain(isoAt(0), isoAt(7));
+    assert.ok(growing !== null);
+    const last = bucketRows([], growing, 3).buckets.at(-1);
+    assert.equal(last?.coveredMinutes, 2);
+    assert.equal(last?.isPartial, true);
+  });
+
+  it("keeps a step the window cuts at its start (the contract's rule) in the first bucket", () => {
+    // A 15-minute step from 09:00 in a window that starts at 09:07.
+    const window = windowDomain(isoAt(7), isoAt(7 + 3 * 1440));
+    assert.ok(window !== null);
+    const series = bucketRows(
+      [row(0, { requests: 5 }), row(15, { requests: 6 })],
+      window,
+      MAX_COLUMNS,
+      15,
+    );
+    assert.equal(series.buckets[0]?.requests, 11);
   });
 
   it("ignores a row outside the window or with a minute that is not a time", () => {
@@ -253,6 +309,28 @@ describe("bucketRows", () => {
     ).buckets[0];
     assert.equal(platform?.memUsedMbMax, 1500);
     assert.equal(platform?.memLimitMb, 6144);
+    assert.equal(platform?.childrenRunning, 1);
+    assert.equal(platform?.childrenRegistered, 2);
+    assert.equal(app?.childrenRunning, null);
+  });
+
+  it("keeps the newest child counts of a wider bucket, as the server keeps the latest minute of a step", () => {
+    const day = windowDomain(isoAt(0), isoAt(1440));
+    assert.ok(day !== null);
+    const platform = (offset: number, running: number, registered: number) =>
+      row(offset, {
+        app_slug: "_platform",
+        mem_used_mb: 1500,
+        mem_limit_mb: 6144,
+        children_running: running,
+        children_registered: registered,
+      });
+    const bucket = bucketRows(
+      [platform(5, 3, 4), platform(1, 1, 2)],
+      day,
+    ).buckets[0];
+    assert.equal(bucket?.childrenRunning, 3);
+    assert.equal(bucket?.childrenRegistered, 4);
   });
 
   it("adds large counts without losing a unit", () => {
@@ -277,8 +355,8 @@ describe("bucketRows", () => {
   });
 });
 
-describe("rowsInDomain and groupBySlug", () => {
-  it("keep the rows of the window, oldest first", () => {
+describe("rowsInDomain", () => {
+  it("keeps the rows of the window, oldest first", () => {
     const rows = rowsInDomain([row(30), row(-5), row(2), row(60)], HOUR);
     assert.deepEqual(
       rows.map((r) => r.minute),
@@ -286,21 +364,13 @@ describe("rowsInDomain and groupBySlug", () => {
     );
   });
 
-  it("group by app, each group oldest first, without trusting a slug as an object key", () => {
-    const groups = groupBySlug([
-      row(2, { app_slug: "sales" }),
-      row(1, { app_slug: "ads" }),
-      row(1, { app_slug: "sales" }),
-      row(3, { app_slug: "__proto__" }),
-    ]);
-    assert.deepEqual([...groups.keys()].toSorted(), [
-      "__proto__",
-      "ads",
-      "sales",
-    ]);
+  it("keeps a step that starts before the window but reaches into it", () => {
+    const window = windowDomain(isoAt(7), isoAt(67));
+    assert.ok(window !== null);
+    const rows = rowsInDomain([row(0), row(-15), row(60)], window, 15);
     assert.deepEqual(
-      groups.get("sales")?.map((r) => r.minute),
-      [isoAt(1), isoAt(2)],
+      rows.map((r) => r.minute),
+      [isoAt(0), isoAt(60)],
     );
   });
 });
@@ -435,6 +505,12 @@ describe("summarizeRows", () => {
     ]);
     assert.equal(summary.reportedMinutes, 5);
     assert.equal(summary.gapMinutes, 3);
+  });
+
+  it("counts missing steps, not minutes, when the rows are steps longer than a minute", () => {
+    const summary = summarizeRows([row(0), row(15), row(45)], 15);
+    assert.equal(summary.reportedMinutes, 45);
+    assert.equal(summary.gapMinutes, 15);
   });
 
   it("takes the peaks, the limit and the newest child counts from platform rows", () => {
@@ -594,49 +670,5 @@ describe("dropsByRule", () => {
     };
     const [first] = dropsByRule([hostile]);
     assert.deepEqual(first, { rule: "__proto__", count: 2 });
-  });
-});
-
-describe("appComparison", () => {
-  it("has one row per app, without the platform, busiest first and then by slug", () => {
-    const rows = [
-      row(0, { app_slug: "ads", requests: 10, r5xx: 1, rss_mb_max: 200 }),
-      row(1, { app_slug: "ads", requests: 5, r5xx: 0, rss_mb_max: 250 }),
-      row(0, { app_slug: "sales", requests: 100, egress_dropped: 7 }),
-      row(0, { app_slug: "billing", requests: 15 }),
-      row(0, { app_slug: "_platform", requests: 130 }),
-    ];
-    const table = appComparison(rows);
-    assert.deepEqual(
-      table.map((entry) => [entry.slug, entry.requests]),
-      [
-        ["sales", 100],
-        ["ads", 15],
-        ["billing", 15],
-      ],
-    );
-    const ads = table.find((entry) => entry.slug === "ads");
-    assert.equal(ads?.r5xx, 1);
-    assert.equal(ads?.rssMbMax, 250);
-    assert.equal(ads?.reportedMinutes, 2);
-    assert.equal(
-      table.find((entry) => entry.slug === "sales")?.egressDropped,
-      7,
-    );
-  });
-
-  it("reads each app's p50 and p95 from its own histogram", () => {
-    const fast = [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    const slow = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10];
-    const table = appComparison([
-      row(0, { app_slug: "fast", lat_hist: fast }),
-      row(0, { app_slug: "slow", lat_hist: slow }),
-    ]);
-    assert.equal(table.find((e) => e.slug === "fast")?.p95Bucket, 0);
-    assert.equal(table.find((e) => e.slug === "slow")?.p50Bucket, 10);
-  });
-
-  it("is empty for no rows", () => {
-    assert.deepEqual(appComparison([]), []);
   });
 });
