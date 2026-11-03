@@ -138,7 +138,7 @@ appmux's.
   (a modal one would inject the `<style>` the CSP refuses). Choosing an item, Escape and a click outside close it;
   every row is at least 40 px tall.
 - **The content** is one inset panel (`card`, 12 px radius, hairline border) on the page colour, 1120 px at most, left
-  aligned; forms stop at 560 px. Inside it sections are ruled, not boxed into further cards.
+  aligned. A form fills the panel (its fields sit side by side in columns of at least 18 rem, one per row on a phone); only running text stops at a reading measure (`max-w-prose`), so no strip is left empty beside a form. Inside it sections are ruled, not boxed into further cards.
 - **One geometry for every bar** (point 8): the top navigation, the sidebar items and the Variables/Packages tabs share
   one rule, a 2 px bar that is transparent at rest, muted on hover and cord on the selected one, and none of them has a
   text underline. It is the `bar-item` utility of globals.css, padding and text size included: the padding on the

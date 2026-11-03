@@ -89,7 +89,7 @@ export function DeleteAppSection({
 
   return (
     <Section title="Delete app">
-      <p className="max-w-140">
+      <p className="max-w-prose">
         Deleting stops {app.slug} and unregisters it: its route closes, and its
         configuration, releases, resources, secrets and requests are deleted
         with it. Its metrics and the audit log stay. This cannot be undone.
@@ -104,7 +104,7 @@ export function DeleteAppSection({
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="flex max-w-140 flex-col gap-4 rounded-md border-2 border-tone-danger-border bg-tone-danger-bg p-4 text-tone-danger-text"
+          className="flex flex-col gap-4 rounded-md border-2 border-tone-danger-border bg-tone-danger-bg p-4 text-tone-danger-text"
           aria-label={`Delete ${app.slug}`}
         >
           <Field

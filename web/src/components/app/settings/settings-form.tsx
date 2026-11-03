@@ -189,7 +189,7 @@ export function AppSettingsForm({
       ref={formRef}
       onSubmit={handleSubmit}
       noValidate
-      className="flex max-w-140 flex-col gap-4"
+      className="flex flex-col gap-4"
       aria-label="Settings"
     >
       <FormNotices

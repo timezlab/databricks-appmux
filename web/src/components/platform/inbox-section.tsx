@@ -322,7 +322,7 @@ function InboxCard({
         )}
       </div>
 
-      <div className="flex max-w-140 min-w-0 flex-col gap-4 border-t pt-4">
+      <div className="flex min-w-0 flex-col gap-4 border-t pt-4">
         <FormSummary errors={errors} />
         <Field
           label="Reason"

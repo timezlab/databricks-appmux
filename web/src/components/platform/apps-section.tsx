@@ -160,12 +160,12 @@ export function AppsSection({
             {arrival.detail === null ? null : <p>{arrival.detail}</p>}
           </Notice>
         )}
-        <p className="text-muted-foreground">
+        <p className="max-w-prose text-muted-foreground">
           An app&apos;s name, address, source folder, memory budget and owner
           are changed on its Settings page, and its egress rules on its Security
           page.
         </p>
-        <div className="max-w-140">
+        <div>
           <Field label="Filter apps" hint="By slug, display name or owner.">
             {(control) => (
               <Input

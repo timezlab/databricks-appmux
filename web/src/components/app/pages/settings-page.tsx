@@ -118,7 +118,7 @@ function ReadOnlySettings({
   request: ReactNode;
 }) {
   return (
-    <div className="flex max-w-140 flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <dl className="flex flex-col gap-4">
         <Fact label="Name">{app.display_name}</Fact>
         <Fact label="Slug">

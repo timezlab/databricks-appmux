@@ -102,8 +102,8 @@ export function EgressEditor({
   }
 
   return (
-    <div className={`${FORM_STACK_CLASSES} max-w-140`}>
-      <p className="text-muted-foreground">
+    <div className={FORM_STACK_CLASSES}>
+      <p className="max-w-prose text-muted-foreground">
         {scope === "global"
           ? "These rules apply to every app, after the app's own rules. "
           : "These rules are checked first for this app; the global rules come next. "}
@@ -127,7 +127,7 @@ export function EgressEditor({
       ) : null}
 
       {shown.rules.length === 0 ? (
-        <p className="text-muted-foreground">
+        <p className="max-w-prose text-muted-foreground">
           {name} is empty
           {scope === "app"
             ? ": only the global rules apply."

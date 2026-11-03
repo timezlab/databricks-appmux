@@ -126,7 +126,7 @@ export function RegisterForm({
       ref={formRef}
       onSubmit={handleSubmit}
       noValidate
-      className={`${FORM_STACK_CLASSES} max-w-140`}
+      className={FORM_STACK_CLASSES}
     >
       <p className="text-muted-foreground">
         A platform admin reviews the request. The app is registered only if they

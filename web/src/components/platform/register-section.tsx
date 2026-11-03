@@ -61,7 +61,7 @@ export function RegisterSection({ view }: { view: PlatformView }) {
   return (
     <Section title="Register an app">
       <form
-        className={`${FORM_STACK_CLASSES} max-w-140`}
+        className={FORM_STACK_CLASSES}
         onSubmit={handleSubmit}
       >
         <p className="text-muted-foreground">

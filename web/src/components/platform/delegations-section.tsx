@@ -199,7 +199,7 @@ function ReasonForm({
 
   return (
     <form
-      className={`${FORM_STACK_CLASSES} max-w-140 border-t pt-4`}
+      className={`${FORM_STACK_CLASSES} border-t pt-4`}
       onSubmit={handleSubmit}
     >
       <h3 className="wrap-break-word">{title}</h3>

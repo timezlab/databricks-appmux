@@ -94,7 +94,7 @@ export function SettingsRequestForm({
       ref={formRef}
       onSubmit={handleSubmit}
       noValidate
-      className="flex max-w-140 flex-col gap-4 border-t pt-4"
+      className="flex flex-col gap-4 border-t pt-4"
       aria-label="Request a change of settings"
     >
       <h3>Request a change of settings</h3>
