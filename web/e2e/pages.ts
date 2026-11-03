@@ -119,6 +119,18 @@ async function pressSevenDays(page: Page): Promise<void> {
   }
 }
 
+/** Withdraws the visitor's one pending request (scenario "requester"); the mock answers it closed. */
+async function withdrawPendingRequest(page: Page): Promise<void> {
+  const row = page.getByRole("row", { name: /Team wiki 2/ });
+  await row.getByRole("button", { name: /^Withdraw/ }).click();
+  // The live region's copy of the notice: the notice itself has no role.
+  await page
+    .getByRole("status")
+    .filter({ hasText: /^Withdrew your request for/ })
+    .waitFor({ timeout: READY_TIMEOUT_MS });
+  await row.getByText("Withdrawn").waitFor({ timeout: READY_TIMEOUT_MS });
+}
+
 /** Opens Browse beside the register form's source folder; the mock answers every folder with the example listing, a Node.js app. */
 async function openFolderBrowser(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Browse", exact: true }).click();
@@ -287,6 +299,17 @@ export const PAGES: readonly PageEntry[] = [
     dataText: "Your requests",
     apiCall: `${API_PREFIX}/apps`,
     scenario: "requester",
+  },
+  {
+    // The check that the page "read" apiCall is the check that Withdraw was sent and answered.
+    name: "launcher-requester-withdrawn",
+    path: `${BASE_PATH}/`,
+    status: 200,
+    heading: "Apps",
+    dataText: "Your requests",
+    apiCall: `${API_PREFIX}/requests/24/withdraw`,
+    scenario: "requester",
+    act: withdrawPendingRequest,
   },
   {
     name: "platform-memory-low",
