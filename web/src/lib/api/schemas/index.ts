@@ -52,7 +52,7 @@ export {
   AppSummary,
   AppList,
 } from "./launcher.ts";
-export { AppLogs } from "./logs.ts";
+export { AppLogs, AppLogsQuery } from "./logs.ts";
 export { MetricsQuery, MetricsRow, MetricsResponse } from "./metrics.ts";
 export {
   MetricStep,
@@ -74,7 +74,11 @@ export {
   AuditList,
 } from "./platform.ts";
 export { ResourceKey } from "./primitives.ts";
-export { PrincipalSuggestion, PrincipalList } from "./principals.ts";
+export {
+  PrincipalSuggestion,
+  PrincipalList,
+  PrincipalQuery,
+} from "./principals.ts";
 export {
   UpdateReleaseRequest,
   ReleaseSummary,
@@ -96,6 +100,7 @@ export {
   ResourceTypeList,
   ResourceSuggestion,
   ResourceSuggestionList,
+  ResourceSuggestionQuery,
 } from "./resources.ts";
 export { Principal, EnvEntry, EnvEntryRequest, ErrorBody } from "./shared.ts";
 export {
@@ -103,4 +108,5 @@ export {
   WorkspaceRoot,
   WorkspaceEntry,
   WorkspaceListing,
+  WorkspaceBrowseQuery,
 } from "./workspace.ts";

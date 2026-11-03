@@ -49,6 +49,13 @@ export const API_ROUTES = [
   "POST /platform/self-check",
   "GET /audit",
   "GET /metrics",
+  "GET /principals",
+  "GET /workspace/browse",
+  "GET /apps/{app}/logs",
+  "GET /apps/{app}/environment",
+  "GET /resources/types",
+  "GET /resources/suggestions",
+  "GET /metrics/breakdown",
 ] as const;
 
 export type ApiRoute = (typeof API_ROUTES)[number];

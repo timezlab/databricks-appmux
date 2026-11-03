@@ -331,6 +331,48 @@ const API_ROUTES: readonly ApiRoute[] = [
     status: 200,
     example: "MetricsResponse",
   },
+  {
+    method: "GET",
+    pattern: "/principals",
+    status: 200,
+    example: "PrincipalList",
+  },
+  {
+    method: "GET",
+    pattern: "/workspace/browse",
+    status: 200,
+    example: "WorkspaceListing",
+  },
+  {
+    method: "GET",
+    pattern: "/apps/{app}/logs",
+    status: 200,
+    example: "AppLogs",
+  },
+  {
+    method: "GET",
+    pattern: "/apps/{app}/environment",
+    status: 200,
+    example: "AppEnvironment",
+  },
+  {
+    method: "GET",
+    pattern: "/resources/types",
+    status: 200,
+    example: "ResourceTypeList",
+  },
+  {
+    method: "GET",
+    pattern: "/resources/suggestions",
+    status: 200,
+    example: "ResourceSuggestionList",
+  },
+  {
+    method: "GET",
+    pattern: "/metrics/breakdown",
+    status: 200,
+    example: "MetricsBreakdown",
+  },
 ];
 
 /** `{app}` matches one segment; `{path}` (a source file) spans segments. */

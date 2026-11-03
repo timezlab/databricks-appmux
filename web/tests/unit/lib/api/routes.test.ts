@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
-import { expandRoute } from "@/lib/api/routes";
+import { API_ROUTES, expandRoute } from "@/lib/api/routes";
 
 describe("expandRoute: a numeric path id", () => {
   // admin-api.md: `{id}` is a release number or a request id. Both start at 1
@@ -41,6 +41,33 @@ describe("expandRoute: a numeric path id", () => {
     assert.throws(
       () => expandRoute("POST /requests/{id}/approve", { id: Number.NaN }),
       /Invalid path segment/,
+    );
+  });
+});
+
+describe("API_ROUTES: the read routes of the admin UI", () => {
+  it("lists the seven routes after the forty-one before them, in the contract's order", () => {
+    assert.deepEqual(API_ROUTES.slice(-7), [
+      "GET /principals",
+      "GET /workspace/browse",
+      "GET /apps/{app}/logs",
+      "GET /apps/{app}/environment",
+      "GET /resources/types",
+      "GET /resources/suggestions",
+      "GET /metrics/breakdown",
+    ]);
+    assert.equal(API_ROUTES.length, 48);
+    assert.equal(new Set(API_ROUTES).size, API_ROUTES.length, "no duplicate");
+  });
+
+  it("expands the two with a path parameter", () => {
+    assert.equal(
+      expandRoute("GET /apps/{app}/logs", { app: "sales" }).url,
+      "/_appmux/api/v1/apps/sales/logs",
+    );
+    assert.equal(
+      expandRoute("GET /apps/{app}/environment", { app: "sales" }).url,
+      "/_appmux/api/v1/apps/sales/environment",
     );
   });
 });
