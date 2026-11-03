@@ -53,6 +53,13 @@ export {
 } from "./launcher.ts";
 export { MetricsQuery, MetricsRow, MetricsResponse } from "./metrics.ts";
 export {
+  MetricStep,
+  MetricsPoint,
+  MetricsSeries,
+  MetricsBreakdown,
+  MetricsBreakdownQuery,
+} from "./metrics-breakdown.ts";
+export {
   AuditQuery,
   PutSettingRequest,
   PutAdminsRequest,

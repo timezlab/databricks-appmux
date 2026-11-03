@@ -1,0 +1,153 @@
+{
+  "from": "2026-10-30T09:00:00Z",
+  "to": "2026-10-30T09:40:00Z",
+  "step": "15m",
+  "series": [
+    {
+      "app_slug": "docs",
+      "display_name": "Docs Portal",
+      "points": [
+        {
+          "minute": "2026-10-30T09:00:00Z",
+          "requests": 6120,
+          "r4xx": 41,
+          "r5xx": 3,
+          "rss_mb_max": 412,
+          "bytes_out": 78643200,
+          "egress_dropped": 0,
+          "lat_hist": [
+            310,
+            1204,
+            2210,
+            1300,
+            690,
+            260,
+            98,
+            35,
+            10,
+            3,
+            0
+          ]
+        },
+        {
+          "minute": "2026-10-30T09:15:00Z",
+          "requests": 5875,
+          "r4xx": 36,
+          "r5xx": 0,
+          "rss_mb_max": 418,
+          "bytes_out": 75497472,
+          "egress_dropped": 0,
+          "lat_hist": [
+            298,
+            1180,
+            2105,
+            1240,
+            660,
+            250,
+            96,
+            34,
+            9,
+            3,
+            0
+          ]
+        },
+        {
+          "minute": "2026-10-30T09:30:00Z",
+          "requests": 3904,
+          "r4xx": 22,
+          "r5xx": 1,
+          "rss_mb_max": 405,
+          "bytes_out": 50331648,
+          "egress_dropped": 0,
+          "lat_hist": [
+            201,
+            790,
+            1402,
+            820,
+            440,
+            170,
+            57,
+            18,
+            5,
+            1,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "app_slug": "old-reports",
+      "display_name": null,
+      "points": [
+        {
+          "minute": "2026-10-30T09:00:00Z",
+          "requests": 1210,
+          "r4xx": 12,
+          "r5xx": 30,
+          "rss_mb_max": 690,
+          "bytes_out": 12582912,
+          "egress_dropped": 4,
+          "lat_hist": [
+            20,
+            110,
+            300,
+            360,
+            240,
+            110,
+            45,
+            15,
+            6,
+            3,
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "other": [
+    {
+      "minute": "2026-10-30T09:00:00Z",
+      "requests": 802,
+      "r4xx": 5,
+      "r5xx": 0,
+      "rss_mb_max": 520,
+      "bytes_out": 4194304,
+      "egress_dropped": 0,
+      "lat_hist": [
+        60,
+        180,
+        260,
+        170,
+        80,
+        34,
+        12,
+        4,
+        2,
+        0,
+        0
+      ]
+    },
+    {
+      "minute": "2026-10-30T09:15:00Z",
+      "requests": 788,
+      "r4xx": 4,
+      "r5xx": 1,
+      "rss_mb_max": 534,
+      "bytes_out": 4063232,
+      "egress_dropped": 2,
+      "lat_hist": [
+        58,
+        176,
+        255,
+        168,
+        79,
+        34,
+        12,
+        4,
+        2,
+        0,
+        0
+      ]
+    }
+  ]
+}

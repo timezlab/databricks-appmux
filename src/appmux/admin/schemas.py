@@ -951,3 +951,36 @@ class MetricsResponse(_Body):
     to: UtcTime
     truncated: bool
     items: list[MetricsRow]
+
+
+# The steps ``GET /metrics`` and ``GET /metrics/breakdown`` add minutes up to (T193).
+MetricStep = Literal["1m", "5m", "15m", "1h"]
+
+
+class MetricsPoint(_Body):
+    """One step of a series of ``MetricsBreakdown``; ``minute`` is the start of the step."""
+
+    minute: UtcTime
+    requests: int
+    r4xx: int
+    r5xx: int
+    rss_mb_max: int
+    bytes_out: int
+    egress_dropped: int
+    lat_hist: Annotated[
+        list[int], Field(min_length=LATENCY_BUCKET_COUNT, max_length=LATENCY_BUCKET_COUNT)
+    ]
+
+
+class MetricsSeries(_Body):
+    app_slug: str
+    display_name: str | None  # null for an app that is no longer registered
+    points: list[MetricsPoint]
+
+
+class MetricsBreakdown(_Body):
+    from_: UtcTime = Field(alias="from")
+    to: UtcTime
+    step: MetricStep
+    series: list[MetricsSeries]
+    other: list[MetricsPoint] | None
