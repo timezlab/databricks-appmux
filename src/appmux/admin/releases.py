@@ -200,27 +200,30 @@ def _live_release(context: AdminContext, request: Request, slug: str) -> Release
 
 
 def _detail_response(context: AdminContext, release: Release, *, reread: bool = False) -> Response:
-    """The release as ``ReleaseDetail``; ``reread`` shows the row as the write left it."""
+    """The release as ``ReleaseDetail``; ``reread`` shows the row as the write left it.
+
+    The snapshot is read after the route's awaits, so another request may have deleted or renamed
+    the app, or deleted the release, in the meantime. That is ``404``, as for the same request a
+    moment later: a write before it is committed and audited, and repeating it changes nothing.
+    """
     snapshot = context.registry.snapshot
+    app = snapshot.app(release.app_slug)
+    if app is None:
+        raise NotFound("no such app")
     if reread:
         stored = snapshot.release(release.app_slug, release.release_no)
         if stored is None:
             raise ValueError("the release written a moment ago is not in the registry")
         release = stored
+    if release.deleted_at is not None:
+        raise NotFound("no such release")
     config = snapshot.app_config(release.app_slug)
     is_target = config is not None and config.target_release_no == release.release_no
+    # The budget of the app now: the failure hint is judged against it.
     detail = build_release_detail(
-        release, is_target=is_target, memory_budget_mb=_memory_budget_mb(context, release)
+        release, is_target=is_target, memory_budget_mb=app.memory_budget_mb
     )
     return JSONResponse(detail.model_dump(mode="json"))
-
-
-def _memory_budget_mb(context: AdminContext, release: Release) -> int:
-    """The budget of the release's app now: the failure hint is judged against it."""
-    app = context.registry.snapshot.app(release.app_slug)
-    if app is None:
-        raise ValueError("a release whose app is not in the registry has no detail to show")
-    return app.memory_budget_mb
 
 
 def _require_fresh_registry(context: AdminContext) -> None:

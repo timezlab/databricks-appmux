@@ -15,7 +15,8 @@ get wrong by accident:
   the changes (a failing change leaves no row and no audit entry).
 
 It does not emulate the deferred foreign keys of ``app_config`` (target release, own-SP keys),
-``CHECK``s the models do not repeat, or concurrency between writers.
+``CHECK``s the models do not repeat, or concurrency between writers; ``RacedRegistry`` stands for
+the one race a route must answer, another request's write committing right after the route's own.
 
 Test helpers beyond the ``Registry`` protocol: ``seed``, ``audit_rows``, ``writes``, ``go_down``
 and ``come_back``.
@@ -542,6 +543,35 @@ class StubRegistry:
                     reason=entry.reason,
                 )
             )
+        return rows
+
+
+class RacedRegistry(StubRegistry):
+    """A ``StubRegistry`` in which another request's write commits right after the route's own.
+
+    In the service a route awaits its write, and in that time another request (a delete, a rename)
+    may commit and reload the snapshot, so what the route reads afterwards is not only its own work.
+    """
+
+    def __init__(self, *, clock: Callable[[], datetime] = _utc_now) -> None:
+        super().__init__(clock=clock)
+        self._race: tuple[Change, SecretStr | None] | None = None
+
+    def after_next_write(self, change: Change, *, admin_token: SecretStr | None = None) -> None:
+        """Apply ``change`` once the next write is in (with ``admin_token`` for a platform kind)."""
+        self._race = (change, admin_token)
+
+    async def write(
+        self,
+        changes: Sequence[Change],
+        audit: Sequence[AuditEntry] = (),
+        *,
+        admin_token: SecretStr | None = None,
+    ) -> tuple[RowModel | None, ...]:
+        rows = await super().write(changes, audit, admin_token=admin_token)
+        if self._race is not None:
+            (race, race_token), self._race = self._race, None
+            await super().write([race], admin_token=race_token)
         return rows
 
 

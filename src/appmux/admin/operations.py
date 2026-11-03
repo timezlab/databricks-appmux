@@ -181,7 +181,9 @@ class OperationRoutes:
             stored = snapshot.release(slug, release_no) or activation.release
             app = snapshot.app(slug)
             if app is None:
-                raise ValueError("the app of a release activated a moment ago is gone")
+                # Deleted or renamed by another request while this one waited on its write: the
+                # activation is committed and audited, and the same request now would be a 404.
+                raise NotFound("no such app")
             detail = build_release_detail(
                 stored, is_target=True, memory_budget_mb=app.memory_budget_mb
             )

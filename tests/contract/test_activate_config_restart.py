@@ -33,9 +33,11 @@ from edge_harness import (
     FakeGroups,
     Reply,
     call,
+    seed_standard_rows,
     seeded_registry,
 )
-from stub_registry import StubRegistry
+from pydantic import SecretStr
+from stub_registry import RacedRegistry, StubRegistry
 
 from appmux.admin.api import create_admin_app
 from appmux.admin.apps import AppRoutes
@@ -44,6 +46,7 @@ from appmux.admin.operations import OperationRoutes
 from appmux.admin.schemas import AppDetail, AppStateResponse, ConfigChangeResult, ReleaseDetail
 from appmux.reconciler.app_control import RunState
 from appmux.registry.models import App, AppConfig
+from appmux.registry.protocol import Change
 from appmux.registry.writers import Identity, WriteKind
 
 pytestmark = pytest.mark.anyio
@@ -87,8 +90,8 @@ class FakeControl:
 
 
 class Harness:
-    def __init__(self) -> None:
-        self.registry: StubRegistry = seeded_registry()
+    def __init__(self, registry: StubRegistry | None = None) -> None:
+        self.registry: StubRegistry = registry if registry is not None else seeded_registry()
         self.control = FakeControl()
         self.app = create_admin_app(
             registry=self.registry,
@@ -289,6 +292,25 @@ async def test_the_keys_attached_since_make_the_same_release_activate() -> None:
     attach(harness.registry, "warehouse-id", "sql_warehouse")
 
     assert (await harness.activate(CAROL, 4)).status == 200
+
+
+async def test_an_app_deleted_right_after_the_activation_is_404_and_it_stays_recorded() -> None:
+    # The activation committed and was audited; its app is gone, so there is no release to show,
+    # and a 404 is what the same request a moment later gets. A 500 would say it failed.
+    registry = seed_standard_rows(RacedRegistry(clock=lambda: NOW))
+    harness = Harness(registry)
+    seed_release(registry, 1)
+    seed_release(registry, 2, "active")
+    seed_app_config(registry, target_release_no=2)
+    registry.after_next_write(
+        Change(WriteKind.APP_DELETE, key={"slug": "sales"}),
+        admin_token=SecretStr("another-admins-token"),
+    )
+
+    reply = await harness.activate(CAROL, 1)
+
+    assert (reply.status, error_of(reply)) == (404, ("not_found", "no such app"))
+    assert [row.action for row in registry.audit_rows] == ["release.activate"]
 
 
 @pytest.mark.parametrize("release_no", ["99", "0", "-1", "abc", "1.5"])

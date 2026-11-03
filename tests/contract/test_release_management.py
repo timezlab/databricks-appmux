@@ -22,7 +22,7 @@ it is called. Starting data: see ``edge_harness`` (``sales`` owned by alice, bob
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Final
 
 import pytest
@@ -36,10 +36,11 @@ from edge_harness import (
     FakeGroups,
     Reply,
     call,
+    seed_standard_rows,
     seeded_registry,
 )
 from pydantic import SecretStr
-from stub_registry import StubRegistry
+from stub_registry import RacedRegistry, StubRegistry
 
 from appmux.admin.api import create_admin_app
 from appmux.admin.apps import AppRoutes
@@ -49,6 +50,8 @@ from appmux.admin.schemas import ReleaseDetail
 from appmux.identity.actor import Actor
 from appmux.reconciler.ports import ChangeWriter, UpdateResult
 from appmux.registry.models import Release
+from appmux.registry.protocol import Change
+from appmux.registry.releases import soft_delete_change
 from appmux.registry.writers import Identity, WriteKind
 
 pytestmark = pytest.mark.anyio
@@ -662,3 +665,54 @@ async def test_while_the_registry_is_down_every_change_is_503_and_nothing_is_sto
     assert {error_of(reply)[0] for reply in replies} == {"registry_unavailable"}
     assert harness.is_untouched()
     assert harness.release(1).deleted_at is None
+
+
+# --- another request's write between the route's write and its answer -------------------------
+
+ANOTHER_ADMIN_TOKEN: Final = SecretStr("another-admins-token")
+DELETE_SALES: Final = Change(WriteKind.APP_DELETE, key={"slug": "sales"})
+
+
+def raced_harness() -> tuple[Harness, RacedRegistry]:
+    """Release 1 is older, 2 is locked, 3 is active and the target."""
+    registry = seed_standard_rows(RacedRegistry(clock=lambda: NOW))
+    for release_no, status in ((1, "superseded"), (2, "superseded"), (3, "active")):
+        seed_release(registry, release_no, status, locked=release_no == 2)
+    set_target(registry, 3)
+    return Harness(registry), registry
+
+
+RACED_WRITES: Final[dict[str, tuple[Callable[[Harness], Awaitable[Reply]], str]]] = {
+    "name": (lambda harness: harness.put(1, {"name": "named", "tags": []}), "release.label"),
+    "lock": (lambda harness: harness.lock(1), "release.lock"),
+    "unlock": (lambda harness: harness.unlock(2), "release.unlock"),
+}
+
+
+@pytest.mark.parametrize("route", sorted(RACED_WRITES))
+async def test_an_app_deleted_right_after_the_write_is_404_and_the_write_stays_recorded(
+    route: str,
+) -> None:
+    # The write committed and was audited; the app it changed is gone, so there is no release to
+    # show, and a 404 is what the same request a moment later gets. A 500 would say it failed.
+    harness, registry = raced_harness()
+    send, action = RACED_WRITES[route]
+    registry.after_next_write(DELETE_SALES, admin_token=ANOTHER_ADMIN_TOKEN)
+
+    reply = await send(harness)
+
+    assert (reply.status, error_of(reply)) == (404, ("not_found", "no such app"))
+    assert [row.action for row in registry.audit_rows] == [action]
+    assert registry.snapshot.app("sales") is None
+
+
+async def test_a_release_deleted_right_after_it_was_named_is_404_like_a_deleted_one() -> None:
+    harness, registry = raced_harness()
+    registry.after_next_write(
+        soft_delete_change(harness.release(1), deleted_by=ALICE, deleted_at=NOW)
+    )
+
+    reply = await harness.put(1, {"name": "named", "tags": []})
+
+    assert (reply.status, error_of(reply)) == (404, ("not_found", "no such release"))
+    assert [row.action for row in registry.audit_rows] == ["release.label"]
