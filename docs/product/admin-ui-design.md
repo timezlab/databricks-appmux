@@ -167,7 +167,7 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
 - **shadcn first.** A component that shadcn ships (Select, Popover, Command, DropdownMenu, Tabs, Tooltip, Collapsible,
   Sonner-style toast where useful) is taken from shadcn's source and adapted, not rewritten, and keeps its
   name and props, so a later shadcn update can be diffed. A native `<select>` is used for nothing a person sees
-  (point 9); `NativeSelect` stays only where a phone's own picker is the better control, and says so in a comment.
+  (point 9), so the kit has no `NativeSelect`.
 - **CSP rules for those components.** The strict CSP (no inline style attribute in prerendered HTML, no injected
   `<style>`) shapes the set: Radix `Select` and modal `Dialog` inject a `<style>` through `react-remove-scroll`, so
   Select is built on `Popover` and `Command` with shadcn's markup and classes; `DropdownMenu` runs with `modal={false}`;

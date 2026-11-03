@@ -135,11 +135,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeCheckbox, NativeRadio } from "@/components/ui/native-choice";
 import {
-  NativeSelect,
-  NativeSelectOptGroup,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
-import {
   Popover,
   PopoverAnchor,
   PopoverContent,
@@ -558,14 +553,6 @@ const UI_SAMPLES: Record<string, () => ReactElement> = {
       <NativeCheckbox name="a" defaultChecked />
       <NativeRadio name="b" value="1" />
     </>
-  ),
-  "native-select.tsx": () => (
-    <NativeSelect name="a" defaultValue="1">
-      <NativeSelectOption value="1">One</NativeSelectOption>
-      <NativeSelectOptGroup label="More">
-        <NativeSelectOption value="2">Two</NativeSelectOption>
-      </NativeSelectOptGroup>
-    </NativeSelect>
   ),
   "card.tsx": () => (
     <>

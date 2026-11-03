@@ -191,9 +191,8 @@ are in `e2e/fixtures-f4.ts`.
   word, through `StatusBadge`), never a coloured pill.
 - **Form controls.** `Input`, `Textarea`, `Select`, `Combobox`, `NativeCheckbox`,
   `NativeRadio` inside `Field`. `Select` is the choice from a fixed list; `Combobox` adds
-  search and, with `allowCustom`, a typed value. `NativeSelect` stays only where a phone's
-  own picker is better; its comment lists where it is still used. The Radix checkbox, radio,
-  select and dialog primitives are not used (see [Primitives](#primitives)).
+  search and, with `allowCustom`, a typed value. No page uses a native `<select>`. The Radix
+  checkbox, radio, select and dialog primitives are not used (see [Primitives](#primitives)).
 - **Layout rules.** One answer for each, so a new form or table looks like the others.
   - A field is a label, the control, then its hint or error _below_ the control
     (`Field`). Fields sit in `FORM_STACK_CLASSES` or `FieldGrid` (a grid whose rows share
