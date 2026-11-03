@@ -92,14 +92,10 @@ assert.ok(
   "globals.css overrides the colours in @media (prefers-color-scheme: dark)",
 );
 
-/** Tokens of `:root` that are not colours: the dark block does not repeat them. */
-const NON_COLOUR_TOKENS: ReadonlySet<string> = new Set(["--radius"]);
-
+// `:root` holds colours only: the radius scale and the fonts are theme values.
 const lightTokens = declarations(lightBlock);
 const darkTokens = declarations(darkBlock);
-const lightColourNames = [...lightTokens.keys()].filter(
-  (name) => !NON_COLOUR_TOKENS.has(name),
-);
+const lightColourNames = [...lightTokens.keys()];
 
 const THEMES = {
   light: lightTokens,
@@ -133,9 +129,8 @@ const TEXT_PAIRS: readonly (readonly [text: string, background: string])[] = [
   ["--primary-foreground", "--primary-hover"],
   ["--destructive-foreground", "--destructive"],
   ["--destructive-foreground", "--destructive-hover"],
-  // The header band: wordmark, and the navigation links that are not the current one.
-  ["--chrome-foreground", "--chrome"],
-  ["--chrome-muted", "--chrome"],
+  // The route strip: the app's route in mono on its paper colour.
+  ["--strip-foreground", "--strip"],
   // The error text of a field sits straight on the page or on a card.
   ["--destructive", "--background"],
   ["--destructive", "--card"],
@@ -152,16 +147,13 @@ const NON_TEXT_PAIRS: readonly (readonly [
   ["--input", "--card"],
   ["--ring", "--background"],
   ["--ring", "--card"],
+  // The ring around a sidebar item under the pointer.
+  ["--ring", "--muted"],
+  // Filled buttons, and the bar of the selected navigation item.
   ["--primary", "--background"],
   ["--primary", "--card"],
   ["--destructive", "--background"],
-  // The Databricks red mark of the header, the selected-tab bar and the ring,
-  // which is too light for text on white (3.6:1) and is never used as text.
-  ["--brand", "--background"],
-  ["--brand", "--card"],
-  ["--brand", "--chrome"],
-  ["--ring", "--chrome"],
-  // Badge outlines, the bar of an alert, and the filled cells of a capacity strip on the page and on a card.
+  // Lamps, badge outlines, the bar of an alert, and the filled cells of a capacity strip on the page and on a card.
   ...TONES.flatMap((tone) => [
     [`--tone-${tone}-border`, "--background"] as const,
     [`--tone-${tone}-border`, "--card"] as const,
