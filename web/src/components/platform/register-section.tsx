@@ -60,10 +60,7 @@ export function RegisterSection({ view }: { view: PlatformView }) {
 
   return (
     <Section title="Register an app">
-      <form
-        className={FORM_STACK_CLASSES}
-        onSubmit={handleSubmit}
-      >
+      <form className={FORM_STACK_CLASSES} onSubmit={handleSubmit}>
         <p className="text-muted-foreground">
           Registers the app now, as you. Someone else asking for an app goes
           through the inbox instead.
