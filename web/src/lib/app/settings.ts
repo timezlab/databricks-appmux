@@ -15,6 +15,7 @@
 import { SetOwnerRequest, UpdateAppRequest } from "@/lib/api/schemas";
 import type { AppDetail, Runtime } from "@/lib/api/schemas";
 import {
+  FORM_ERROR_KEY,
   formErrors,
   formFailure,
   memoryProblem,
@@ -136,6 +137,93 @@ export function parseOwnerForm(
   return parsed.success
     ? { ok: true, value: parsed.data }
     : { ok: false, errors: formErrors(parsed.error.issues) };
+}
+
+// ------------------------------------------------------------- one save bar
+
+/** The Settings form of a platform admin: the platform fields and the owner, saved together. */
+export interface AppSettingsValues extends AppFieldsValues {
+  owner: string;
+}
+
+export function appSettingsFormValues(app: AppFieldsSource): AppSettingsValues {
+  return { ...appFieldsFormValues(app), owner: app.owner };
+}
+
+/** As `appFieldsKey`, for the whole form: the values it starts from, not the version. */
+export function appSettingsKey(app: AppFieldsSource): string {
+  return JSON.stringify(Object.values(appSettingsFormValues(app)));
+}
+
+/**
+ * What one Save sends: the body of `PATCH /apps/{app}` when a field changed,
+ * and the new owner for `PUT /apps/{app}/owner` when it changed. The owner's
+ * version is taken when it is sent, since a PATCH before it moves the version.
+ */
+export interface SettingsChange {
+  fields: UpdateAppRequest | null;
+  owner: string | null;
+}
+
+export function parseSettingsForm(
+  app: AppFieldsSource,
+  values: AppSettingsValues,
+  otherSlugs: readonly string[],
+): FormParse<SettingsChange> {
+  const { owner: ownerText, ...fieldValues } = values;
+  const fields = parseAppFieldsForm(app, fieldValues, otherSlugs);
+  // `parseAppFieldsForm` refuses with the form-wide message only when no field changed and none is wrong.
+  const isFieldsUnchanged = !fields.ok && FORM_ERROR_KEY in fields.errors;
+  const isOwnerUnchanged = ownerText.trim() === app.owner;
+
+  if (isFieldsUnchanged && isOwnerUnchanged) {
+    return formFailure("Change at least one field");
+  }
+  const owner = isOwnerUnchanged ? null : parseOwnerForm(app, ownerText);
+  const errors = {
+    ...(fields.ok || isFieldsUnchanged ? {} : fields.errors),
+    ...(owner === null || owner.ok ? {} : owner.errors),
+  };
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    value: {
+      fields: fields.ok ? fields.value : null,
+      owner: owner?.ok === true ? owner.value.owner : null,
+    },
+  };
+}
+
+// ------------------------------------------------------- carried outcomes
+
+/** What a rename or a delete says on the page it lands on. */
+export interface CarriedOutcome {
+  title: string;
+  detail: string | null;
+}
+
+// A rename moves the page to the new slug, and the app's shell is keyed by
+// slug, so the notice it held goes with the old shell; a delete leaves for the
+// platform's list of apps. The outcome is carried across that one client-side
+// navigation here, read by the page it lands on when it first renders, and
+// dropped once that page is on screen (reading and dropping are two steps
+// because React may render a page twice before it mounts it). A full reload
+// drops it too, which is right: by then the person has seen the result.
+const carriedOutcomes = new Map<string, CarriedOutcome>();
+
+/** Leaves `outcome` for the page at `path` (as `appPagePath` writes it). */
+export function carryOutcome(path: string, outcome: CarriedOutcome): void {
+  carriedOutcomes.set(path, outcome);
+}
+
+/** The outcome left for `path`; `null` when none waits. */
+export function carriedOutcome(path: string): CarriedOutcome | null {
+  return carriedOutcomes.get(path) ?? null;
+}
+
+/** Called once the page at `path` shows its outcome, so a later visit does not show it again. */
+export function dropCarriedOutcome(path: string): void {
+  carriedOutcomes.delete(path);
 }
 
 // ------------------------------------------------------------------- rename

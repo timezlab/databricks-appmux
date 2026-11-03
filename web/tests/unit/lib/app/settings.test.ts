@@ -9,10 +9,15 @@ import {
   appFieldsFormValues,
   appFieldsKey,
   appOwnerKey,
+  appSettingsFormValues,
+  carriedOutcome,
+  carryOutcome,
+  dropCarriedOutcome,
   isDeleteConfirmed,
   nodeMemoryHint,
   parseAppFieldsForm,
   parseOwnerForm,
+  parseSettingsForm,
   renameMessage,
   renameWarning,
   settingsAccess,
@@ -241,6 +246,102 @@ describe("nodeMemoryHint", () => {
     assert.equal(nodeMemoryHint("python", "256"), null);
     assert.equal(nodeMemoryHint(null, "256"), null);
     assert.equal(nodeMemoryHint("node", "lots"), null);
+  });
+});
+
+describe("parseSettingsForm", () => {
+  const current = app();
+
+  it("starts from the app's fields and its owner", () => {
+    assert.deepEqual(appSettingsFormValues(current), {
+      ...appFieldsFormValues(current),
+      owner: "alice@example.com",
+    });
+  });
+
+  it("sends the fields that changed and leaves the owner out when it did not", () => {
+    const values = { ...appSettingsFormValues(current), display_name: "Sales" };
+    assert.deepEqual(parseSettingsForm(current, values, []), {
+      ok: true,
+      value: {
+        fields: { version: 7, display_name: "Sales" },
+        owner: null,
+      },
+    });
+  });
+
+  it("sends only the owner when only the owner changed", () => {
+    const values = {
+      ...appSettingsFormValues(current),
+      owner: " bob@example.com ",
+    };
+    assert.deepEqual(parseSettingsForm(current, values, []), {
+      ok: true,
+      value: { fields: null, owner: "bob@example.com" },
+    });
+  });
+
+  it("sends both when both changed", () => {
+    const values = {
+      ...appSettingsFormValues(current),
+      memory_budget_mb: "1024",
+      owner: "bob@example.com",
+    };
+    assert.deepEqual(parseSettingsForm(current, values, []), {
+      ok: true,
+      value: {
+        fields: { version: 7, memory_budget_mb: 1024 },
+        owner: "bob@example.com",
+      },
+    });
+  });
+
+  it("refuses a form where nothing changed", () => {
+    assert.deepEqual(
+      parseSettingsForm(current, appSettingsFormValues(current), []),
+      { ok: false, errors: { _form: "Change at least one field" } },
+    );
+  });
+
+  it("names every wrong field at once, the owner among them", () => {
+    const values = {
+      ...appSettingsFormValues(current),
+      slug: "reports",
+      owner: "bob",
+    };
+    const result = parseSettingsForm(current, values, ["reports"]);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.errors.slug, "slug 'reports' is already taken");
+      assert.notEqual(result.errors.owner, undefined);
+      assert.equal(result.errors._form, undefined);
+    }
+  });
+
+  it("does not call a changed owner wrong because the fields are unchanged", () => {
+    const values = { ...appSettingsFormValues(current), owner: "bob" };
+    const result = parseSettingsForm(current, values, []);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.deepEqual(Object.keys(result.errors), ["owner"]);
+    }
+  });
+});
+
+describe("carried outcomes", () => {
+  it("hand the page a rename or a delete lands on its outcome, until that page drops it", () => {
+    const path = "/app/settings/?slug=revenue";
+    const outcome = {
+      title: "Renamed sales to revenue",
+      detail: "The app's URL prefix is saved as /revenue/.",
+    };
+    carryOutcome(path, outcome);
+    assert.equal(carriedOutcome("/platform/apps/"), null);
+    // A page may render twice before it mounts: both renders read it.
+    assert.deepEqual(carriedOutcome(path), outcome);
+    assert.deepEqual(carriedOutcome(path), outcome);
+    dropCarriedOutcome(path);
+    assert.equal(carriedOutcome(path), null);
   });
 });
 
