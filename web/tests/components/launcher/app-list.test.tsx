@@ -106,7 +106,8 @@ describe("AppsSection", () => {
     // The header row and one row per app.
     expect(within(table).getAllByRole("row")).toHaveLength(4);
     const docs = within(rowOf("Team docs"));
-    expect(docs.getByText("docs")).toBeInTheDocument();
+    // The slug is shown as the app's route, on the route strip.
+    expect(docs.getByText("/docs/")).toBeInTheDocument();
     expect(docs.getByText(/Stopped/)).toBeInTheDocument();
     expect(
       within(rowOf("Weekly reports")).getByText(/Running/),

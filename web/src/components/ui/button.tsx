@@ -8,15 +8,15 @@ import type { ComponentProps } from "react";
 // contrast test sees them; an opacity modifier it could not) and the focus ring
 // left to the global `:focus-visible` outline in globals.css.
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-transparent text-sm font-semibold whitespace-nowrap no-underline transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-control border border-transparent text-sm font-medium whitespace-nowrap no-underline transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary-hover",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive-hover",
-        // Danger at rest is an outline: a filled red button is the primary
-        // button's colour too, so filled is kept for the confirm step.
+        // Danger at rest is an outline, and the filled red is kept for the
+        // confirm step, so only the final click is the loud one.
         "destructive-outline":
           "border-2 border-destructive bg-background text-destructive hover:bg-destructive hover:text-destructive-foreground",
         outline:

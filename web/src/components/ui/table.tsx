@@ -4,8 +4,8 @@ import { cn } from "cn";
 import type { ComponentProps } from "react";
 
 // shadcn new-york table, with the appmux look: a framed table whose caption
-// is its title (on top), a tinted header row, cells that wrap and align to
-// the middle, so a row with a button in one cell keeps its text on the
+// is its title (on top), quiet column headers (13 px, medium, muted, sentence
+// case: the design's Type section), cells that wrap and align to the middle, so a row with a button in one cell keeps its text on the
 // button's line. No opacity-modified colours: hover uses the `muted` token.
 //
 // The frame scrolls sideways when the table is wider than the screen, so it is
@@ -81,7 +81,7 @@ function TableHead({ className, ...props }: ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "px-3 py-2 text-start align-middle font-bold whitespace-nowrap text-foreground",
+        "px-3 py-2 text-start align-middle text-xs font-medium whitespace-nowrap text-muted-foreground",
         className,
       )}
       {...props}
@@ -104,7 +104,7 @@ function TableCaption({ className, ...props }: ComponentProps<"caption">) {
     <caption
       data-slot="table-caption"
       className={cn(
-        "px-3 py-2 text-start font-bold text-foreground",
+        "px-3 py-2 text-start font-semibold text-foreground",
         className,
       )}
       {...props}

@@ -19,6 +19,7 @@ import { ErrorNotice } from "@/components/error-notice";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { RelativeTime } from "@/components/relative-time";
+import { RouteStrip } from "@/components/route-strip";
 import { Section } from "@/components/section";
 import { AppStateBadge } from "@/components/status-badge";
 import type { AppActions } from "./use-app-actions";
@@ -61,6 +62,7 @@ export function AppTitle({ app }: { app: AppDetail }) {
   return (
     <PageHeader
       title={app.display_name}
+      route={<RouteStrip slug={app.slug} />}
       description={
         <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <AppStateBadge state={app.state} />

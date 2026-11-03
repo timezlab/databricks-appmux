@@ -166,7 +166,7 @@ export function DataTable<Row>({
                   scope="row"
                   role={isStacked ? "rowheader" : undefined}
                   className={cn(
-                    "font-semibold whitespace-normal",
+                    "text-sm font-semibold whitespace-normal text-foreground",
                     alignClass(column),
                     isStacked && STACKED.rowHeader,
                   )}

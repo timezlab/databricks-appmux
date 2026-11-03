@@ -12,7 +12,7 @@ export interface RouteStripProps {
 }
 
 const STRIP_CLASSES =
-  "inline-block rounded-strip border border-strip-border bg-strip px-1.5 font-mono text-xs leading-5 font-medium whitespace-nowrap text-strip-foreground no-underline";
+  "inline-block rounded-strip border border-strip-border bg-strip max-w-full px-1.5 font-mono text-xs leading-5 font-medium wrap-break-word text-strip-foreground no-underline";
 
 /**
  * An app's route on a paper-coloured strip with square corners, in the
