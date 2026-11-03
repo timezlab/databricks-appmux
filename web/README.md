@@ -59,6 +59,36 @@ A new sub-page is a route, an entry in `e2e/pages.ts` and a sidebar or tab item;
 the screenshots then cover it. The earlier `/app/releases/` and `/app/sharing/` are gone: a static
 export has no redirects, so an old link there gets the 404 page.
 
+The launcher and the app's Overview, Deployments, Logs and Environment are built (T201); where
+the table above says Logs or Environment is being built, it is out of date for those two. What
+each one decides is a pure function, tested without rendering:
+
+- **Launcher** (`components/launcher/app-list.tsx`, `lib/launcher/apps.ts`): crashed, starting
+  and stopped apps come first, then the running ones, each by name; each row shows the person's
+  level. It has skeleton rows while it loads, a search field from 11 apps, and an empty state
+  with the next step ("Request an app" opens the form; a platform admin gets "Register an app",
+  a link to Platform > Apps). `GET /apps` has no active release, so the launcher shows none.
+- **Overview** (`AppOverview` in `components/app/app-header.tsx`, `lib/app/status.ts`): Start,
+  Stop, Restart and Update in one row, with the reason each unavailable one cannot be used; a
+  "Needs attention" list whose notices each carry their action (read the logs, see the failed
+  release, restart, attach resources); then the facts. A failed target's `failure_hint` is read
+  from `GET /apps/{app}/releases/{id}` for that release only.
+- **Deployments** (`release-section.tsx`, `release-actions.tsx`): one row menu per release
+  (Activate, Rename, Tag, Lock or Unlock, Delete after an inline confirm, View source); an item
+  that cannot be used stays in the menu with its reason. A failed release shows its reason, its
+  `failure_hint` with a link to Settings, and its output in a block with a copy button.
+- **Logs** (`components/app/logs/`, `lib/app/logs.ts`): `GET /apps/{app}/logs` every 2 s while
+  the tab is visible and the view is not paused (no calls at all while it is hidden), asking
+  after `next_after`; a new `instance` clears the view, at most 2000 lines are kept, and lines
+  are text nodes only.
+- **Environment** (`components/app/environment/`, `lib/app/environment.ts`): the runtime, then
+  Variables and Packages tabs with a search each, or the same data as JSON; a secret shows `***`
+  and its value is never in the page.
+
+Their e2e worlds (a person with no app, a Node.js release that failed in a 64 MB budget, a log
+that is empty and then gets lines, a log that never started, an environment with secrets) are
+in `e2e/fixtures-f1b.ts`.
+
 ## Writing a page
 
 - Pages live in `src/app/**/page.tsx`; a static export cannot prerender a slug
