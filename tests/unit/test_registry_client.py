@@ -1634,6 +1634,90 @@ async def test_the_unreadable_row_count_adds_up_over_reads() -> None:
     assert client.unreadable_rows == 2
 
 
+# --- the registry-call counters of the metrics (T192) ---------------------------------------------
+
+
+class CallLog:
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, bool]] = []
+
+    def __call__(self, duration_ms: float, *, failed: bool) -> None:
+        self.calls.append((duration_ms, failed))
+
+
+async def test_every_operation_reports_how_long_it_took() -> None:
+    database = FakeDatabase()
+    client = make_client(database)
+    calls = CallLog()
+    client.observe_calls(calls)
+
+    await client.fetch_rows("apps")
+    await client.append_metrics([MetricRow.model_validate(metric_row())])
+
+    assert [failed for _, failed in calls.calls] == [False, False]
+    assert all(duration_ms >= 0 for duration_ms, _ in calls.calls)
+
+
+async def test_an_operation_the_registry_could_not_serve_is_reported_as_failed() -> None:
+    database = FakeDatabase()
+    database.on('INSERT INTO "metrics"', psycopg.OperationalError("lost"))
+    client = make_client(database)
+    calls = CallLog()
+    client.observe_calls(calls)
+
+    with pytest.raises(RegistryUnavailable):
+        await client.append_metrics([MetricRow.model_validate(metric_row())])
+
+    assert [failed for _, failed in calls.calls] == [True]
+
+
+async def test_an_operation_past_its_deadline_is_reported_as_failed() -> None:
+    database = FakeDatabase()
+    database.on("SELECT", HANG)
+    client = make_client(database, operation_timeout_s=0.05)
+    calls = CallLog()
+    client.observe_calls(calls)
+
+    with pytest.raises(RegistryUnavailable):
+        await client.fetch_rows("apps")
+
+    ((duration_ms, failed),) = calls.calls
+    assert failed
+    assert duration_ms >= 40
+
+
+async def test_a_refusal_the_database_answered_is_not_a_failed_call() -> None:
+    # The same line ``last_error`` draws: a conflict means the registry works.
+    database = FakeDatabase()
+    database.on('INSERT INTO "apps"', pg.UniqueViolation("duplicate key"))
+    client = make_client(database)
+    calls = CallLog()
+    client.observe_calls(calls)
+
+    with pytest.raises(RowAlreadyExists):
+        await client.write(register_changes(), [audit_entry()], admin_token=ADMIN_TOKEN)
+
+    assert [failed for _, failed in calls.calls] == [False]
+
+
+async def test_an_observer_that_raises_does_not_fail_the_operation(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    database = FakeDatabase()
+    database.on("SELECT", [app_row("sales")])
+    client = make_client(database)
+
+    def broken(duration_ms: float, *, failed: bool) -> None:
+        raise RuntimeError(LEAK)
+
+    client.observe_calls(broken)
+
+    rows = await client.fetch_rows("apps")
+
+    assert len(rows) == 1
+    assert LEAK not in caplog.text
+
+
 # --- audit-only writes (D1) ---------------------------------------------------------------------
 
 

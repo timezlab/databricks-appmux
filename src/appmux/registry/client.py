@@ -51,6 +51,11 @@ copied).
 A connection that may be in an unknown state (a lost connection, a cancelled or timed-out
 operation, anything that is not an answered error) is closed and dropped, and the next operation
 logs in again. An answered error (a conflict, a refused privilege) leaves it in use.
+
+``observe_calls`` hands every operation's duration (the wait for the connection included) and
+whether the registry could not serve it to the metrics: the ``registry_ms_max`` and
+``registry_errors`` columns of the ``_platform`` row. "Could not serve" is the line ``last_error``
+draws, so a conflict the database answered is not a failed call.
 """
 
 from __future__ import annotations
@@ -59,6 +64,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
@@ -180,6 +186,12 @@ class ConnectionParameters:
 
 ConnectionFactory = Callable[[ConnectionParameters], Awaitable[DatabaseConnection]]
 TokenProvider = Callable[[], Awaitable[SecretStr]]
+
+
+class CallObserver(Protocol):
+    """Told of every registry operation: how long it took and whether the registry failed it."""
+
+    def __call__(self, duration_ms: float, *, failed: bool) -> None: ...
 
 
 class _PsycopgConnection:
@@ -637,6 +649,7 @@ class RegistryClient:
         self._lock = asyncio.Lock()
         self._last_error: str | None = None
         self._unreadable_rows = 0
+        self._call_observer: CallObserver | None = None
 
     # --- Registry: the snapshot -----------------------------------------------------------------
 
@@ -656,6 +669,10 @@ class RegistryClient:
 
     async def refresh(self) -> None:
         await self._loader.refresh()
+
+    def observe_calls(self, observer: CallObserver) -> None:
+        """Tell ``observer`` of every operation from now on (the metrics' registry counters)."""
+        self._call_observer = observer
 
     async def poll(self) -> None:
         """Reload every interval until cancelled (``SnapshotLoader.poll``)."""
@@ -935,6 +952,8 @@ class RegistryClient:
     async def _guarded(self, operation: Awaitable[_T], *, identity: Identity | None) -> _T:
         """Bound ``operation`` by the deadline, turn driver errors into registry errors, and keep
         ``last_error`` (``identity`` is ``None`` for a read)."""
+        started_s = time.perf_counter()
+        unhealthy = False
         try:
             try:
                 async with asyncio.timeout(self._operation_timeout_s):
@@ -949,5 +968,18 @@ class RegistryClient:
             unhealthy = isinstance(failure, RegistryUnavailable) or type(failure) is RegistryError
             self._last_error = failure.message if unhealthy else None
             raise
+        finally:
+            self._report_call((time.perf_counter() - started_s) * 1000, failed=unhealthy)
         self._last_error = None
         return result
+
+    def _report_call(self, duration_ms: float, *, failed: bool) -> None:
+        observer = self._call_observer
+        if observer is None:
+            return
+        try:
+            observer(duration_ms, failed=failed)
+        except Exception as exc:
+            # Best effort (metrics, design 11): a counter that fails must not fail the operation
+            # it counts. Only the class is logged, as for every other metrics source.
+            logger.warning("registry call counter failed: %s", type(exc).__name__)
