@@ -3,6 +3,9 @@ import { z } from "./zod.ts";
 import { AppState } from "./enums.ts";
 import { Time } from "./primitives.ts";
 
+/** admin-api.md addendum, GET /apps/{app}/logs: `limit` is 1 to 1000. */
+const LIMIT_MAX = 1000;
+
 /** `appmux` is a line appmux wrote about the app (started, exited with code 1 after 2.3 s). */
 const OutputStream = z.enum(["stdout", "stderr", "appmux"]);
 
@@ -34,3 +37,16 @@ export const AppLogs = z.object({
 });
 
 export type AppLogs = z.infer<typeof AppLogs>;
+
+/**
+ * The query string of `GET /apps/{app}/logs`. It is no body of the contract, so
+ * it has no example file; `getAppLogs` checks it before it builds the URL. The
+ * server defaults `after` to 0 (all the lines it holds) and `limit` to 500.
+ */
+export const AppLogsQuery = z.strictObject({
+  /** The `seq` the client already has: `AppLogs.next_after` of the last answer. */
+  after: z.int().min(0).optional(),
+  limit: z.int().min(1).max(LIMIT_MAX).optional(),
+});
+
+export type AppLogsQuery = z.infer<typeof AppLogsQuery>;
