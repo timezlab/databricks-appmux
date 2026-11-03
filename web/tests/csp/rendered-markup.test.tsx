@@ -16,24 +16,31 @@
  *     with no sample (and for a sample with no primitive), so a primitive
  *     cannot be added without its server HTML passing the checks above.
  *  2. Do not adopt one that fails them as shipped. The Radix Checkbox, Switch,
- *     RadioGroup, Select, Tabs and ScrollArea write an inline `style` on the
- *     server; the modal ones (dialog, sheet, popover, dropdown-menu) inject a
- *     `<style>` when they open; sidebar, progress, chart and sonner do one or
- *     the other. Use a native element instead (input, select, meter, details)
- *     or write the primitive without the part that styles.
- *  3. Colours come from the tokens in globals.css, never with an opacity
+ *     RadioGroup, Select, Tabs, ScrollArea and roving-focus groups write an
+ *     inline `style` on the server, and so does cmdk's Command (its label);
+ *     the modal ones (dialog, sheet, and popover or dropdown-menu when modal)
+ *     inject a `<style>` when they open; sidebar, progress, chart and sonner
+ *     do one or the other. Use a native element instead (input, meter,
+ *     details), write the primitive without the part that styles, or render
+ *     that part only once the browser has taken over (`useIsClient`), as
+ *     command, tabs and toggle-group here do. Select and Combobox are built on
+ *     Popover and Command; Popover and DropdownMenu are never modal.
+ *  3. If the browser can open it, give it an opened sample in UI_OPENED too:
+ *     what it writes once open is checked in jsdom (no `style` attribute set
+ *     through setAttribute, no `<style>` element; CSSOM writes are allowed).
+ *  4. Colours come from the tokens in globals.css, never with an opacity
  *     modifier (tests/contract/color-utilities.test.ts).
- *  4. No `style` and no `dangerouslySetInnerHTML` prop (ESLint rule, and the
+ *  5. No `style` and no `dangerouslySetInnerHTML` prop (ESLint rule, and the
  *     `@ts-expect-error` lines in csp-props.test.tsx).
  */
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AppLink } from "@/components/app-link";
 import { Button } from "@/components/button";
@@ -65,6 +72,38 @@ import { Button as UiButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Combobox } from "@/components/ui/combobox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -80,6 +119,22 @@ import {
   NativeSelectOptGroup,
   NativeSelectOption,
 } from "@/components/ui/native-select";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -92,7 +147,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Toggle } from "@/components/ui/toggle";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import RootLayout from "@/app/layout";
 
 const COMPONENTS_DIR = path.resolve(
@@ -120,6 +184,45 @@ function assertCspClean(element: ReactElement, name: string): void {
   assert.deepEqual(cspViolations(html), [], `${name}: ${html}`);
 }
 
+/**
+ * What the page writes while a primitive is open in jsdom. jsdom serialises
+ * CSSOM writes (`element.style.x = ...`, which the CSP allows) as a `style`
+ * attribute, so the live DOM cannot be scanned for one; the writes the CSP
+ * refuses are watched instead: `setAttribute("style", ...)` and a `<style>`
+ * element anywhere in the document.
+ */
+interface CspWriteWatch {
+  /** The refused writes so far, as reasons. */
+  refusedWrites(): string[];
+  restore(): void;
+}
+
+function watchCspWrites(): CspWriteWatch {
+  const setAttribute = vi.spyOn(Element.prototype, "setAttribute");
+  const setAttributeNS = vi.spyOn(Element.prototype, "setAttributeNS");
+  return {
+    refusedWrites() {
+      const styleAttributeWrites = [
+        ...setAttribute.mock.calls.map(([name]) => name),
+        ...setAttributeNS.mock.calls.map(([, name]) => name),
+      ].filter((name) => name.toLowerCase() === "style");
+      return [
+        ...styleAttributeWrites.map(() => "setAttribute('style')"),
+        ...(document.querySelector("style") === null
+          ? []
+          : ["a <style> element"]),
+        ...cspViolations(document.documentElement.outerHTML).filter(
+          (reason) => reason !== "a style attribute",
+        ),
+      ];
+    },
+    restore() {
+      setAttribute.mockRestore();
+      setAttributeNS.mockRestore();
+    },
+  };
+}
+
 describe("the guard itself", () => {
   it.each([
     ['<p style="color:red">x</p>', ["a style attribute"]],
@@ -138,7 +241,190 @@ describe("the guard itself", () => {
       ),
     ).toEqual([]);
   });
+
+  it("the write watch catches a style attribute and a <style> element, not a CSSOM write", () => {
+    const watch = watchCspWrites();
+    try {
+      const element = document.createElement("p");
+      document.body.append(element);
+      element.style.color = "red";
+      element.style.setProperty("--x", "1px");
+      expect(watch.refusedWrites()).toEqual([]);
+
+      element.setAttribute("style", "color: red");
+      const sheet = document.createElement("style");
+      document.head.append(sheet);
+      expect(watch.refusedWrites()).toEqual([
+        "setAttribute('style')",
+        "a <style> element",
+      ]);
+      element.remove();
+      sheet.remove();
+    } finally {
+      watch.restore();
+    }
+  });
 });
+
+function CommandSample() {
+  return (
+    <Command label="Search apps">
+      <CommandInput placeholder="Search apps" />
+      <CommandList>
+        <CommandEmpty>No app matches.</CommandEmpty>
+        <CommandGroup heading="Apps">
+          <CommandItem value="sales">
+            Sales
+            <CommandShortcut>S</CommandShortcut>
+          </CommandItem>
+          <CommandItem value="hr" disabled>
+            HR
+          </CommandItem>
+        </CommandGroup>
+        <CommandSeparator />
+      </CommandList>
+    </Command>
+  );
+}
+
+function SelectSample({ searchPlaceholder }: { searchPlaceholder?: string }) {
+  return (
+    <>
+      <Select name="range" defaultValue="1h">
+        <SelectTrigger aria-label="Range" size="sm">
+          <SelectValue placeholder="Pick a range" />
+        </SelectTrigger>
+        <SelectContent
+          searchPlaceholder={searchPlaceholder}
+          emptyMessage="No range matches."
+        >
+          <SelectGroup>
+            <SelectLabel>Short</SelectLabel>
+            <SelectItem value="15m">15 minutes</SelectItem>
+            <SelectItem value="1h">1 hour</SelectItem>
+          </SelectGroup>
+          <SelectSeparator />
+          <SelectItem value="7d" disabled>
+            7 days
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Select required>
+        <SelectTrigger aria-label="Empty" aria-invalid>
+          <SelectValue placeholder="Nothing yet" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="a">A</SelectItem>
+        </SelectContent>
+      </Select>
+    </>
+  );
+}
+
+function ComboboxSample() {
+  return (
+    <Combobox
+      aria-label="Principal"
+      options={[
+        { value: "data-team", label: "Data team", description: "Group" },
+        { value: "someone@example.com", label: "Someone" },
+      ]}
+      value="data-team"
+      onValueChange={() => undefined}
+      placeholder="Choose a principal"
+      searchPlaceholder="Search people and groups"
+      emptyMessage="Nobody matches."
+      allowCustom
+    />
+  );
+}
+
+function DropdownMenuSample() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <UiButton variant="outline">Actions</UiButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel>sales</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuItem>
+            Restart
+            <DropdownMenuShortcut>R</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuCheckboxItem checked>
+            Wrap lines
+          </DropdownMenuCheckboxItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value="light">
+          <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>More</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem>Copy slug</DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function TabsSample({ variant }: { variant?: "default" | "bar" }) {
+  return (
+    <Tabs defaultValue="overview">
+      <TabsList aria-label="Sections" variant={variant}>
+        <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="logs">Logs</TabsTrigger>
+        <TabsTrigger value="environment" disabled>
+          Environment
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="overview">Overview panel</TabsContent>
+      <TabsContent value="logs">Logs panel</TabsContent>
+      <TabsContent value="environment">Environment panel</TabsContent>
+    </Tabs>
+  );
+}
+
+function TooltipSample() {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <UiButton variant="outline" size="icon" aria-label="Copy">
+            C
+          </UiButton>
+        </TooltipTrigger>
+        <TooltipContent>Copy the URL</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function ToggleGroupSample() {
+  return (
+    <>
+      <ToggleGroup type="single" defaultValue="1h" aria-label="Range">
+        <ToggleGroupItem value="15m">15 min</ToggleGroupItem>
+        <ToggleGroupItem value="1h">1 hour</ToggleGroupItem>
+      </ToggleGroup>
+      <ToggleGroup
+        type="multiple"
+        variant="outline"
+        size="sm"
+        spacing={2}
+        aria-label="Streams"
+      >
+        <ToggleGroupItem value="stdout">stdout</ToggleGroupItem>
+        <ToggleGroupItem value="stderr">stderr</ToggleGroupItem>
+      </ToggleGroup>
+    </>
+  );
+}
 
 // One sample per shadcn primitive, in the states that add markup.
 const UI_SAMPLES: Record<string, () => ReactElement> = {
@@ -168,6 +454,51 @@ const UI_SAMPLES: Record<string, () => ReactElement> = {
   ),
   // A chart is drawn only after the browser has taken over; the server HTML is
   // the placeholder (and the tooltip card, which is plain text).
+  "collapsible.tsx": () => (
+    <>
+      <Collapsible>
+        <CollapsibleTrigger>More</CollapsibleTrigger>
+        <CollapsibleContent>Hidden body</CollapsibleContent>
+      </Collapsible>
+      <Collapsible defaultOpen>
+        <CollapsibleTrigger>Less</CollapsibleTrigger>
+        <CollapsibleContent>Shown body</CollapsibleContent>
+      </Collapsible>
+    </>
+  ),
+  "combobox.tsx": () => <ComboboxSample />,
+  "command.tsx": () => <CommandSample />,
+  "dropdown-menu.tsx": () => <DropdownMenuSample />,
+  "popover.tsx": () => (
+    <>
+      <Popover>
+        <PopoverTrigger>Open</PopoverTrigger>
+        <PopoverContent>Body</PopoverContent>
+      </Popover>
+      <Popover defaultOpen>
+        <PopoverAnchor />
+        <PopoverTrigger>Opened</PopoverTrigger>
+        <PopoverContent>Body</PopoverContent>
+      </Popover>
+    </>
+  ),
+  "select.tsx": () => <SelectSample />,
+  "tabs.tsx": () => (
+    <>
+      <TabsSample />
+      <TabsSample variant="bar" />
+    </>
+  ),
+  "toggle.tsx": () => (
+    <>
+      <Toggle aria-label="Wrap lines">W</Toggle>
+      <Toggle variant="outline" size="sm" defaultPressed>
+        Pause
+      </Toggle>
+    </>
+  ),
+  "toggle-group.tsx": () => <ToggleGroupSample />,
+  "tooltip.tsx": () => <TooltipSample />,
   "chart.tsx": () => (
     <>
       <ChartContainer
@@ -243,6 +574,110 @@ const UI_SAMPLES: Record<string, () => ReactElement> = {
     </Table>
   ),
   "textarea.tsx": () => <Textarea aria-invalid name="a" defaultValue="x" />,
+};
+
+// How the browser opens each primitive that opens; each step checks that it
+// did, so a sample that silently stays closed fails.
+const UI_OPENED: Record<
+  string,
+  { sample: () => ReactElement; open: (user: UserEvent) => Promise<void> }
+> = {
+  "collapsible.tsx": {
+    sample: () => (
+      <Collapsible>
+        <CollapsibleTrigger>More</CollapsibleTrigger>
+        <CollapsibleContent>Hidden body</CollapsibleContent>
+      </Collapsible>
+    ),
+    open: async (user) => {
+      await user.click(screen.getByRole("button", { name: "More" }));
+      expect(screen.getByText("Hidden body")).toBeVisible();
+    },
+  },
+  "combobox.tsx": {
+    sample: () => <ComboboxSample />,
+    open: async (user) => {
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      await user.keyboard("some");
+      expect(screen.getByRole("option", { name: /Someone/ })).toBeVisible();
+      await user.keyboard("thing");
+      expect(
+        screen.getByRole("option", { name: "Use “something”" }),
+      ).toBeVisible();
+    },
+  },
+  "command.tsx": {
+    sample: () => <CommandSample />,
+    open: async (user) => {
+      await user.click(screen.getByRole("combobox", { name: "Search apps" }));
+      await user.keyboard("sa");
+      expect(screen.getByRole("option", { name: /Sales/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await user.keyboard("zz");
+      expect(screen.getByText("No app matches.")).toBeVisible();
+    },
+  },
+  "dropdown-menu.tsx": {
+    sample: () => <DropdownMenuSample />,
+    open: async (user) => {
+      screen.getByRole("button", { name: "Actions" }).focus();
+      await user.keyboard("{Enter}{End}{ArrowUp}{ArrowRight}");
+      expect(screen.getByRole("menuitem", { name: "Copy slug" })).toBeVisible();
+    },
+  },
+  "popover.tsx": {
+    sample: () => (
+      <Popover>
+        <PopoverTrigger>Open</PopoverTrigger>
+        <PopoverContent>Body</PopoverContent>
+      </Popover>
+    ),
+    open: async (user) => {
+      await user.click(screen.getByRole("button", { name: "Open" }));
+      expect(screen.getByRole("dialog")).toHaveTextContent("Body");
+    },
+  },
+  "select.tsx": {
+    sample: () => <SelectSample searchPlaceholder="Search ranges" />,
+    open: async (user) => {
+      await user.click(screen.getByRole("combobox", { name: "Range" }));
+      await user.keyboard("15{Enter}");
+      expect(screen.getByRole("combobox", { name: "Range" })).toHaveTextContent(
+        "15 minutes",
+      );
+      await user.click(screen.getByRole("combobox", { name: "Empty" }));
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByRole("listbox")).toBeVisible();
+    },
+  },
+  "tabs.tsx": {
+    sample: () => <TabsSample variant="bar" />,
+    open: async (user) => {
+      await user.tab();
+      await user.keyboard("{ArrowRight}");
+      expect(screen.getByRole("tabpanel")).toHaveTextContent("Logs panel");
+    },
+  },
+  "toggle-group.tsx": {
+    sample: () => <ToggleGroupSample />,
+    open: async (user) => {
+      await user.tab();
+      await user.keyboard("{ArrowLeft} ");
+      expect(screen.getByRole("radio", { name: "15 min" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+    },
+  },
+  "tooltip.tsx": {
+    sample: () => <TooltipSample />,
+    open: async (user) => {
+      await user.tab();
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Copy the URL");
+    },
+  },
 };
 
 function ConfirmButtonSample() {
@@ -460,6 +895,25 @@ describe("shadcn primitives (src/components/ui)", () => {
   for (const [file, sample] of Object.entries(UI_SAMPLES)) {
     it(`${file} renders no style, script or handler`, () => {
       assertCspClean(sample(), file);
+    });
+  }
+
+  it("every opened sample belongs to a primitive", () => {
+    for (const file of Object.keys(UI_OPENED)) {
+      assert.ok(file in UI_SAMPLES, `${file} has no primitive sample`);
+    }
+  });
+
+  for (const [file, { sample, open }] of Object.entries(UI_OPENED)) {
+    it(`${file}, once open in the browser, writes no style attribute or <style>`, async () => {
+      const watch = watchCspWrites();
+      try {
+        render(sample());
+        await open(userEvent.setup());
+        assert.deepEqual(watch.refusedWrites(), [], file);
+      } finally {
+        watch.restore();
+      }
     });
   }
 });
