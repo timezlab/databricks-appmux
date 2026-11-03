@@ -14,11 +14,13 @@ rules file and the unix socket the edge connects to; none of it is visible insid
 The reconciler reads a child's output as it comes (``read_output``) into the app's output ring
 (``output.py``): each file is followed from where the last read stopped, a line is returned only
 once it is whole (or the child has ended), and a flood between two reads of more than
-``MAX_OUTPUT_READ_BYTES``, or of more lines than the ring keeps (``OUTPUT_MAX_LINES``), keeps its
-end and says how many bytes it skipped. Each line read is masked in the event loop that serves
-every app. These caps bound how much text one read hands over, and so the time it holds the loop,
-because masking takes time linear in that text: each credential shape runs in linear time
-(``registry.audit``), and a long line is masked only as far as its cut (``output.py``).
+``MAX_OUTPUT_READ_BYTES`` keeps its end and says how many bytes it skipped. One read hands over no
+more lines than the ring keeps (``OUTPUT_MAX_LINES``), both files together: a file that needs more
+than its share keeps its newest lines and a note before them of what it skipped. Each line read
+is masked in the event loop that serves every app. These caps bound how much text one read hands
+over, and so the time it holds the loop, because masking takes time linear in that text: each
+credential shape runs in linear time (``registry.audit``), and a long line is masked only as far
+as its cut (``output.py``).
 
 A child whose environment names the shared service principal's token command also gets a *host*
 run directory, ``<scratch>/run``, bound read-write at ``/run/appmux`` instead of the tmpfs (the
@@ -38,6 +40,7 @@ import os
 import shutil
 import signal
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Final, Protocol
@@ -147,34 +150,22 @@ class _OutputFile:
         self._offset = 0
         self._partial = b""
 
-    def read(self, *, final: bool) -> list[tuple[OutputStream, str]]:
+    def read(self, *, final: bool) -> _NewOutput:
         try:
             data, skipped = self._read_new()
         except FileNotFoundError:
-            return []  # the child has not written to it yet
+            return _NewOutput(self._stream, [], 0)  # the child has not written to it yet
         except OSError as exc:
             # Best effort: the output ring is for a person to read; a file that cannot be read now
             # is tried again at the next read, and the child runs on either way.
             logger.warning("could not read %s: %s", self._path, exc.strerror)
-            return []
+            return _NewOutput(self._stream, [], 0)
         *whole, self._partial = (self._partial + data).split(b"\n")
         if final or len(self._partial) > MAX_PARTIAL_LINE_BYTES:
             if self._partial:
                 whole.append(self._partial)
             self._partial = b""
-        if skipped or len(whole) > OUTPUT_MAX_LINES:
-            # The note takes a line of the ring too, so it is not pushed out by what follows it.
-            kept = whole[-(OUTPUT_MAX_LINES - 1) :]
-            dropped = len(whole) - len(kept)
-            skipped += sum(map(len, whole[:dropped])) + dropped  # each with its newline
-            whole = kept
-        lines: list[tuple[OutputStream, str]] = []
-        if skipped:
-            lines.append(
-                ("appmux", f"skipped {skipped} bytes of {self._stream} written faster than read")
-            )
-        lines.extend((self._stream, _decode(line)) for line in whole)
-        return lines
+        return _NewOutput(self._stream, whole, skipped)
 
     def _read_new(self) -> tuple[bytes, int]:
         with self._path.open("rb") as handle:
@@ -194,6 +185,49 @@ class _OutputFile:
             cut = first_newline + 1 if first_newline >= 0 else len(data)
             data, skipped = data[cut:], skipped + cut
         return data, skipped
+
+
+@dataclass(frozen=True, slots=True)
+class _NewOutput:
+    """What one read found in one output file: its whole lines, and the bytes it skipped first."""
+
+    stream: OutputStream
+    whole: list[bytes]
+    skipped: int
+
+    @property
+    def lines_needed(self) -> int:
+        """How many lines of the ring it takes, the note of what was skipped included."""
+        return len(self.whole) + (1 if self.skipped else 0)
+
+    def lines(self, *, room: int) -> list[tuple[OutputStream, str]]:
+        """Its newest lines that fit in ``room``; what does not fit is counted in a note first."""
+        whole, skipped = self.whole, self.skipped
+        if self.lines_needed > room:
+            # The note takes a line of the room too: with it, one read fits the ring's line cap.
+            kept = whole[len(whole) - max(room - 1, 0) :]
+            dropped = len(whole) - len(kept)
+            skipped += sum(map(len, whole[:dropped])) + dropped  # each with its newline
+            whole = kept
+        lines: list[tuple[OutputStream, str]] = []
+        if skipped:
+            lines.append(
+                ("appmux", f"skipped {skipped} bytes of {self.stream} written faster than read")
+            )
+        lines.extend((self.stream, _decode(line)) for line in whole)
+        return lines
+
+
+def _rooms(lines_needed: list[int], room: int) -> list[int]:
+    """How many of ``room`` lines each file gets: all it needs while that fits an even share, and
+    the room such files leave split evenly among the others."""
+    rooms = [0] * len(lines_needed)
+    left = room
+    by_need = sorted(range(len(lines_needed)), key=lines_needed.__getitem__)
+    for done, index in enumerate(by_need):
+        rooms[index] = min(lines_needed[index], left // (len(by_need) - done))
+        left -= rooms[index]
+    return rooms
 
 
 def _decode(line: bytes) -> str:
@@ -254,9 +288,13 @@ class SandboxRunningChild:
             await self._host_run_dir.release()
 
     def read_output(self, *, final: bool = False) -> list[tuple[OutputStream, str]]:
-        # Read in the event loop: a local file, at most MAX_OUTPUT_READ_BYTES and
-        # OUTPUT_MAX_LINES lines of each per call.
-        return [line for output in self._output for line in output.read(final=final)]
+        # Read in the event loop: a local file, at most MAX_OUTPUT_READ_BYTES of each, and no more
+        # lines of both than the ring keeps, so no line of one read pushes another out of it.
+        found = [output.read(final=final) for output in self._output]
+        rooms = _rooms([new.lines_needed for new in found], OUTPUT_MAX_LINES)
+        return [
+            line for new, room in zip(found, rooms, strict=True) for line in new.lines(room=room)
+        ]
 
     # What the metrics sampler reads (T192): which sandbox this is, its pid, its pump's counters.
 

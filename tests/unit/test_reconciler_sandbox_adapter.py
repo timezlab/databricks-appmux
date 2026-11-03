@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from appmux.reconciler.children import ChildStart, ChildStartError
+from appmux.reconciler.children import ChildStart, ChildStartError, OutputStream
 from appmux.reconciler.output import OUTPUT_MAX_LINES, OutputRing
 from appmux.reconciler.sandbox_adapter import (
     MAX_OUTPUT_READ_BYTES,
@@ -302,6 +302,58 @@ async def test_a_flood_of_empty_lines_is_read_no_further_than_a_ring_holds(tmp_p
     skipped_bytes = MAX_OUTPUT_READ_BYTES - (len(lines) - 1)
     assert note.text == f"skipped {skipped_bytes} bytes of stdout written faster than read"
     assert running.read_output() == []  # what was skipped is not read again
+
+
+def into_a_ring(lines: list[tuple[OutputStream, str]]) -> list[tuple[OutputStream, str]]:
+    """What the ring keeps of one read: its lines are written in order into a fresh ring."""
+    ring = OutputRing()
+    writer = ring.begin()
+    for stream, text in lines:
+        writer.add(stream, text)
+    return [(line.stream, line.text) for line in ring.read(after=0, limit=OUTPUT_MAX_LINES).lines]
+
+
+async def test_a_flood_on_stdout_keeps_its_skipped_note_when_stderr_writes_in_the_same_read(
+    tmp_path: Path,
+) -> None:
+    # The ring keeps OUTPUT_MAX_LINES lines: a read that hands it more pushes out its oldest, the
+    # note that says what the flood skipped (review T205 R2).
+    starter = FakeStarter()
+    running = await launcher(tmp_path, starter).start(child_start())
+    spec = starter.specs[0]
+    assert spec.stderr_path is not None
+    spec.log_path.write_bytes(b"\n" * MAX_OUTPUT_READ_BYTES)
+    spec.stderr_path.write_text("one warning\n")
+
+    lines = running.read_output()
+
+    kept = into_a_ring(lines)
+    assert len(lines) <= OUTPUT_MAX_LINES
+    assert kept == lines
+    assert kept[-1] == ("stderr", "one warning")
+    skipped = MAX_OUTPUT_READ_BYTES - (len(lines) - 2)  # each empty line is one byte
+    assert kept[0] == ("appmux", f"skipped {skipped} bytes of stdout written faster than read")
+
+
+async def test_two_floods_in_one_read_share_what_the_ring_keeps_and_both_say_what_they_skipped(
+    tmp_path: Path,
+) -> None:
+    starter = FakeStarter()
+    running = await launcher(tmp_path, starter).start(child_start())
+    spec = starter.specs[0]
+    assert spec.stderr_path is not None
+    spec.log_path.write_bytes(b"\n" * MAX_OUTPUT_READ_BYTES)
+    spec.stderr_path.write_bytes(b"\n" * MAX_OUTPUT_READ_BYTES)
+
+    lines = running.read_output()
+
+    assert len(lines) <= OUTPUT_MAX_LINES
+    notes = [text for stream, text in into_a_ring(lines) if stream == "appmux"]
+    for name in ("stdout", "stderr"):
+        shown = sum(1 for stream, _ in lines if stream == name)
+        assert shown >= OUTPUT_MAX_LINES // 2 - 1
+        skipped = MAX_OUTPUT_READ_BYTES - shown
+        assert f"skipped {skipped} bytes of {name} written faster than read" in notes
 
 
 # --- a run directory on the host (the shared service principal's token files) -------------------
