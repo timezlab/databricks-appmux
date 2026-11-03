@@ -74,15 +74,27 @@ describe("RequestsSection", () => {
     expect(rows[1]).toHaveTextContent("Waiting for a platform admin");
   });
 
-  it("offers Withdraw to the asker of a pending request, and sends it by request id", async () => {
+  it("shows each request's state as a lamp and its word", () => {
+    const { container } = renderSection(ready([PENDING_SETTINGS]));
+    const lamp = container.querySelector("[data-lamp]");
+    expect(lamp).toHaveTextContent("Pending");
+    expect(lamp).toHaveAttribute("data-lamp", "warning");
+  });
+
+  it("offers Withdraw to the asker of a pending request, asks first, and sends it by request id", async () => {
     const calls = stubApi(() =>
       jsonResponse(200, { ...PENDING_SETTINGS, status: "withdrawn" }),
     );
     const { user, onChanged } = renderSection(ready([PENDING_SETTINGS]));
 
-    await user.click(
-      screen.getByRole("button", { name: "Withdraw settings change request" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Withdraw" }));
+    expect(calls).toHaveLength(0);
+    expect(
+      screen.getByRole("group", {
+        name: /Withdraw this settings change request\?/,
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yes, withdraw it" }));
 
     await waitFor(() => {
       expect(onChanged).toHaveBeenCalledTimes(1);
