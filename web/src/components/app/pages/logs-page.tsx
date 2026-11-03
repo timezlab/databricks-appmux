@@ -1,13 +1,10 @@
 "use client";
 
-import { SectionPlaceholder } from "../section-placeholder";
+import { useAppPageContext } from "../app-context";
+import { LogsPanel } from "../logs/logs-panel";
 
-/** `/app/logs/`: the app's output. */
+/** `/app/logs/`: the app's output, polled while the tab is visible. */
 export function AppLogsPage() {
-  return (
-    <SectionPlaceholder
-      title="Logs"
-      description="The last lines of the app's output will show here, with the exit code and signal when it stopped."
-    />
-  );
+  const { app } = useAppPageContext();
+  return <LogsPanel slug={app.slug} appName={app.display_name} />;
 }
