@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDownIcon } from "lucide-react";
+import { cn } from "cn";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -84,6 +85,14 @@ function AppRows({
                   state={lampStateOfTone(state.tone)}
                   label={state.label}
                   description={state.description}
+                />
+                {/* Combobox's mark of the chosen row: once the highlight moves
+                    off the current app, this still shows which one is on screen. */}
+                <CheckIcon
+                  className={cn(
+                    app.slug === currentSlug ? undefined : "invisible",
+                  )}
+                  aria-hidden="true"
                 />
               </CommandItem>
             );
