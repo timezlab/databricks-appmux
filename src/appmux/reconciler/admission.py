@@ -151,7 +151,7 @@ def read_container_memory_limit_mb(
     whole host.
     """
     for path in (cgroup_v2_path, cgroup_v1_path):
-        limit_bytes = _cgroup_limit_bytes(path)
+        limit_bytes = read_cgroup_bytes(path)
         if limit_bytes is not None:
             return limit_bytes // _BYTES_PER_MB
     total_kb = _meminfo_total_kb(meminfo_path)
@@ -164,7 +164,12 @@ def read_container_memory_limit_mb(
     )
 
 
-def _cgroup_limit_bytes(path: Path) -> int | None:
+def read_cgroup_bytes(path: Path) -> int | None:
+    """A byte count a cgroup file states (a limit or a usage), or ``None`` when it states none.
+
+    ``None`` for a missing or unreadable file, "max", anything not decimal, zero, and v1's "no
+    limit" (a value too large to be a real size). The metrics sampler reads usage with it too.
+    """
     try:
         text = path.read_text(encoding="ascii").strip()
     except (OSError, UnicodeDecodeError):

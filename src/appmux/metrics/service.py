@@ -11,8 +11,10 @@ jobs on the event loop:
 
 Where the figures come from is injected, so this module imports neither the reconciler nor the
 sandbox launcher: ``platform`` answers one ``PlatformSample`` (or ``None`` while there is nothing to
-report) and ``children`` answers one ``ChildProbe`` per running sandbox. The request counters do
-not pass through here; the edge feeds the aggregator directly (``edge/pipeline.py``).
+report) and ``children`` answers one ``ChildProbe`` per running sandbox. The readings of the
+container's files are in ``metrics/sources.py``; ``Service`` (``assembly.py``) joins them to the
+reconciler. The request counters do not pass through here; the edge feeds the aggregator directly
+(``edge/pipeline.py``).
 
 Metrics are best effort (design 11). A source that raises or hangs costs one sample of one figure:
 the failure is logged once when it starts and once when it ends, by the exception's class and
@@ -29,10 +31,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Final
 
 from appmux.metrics.aggregate import MetricsAggregator
@@ -48,10 +48,6 @@ DEFAULT_FLUSH_INTERVAL_S: Final = 60.0
 DEFAULT_PROBE_TIMEOUT_S: Final = 3.0
 DEFAULT_FLUSH_TIMEOUT_S: Final = 5.0
 DEFAULT_STOP_BUDGET_S: Final = 8.0
-
-_BYTES_PER_MB: Final = 1024 * 1024
-_STATM_PATH: Final = Path("/proc/self/statm")
-_STATM_RESIDENT_FIELD: Final = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,28 +83,6 @@ class ChildProbe:
 
 PlatformSource = Callable[[], PlatformSample | None]
 ChildSource = Callable[[], Sequence[ChildProbe]]
-
-
-def rss_mb_from_statm(text: str, *, page_size_bytes: int) -> int | None:
-    """Resident megabytes from the text of ``/proc/<pid>/statm`` (its second field, in pages)."""
-    fields = text.split()
-    if len(fields) <= _STATM_RESIDENT_FIELD:
-        return None
-    try:
-        pages = int(fields[_STATM_RESIDENT_FIELD])
-    except ValueError:
-        return None
-    return pages * page_size_bytes // _BYTES_PER_MB
-
-
-def process_rss_mb() -> int | None:
-    """Resident megabytes of this process, or ``None`` where ``/proc`` cannot say."""
-    try:
-        text = _STATM_PATH.read_text(encoding="ascii")
-        page_size_bytes = os.sysconf("SC_PAGE_SIZE")
-    except (OSError, ValueError):
-        return None
-    return rss_mb_from_statm(text, page_size_bytes=page_size_bytes)
 
 
 class MetricsService:
@@ -244,7 +218,8 @@ class MetricsService:
     async def _sample_child(self, probe: ChildProbe) -> None:
         name = self._child_name(probe)
         try:
-            rss_mb = probe.rss_mb()
+            # In a thread: a reading walks /proc, once per child, and would stall the edge.
+            rss_mb = await asyncio.to_thread(probe.rss_mb)
             if rss_mb is not None:
                 self._aggregator.observe_rss(probe.slug, rss_mb)
             async with asyncio.timeout(self._probe_timeout_s):
