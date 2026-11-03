@@ -372,7 +372,7 @@ describe("grantLevelChange", () => {
       },
     });
     assert.deepEqual(grantLevelChange(team), {
-      label: "Make CAN_MANAGE",
+      label: "Make Can manage",
       request: { type: "group", name: "sales-team", permission: "CAN_MANAGE" },
     });
   });
