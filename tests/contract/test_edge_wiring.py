@@ -9,6 +9,7 @@ unknown path) when it is not given:
   page;
 * ``attach_checker`` -> the requirements and the attach and detach routes;
 * ``source_store`` -> the read-only source viewer;
+* ``workspace_client`` -> the workspace folder browser;
 * ``open_mode_cookies`` -> ``POST /apps/{app}/open-mode`` writes the cookie *and* the pipeline reads
   that same cookie to decide whether a child receives an admin's token (one key, one instance);
 * ``bootstrap_admins`` is read once and shared: a one-shot iterable still reaches the authorizer
@@ -26,6 +27,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Final
 
+import httpx
 import pytest
 from edge_harness import (
     ALICE,
@@ -220,6 +222,54 @@ async def test_without_a_snapshot_store_the_edge_has_no_source_viewer() -> None:
     reply = await get(app, "/apps/sales/releases/7/source", DANA)
 
     assert reply.status == 404
+
+
+# --- the workspace folder browser --------------------------------------------------------------
+
+
+def workspace_client_listing_one_file() -> httpx.AsyncClient:
+    def answer(request: httpx.Request) -> httpx.Response:
+        listed = {"objects": [{"path": "/Workspace/Shared/app.yaml", "object_type": "FILE"}]}
+        return httpx.Response(200, json=listed)
+
+    return httpx.AsyncClient(
+        base_url="https://workspace.example.invalid", transport=httpx.MockTransport(answer)
+    )
+
+
+async def browse_shared(app: App) -> httpx.Response:
+    """``GET /workspace/browse?path=/Workspace/Shared`` as Alice, query string included.
+
+    The harness's ``call`` has no query string, so this goes through httpx's ASGI transport.
+    """
+    headers = {"X-Forwarded-Email": ALICE, "X-Forwarded-Access-Token": VISITOR_TOKEN}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        return await client.get(
+            f"{MOUNT}/workspace/browse", params={"path": "/Workspace/Shared"}, headers=headers
+        )
+
+
+async def test_the_folder_browser_is_served_when_a_workspace_client_is_given() -> None:
+    app = create_edge_app(
+        registry=seeded_registry(),
+        group_source=FakeGroups(),
+        workspace_client=workspace_client_listing_one_file(),
+    )
+
+    reply = await browse_shared(app)
+
+    assert reply.status_code == 200, reply.text
+    assert [entry["name"] for entry in reply.json()["entries"]] == ["app.yaml"]
+
+
+async def test_without_a_workspace_client_the_edge_has_no_folder_browser() -> None:
+    app = create_edge_app(registry=seeded_registry(), group_source=FakeGroups())
+
+    reply = await browse_shared(app)
+
+    assert reply.status_code == 404
 
 
 # --- Open as a user: one cookie key for the route and the pipeline ----------------------------

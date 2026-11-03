@@ -3,7 +3,7 @@
 ``/_appmux/api/v1`` goes to the admin API (``admin.api.create_admin_app`` with the route providers
 that exist: identity, grants, the platform routes, the app and egress routes, the request inbox,
 delegation, audit and metrics, and, for each part the start-up gives, the control, release, resource
-and source-viewer routes), ``/`` and ``/_appmux/...``
+source-viewer and folder-browser routes), ``/`` and ``/_appmux/...``
 go to the UI application when one is given (``edge.ui_static``), and every other path goes to the
 request pipeline (``edge.pipeline``): ``/<slug>/...`` is a request for a child app. The pipeline
 exists only when the caller gives a route table; without one those paths answer ``404``, which is
@@ -19,7 +19,7 @@ because that gate never reopens and answers ``503`` on ``/_appmux/`` too.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -46,6 +46,7 @@ from appmux.admin.releases import ReleaseRoutes
 from appmux.admin.requests import RenameCascade, RequestRoutes
 from appmux.admin.resources import ResourceRoutes
 from appmux.admin.source_viewer import SnapshotStore, SourceViewerRoutes
+from appmux.admin.workspace_browse import WorkspaceBrowseRoutes
 from appmux.edge.connections import OpenConnections
 from appmux.edge.gate import ASGIApplication, Receive, Scope, Send
 from appmux.edge.open_mode import OpenModeCookies, OpenModeTokenPolicy
@@ -58,12 +59,16 @@ from appmux.edge.status_pages import (
     status_page_headers,
 )
 from appmux.edge.ui_static import ui_routes
+from appmux.packages.store import WorkspaceHttpApi
 from appmux.reconciler.app_control import AppControl
 from appmux.reconciler.ports import ReleaseUpdater
 from appmux.registry.protocol import Registry
 from appmux.registry.resources import AttachChecker
 from appmux.sandbox.self_check import SelfCheckState
 from appmux.upstream.client import UpstreamClient
+
+if TYPE_CHECKING:
+    import httpx
 
 ADMIN_API_MOUNT: Final = "/_appmux/api/v1"
 ADMIN_PATH_ROOT: Final = "/_appmux"
@@ -187,6 +192,7 @@ def create_edge_app(
     app_control: AppControl | None = None,
     rename_cascade: RenameCascade | None = None,
     memory: MemorySource | None = None,
+    workspace_client: httpx.AsyncClient | None = None,
 ) -> ASGIApplication:
     """The application behind an open gate.
 
@@ -221,6 +227,8 @@ def create_edge_app(
       route answers ``503``, never a made-up figure;
     * ``attach_checker`` mounts the requirements, attach and detach routes;
     * ``source_store`` (the content store) mounts the read-only source viewer;
+    * ``workspace_client`` (the client every call to the workspace goes through) mounts the
+      folder browser, which reads a folder with the visitor's own token;
     * ``open_mode_cookies`` is the one writer and reader of the Open as a user cookie: the
       ``POST /apps/{app}/open-mode`` route sets it, and, unless ``forward_token_policy`` is given,
       the pipeline reads the same instance to decide whether a child receives an admin's token.
@@ -277,6 +285,8 @@ def create_edge_app(
         providers.append(ResourceRoutes(checker=attach_checker))
     if source_store is not None:
         providers.append(SourceViewerRoutes(source_store))
+    if workspace_client is not None:
+        providers.append(WorkspaceBrowseRoutes(WorkspaceHttpApi(workspace_client)))
     admin_app = create_admin_app(
         registry=registry, authorizer=authorizer, route_providers=providers
     )
