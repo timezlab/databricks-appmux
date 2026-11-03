@@ -12,10 +12,13 @@ export interface PlatformNavItem {
   badge: { text: string; description: string } | null;
 }
 
+/** Where a deleted app's Settings page sends the person: the list of apps. */
+export const PLATFORM_APPS_PATH = "/platform/apps/";
+
 /** In tab order. The first is the page an admin lands on: what waits for them. */
 export const PLATFORM_PAGES: readonly { label: string; href: string }[] = [
   { label: "Overview", href: "/platform/" },
-  { label: "Apps", href: "/platform/apps/" },
+  { label: "Apps", href: PLATFORM_APPS_PATH },
   { label: "Access", href: "/platform/access/" },
   { label: "Egress", href: "/platform/egress/" },
   { label: "Settings", href: "/platform/settings/" },

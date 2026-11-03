@@ -29,6 +29,7 @@ import type { RecordedCall } from "../../support/fake-fetch";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/app/",
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
 }));
 
 const PAGES: Readonly<Record<AppSection, ComponentType>> = {
@@ -50,7 +51,6 @@ const STILL_PLACEHOLDERS: readonly AppSection[] = [
   "security",
   "environment",
   "insights",
-  "settings",
 ];
 
 const PLACEHOLDER_TEXT = "This section is being built.";
