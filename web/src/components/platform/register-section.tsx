@@ -10,6 +10,10 @@ import type { RegisterFormValues } from "@/lib/platform/apps";
 import { Button } from "@/components/button";
 import { Field } from "@/components/field";
 import {
+  BROWSE_PATH_HINT,
+  SourceFolderInput,
+} from "@/components/folder-browser";
+import {
   FORM_STACK_CLASSES,
   FieldGrid,
   FormActions,
@@ -20,7 +24,11 @@ import { ActionResult } from "./action-result";
 import { FormSummary } from "./form-summary";
 import { useWriteAction } from "./use-write-action";
 
-/** Registers an app directly, without a request (design 9.3). Gate fields apply to requests, not to an admin's own registration. */
+/**
+ * Registers an app directly, without a request (design 9.3). Gate fields apply
+ * to requests, not to an admin's own registration. The page is a platform
+ * admin's, whom `GET /workspace/browse` always answers, so Browse is offered.
+ */
 export function RegisterSection({ view }: { view: PlatformView }) {
   const [values, setValues] = useState<RegisterFormValues>(EMPTY_REGISTER_FORM);
   // Messages stay hidden until the first Register, then follow the typing.
@@ -52,7 +60,10 @@ export function RegisterSection({ view }: { view: PlatformView }) {
 
   return (
     <Section title="Register an app">
-      <form className={FORM_STACK_CLASSES} onSubmit={handleSubmit}>
+      <form
+        className={`${FORM_STACK_CLASSES} max-w-140`}
+        onSubmit={handleSubmit}
+      >
         <p className="text-muted-foreground">
           Registers the app now, as you. Someone else asking for an app goes
           through the inbox instead.
@@ -93,19 +104,23 @@ export function RegisterSection({ view }: { view: PlatformView }) {
           </Field>
           <Field
             label="Source folder"
-            hint="A workspace path starting with /Workspace/"
+            hint={BROWSE_PATH_HINT}
             isRequired
             error={errors.source_path}
           >
             {(control) => (
-              <Input
-                {...control}
-                type="text"
-                autoComplete="off"
-                spellCheck={false}
+              <SourceFolderInput
+                control={control}
                 value={values.source_path}
-                onChange={(event) => {
-                  setValues({ ...values, source_path: event.target.value });
+                onValueChange={(value) => {
+                  setValues((current) => ({ ...current, source_path: value }));
+                }}
+                canBrowse
+                onUseMemory={(memoryMb) => {
+                  setValues((current) => ({
+                    ...current,
+                    memory_budget_mb: String(memoryMb),
+                  }));
                 }}
               />
             )}

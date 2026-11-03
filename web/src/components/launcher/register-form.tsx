@@ -24,6 +24,11 @@ import { ErrorNotice } from "@/components/error-notice";
 import { FORM_ERROR_KEY } from "@/lib/forms/field-errors";
 import { Field } from "@/components/field";
 import {
+  BROWSE_PATH_HINT,
+  SourceFolderInput,
+  TYPE_PATH_HINT,
+} from "@/components/folder-browser";
+import {
   FORM_STACK_CLASSES,
   FieldGrid,
   FormActions,
@@ -40,6 +45,12 @@ export interface RegisterFormProps {
   onCancel: () => void;
   /** Fetches the page's data again: offered when the server answers 409. */
   onReload: () => void;
+  /**
+   * Offer the folder browser beside the source folder (`mayBrowseWorkspace`):
+   * the route answers 403 to a plain visitor, who types the path. Default
+   * `false`, so nothing leads to a refusal while the answer is unknown.
+   */
+  canBrowseWorkspace?: boolean;
 }
 
 /**
@@ -52,6 +63,7 @@ export function RegisterForm({
   onSent,
   onCancel,
   onReload,
+  canBrowseWorkspace = false,
 }: RegisterFormProps) {
   const [values, setValues] = useState<RegisterFormValues>(EMPTY_REGISTER_FORM);
   const [errors, setErrors] = useState<RegisterFormErrors>({});
@@ -114,7 +126,7 @@ export function RegisterForm({
       ref={formRef}
       onSubmit={handleSubmit}
       noValidate
-      className={FORM_STACK_CLASSES}
+      className={`${FORM_STACK_CLASSES} max-w-140`}
     >
       <p className="text-muted-foreground">
         A platform admin reviews the request. The app is registered only if they
@@ -182,21 +194,21 @@ export function RegisterForm({
 
         <Field
           label="Source folder"
-          hint="The workspace folder the app is read from, such as /Workspace/Shared/apps/wiki."
+          hint={canBrowseWorkspace ? BROWSE_PATH_HINT : TYPE_PATH_HINT}
           error={errors.sourcePath}
           isRequired
         >
           {(control) => (
-            <Input
-              {...control}
+            <SourceFolderInput
+              control={control}
               name="source_path"
-              type="text"
               value={values.sourcePath}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              onChange={(event) => {
-                setField("sourcePath", event.target.value);
+              onValueChange={(value) => {
+                setField("sourcePath", value);
+              }}
+              canBrowse={canBrowseWorkspace}
+              onUseMemory={(memoryMb) => {
+                setField("memoryBudgetMb", String(memoryMb));
               }}
             />
           )}
