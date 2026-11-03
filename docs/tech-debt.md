@@ -176,3 +176,31 @@ Entry schema — copy for each new item:
 - **Why deferred:** no small fix is exact. Holding back the last (longest hidden value − 1) characters of a flushed piece and putting them in front of the next one only moves the split: a value that crosses the held-back point is split there instead. Masking the joined line needs the reader to keep the whole line until its newline, which the 16 KiB flush exists to avoid.
 - **Trigger to fix:** the next change to how a child's output is read, or a report of part of a secret in Logs or in a stored log tail. The fix: the reader keeps only the start of a line it flushed (it drops the rest up to the newline, counted in its `skipped` note) and says that the piece it handed over was cut; the writer then treats that piece like a line too long to mask whole, and shows only what masking it cut at its end and `reach` before its end agree on (`OutputWriter._masked_start`). That changes what `read_output` returns (a flag per line), the reconciler's drain, `tests/unit/reconciler_fakes.py` and their tests.
 - **Created:** 2026-11-03
+
+## TD-023: Deleting an app can show "App not found" before the page leaves
+- **Where:** `web/src/components/app/settings/delete-app-section.tsx` (`remove`), `web/src/lib/app/view.ts` (`appLoadView`), `web/src/components/app/app-view.tsx` (`isMoving`, `startMove`)
+- **Symptom:** After `DELETE` answers, the page that is still mounted can read the app once more and get `404`, so it can show "App not found" until `router.push` lands on the list of apps. The rename flow had the same race and was fixed in T205 (the page says it is moving, and `appLoadView` keeps the app on screen on a `404` meanwhile). Found by reading while fixing that; not reproduced.
+- **Why deferred:** a delete is followed by a navigation within a few hundred milliseconds, so the flash is short and shows no wrong data; reusing the rename flow's `startMove` for it is a small change, but nothing has shown it matters.
+- **Trigger to fix:** a report of the flash, or the next change to `app-view.tsx` or `delete-app-section.tsx`. The fix: call `startMove` before `deleteApp`, and a test that a `404` read during the delete keeps the page.
+- **Created:** 2026-11-03
+
+## TD-024: A flood on both output streams can still push a skipped note out of the output ring
+- **Where:** `src/appmux/reconciler/output.py` (`OUTPUT_MAX_BYTES`, `OutputRing._append`), `src/appmux/reconciler/sandbox_adapter.py` (`SandboxRunningChild.read_output`, `_rooms`)
+- **Symptom:** One read of both streams now hands over no more than `OUTPUT_MAX_LINES` lines, each stream's note of what it skipped first, so the line cap cannot push a note out. The ring also has a byte cap (`OUTPUT_MAX_BYTES`, 256 KiB): with two floods of 200-byte lines one read keeps 1318 lines in the ring and stdout's note is gone (run by the T205 backend lane, `two_streams_bytes.py`). By reading, one stream can do the same with long lines that were cut, or with invalid UTF-8 that grows when decoded.
+- **Why deferred:** the note only says that output was skipped; the lines it stands for are gone either way, and the Logs view still shows `dropped` when the ring evicts. Making a note survive the byte cap means reserving bytes for it or writing it after the lines, which changes what the ring evicts.
+- **Trigger to fix:** a report of a flood in Logs with no word of what was skipped, or the next change to the ring's eviction.
+- **Created:** 2026-11-03
+
+## TD-025: A release's failure reason and log tail are cleaned of NUL only, so an ESC can reach the page
+- **Where:** `src/appmux/registry/releases.py` (`clean_reason`, `clean_log_tail`), `src/appmux/sandbox/launcher.py` (`SandboxStartError`: "the end of its log" and the stderr tail, joined by newlines), `web/src/components/app/release-failure.tsx`
+- **Symptom:** The output ring drops C0 (except tab, line feed and carriage return), DEL and C1 when a line is kept (T205 R7), but a start-failure reason that quotes the sandbox process's log, and the stored `build_log_tail`, are cleaned of NUL alone. An ESC or C1 character that reaches those logs (whether the child's own output does, was not checked) can therefore reach `status_reason` and the failure panel. The Copy button filters it again; a mouse selection, and the selection fallback of the button when the clipboard is blocked, do not. By reading, not run.
+- **Why deferred:** only app managers see these fields, and a pasted ESC needs a terminal that acts on it. `without_control_characters` lives in `reconciler/output.py`, and the registry must not import the reconciler, so the fix moves it (next to `mask_credentials` in `registry/audit.py` is the nearest shared place) and applies it in both cleaners.
+- **Trigger to fix:** the next change to `clean_reason` or `clean_log_tail`, or before the Logs claim in [the admin UI design](product/admin-ui-design.md) is made for these fields.
+- **Created:** 2026-11-03
+
+## TD-026: `Authorization: Basic <base64>` is masked only as far as the word "Basic"
+- **Where:** `src/appmux/registry/audit.py` (`_NAMED_CREDENTIAL`, `mask_credentials`)
+- **Symptom:** `mask_credentials("Authorization: Basic dXNlcjpwYXNzd29yZA==")` gives `Authorization: *** dXNlcjpwYXNzd29yZA==`: the named shape takes the one word after the separator, which is the scheme, and the base64 of `user:password` stays. The same holds for the audit log's masking and for a child's output in Logs. It predates T205 (the base of the branch gives the same text; the T205 backend lane ran both).
+- **Why deferred:** a plain `basic <base64>` value shape would also refuse an audit reason like "basic authentication was removed" (`_CREDENTIAL_VALUE_SHAPES` is the refusal list too), so the right shape is a scheme and a value after an `authorization` name only, and how much false refusal is acceptable is for the owner. The value is the child's own, or a person's own, not the platform's.
+- **Trigger to fix:** the next change to the credential shapes, or a report of a Basic header in Logs.
+- **Created:** 2026-11-03

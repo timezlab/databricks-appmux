@@ -197,8 +197,10 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
 - **Logs (point 4).** The Logs section: the last lines of the child's output, polled, with a stream mark,
   pause, wrap and copy, and, for an app that stopped, the exit code and signal. The output ring stores no control
   character other than tab and a carriage return inside a line (and the line feeds of a multi-line note of appmux's
-  own), so an ESC the child printed never reaches the page, nor a terminal a selection is pasted into. Every copy
-  button still leaves out the control characters other than tab, line feed and carriage return.
+  own), so an ESC the child printed never reaches Logs, nor a terminal a selection of Logs is pasted into (a
+  start-failure reason or log tail that quotes the output is cleaned of NUL only: [TD-025](../tech-debt.md)). Every
+  copy button still leaves out the control characters other than tab, line feed and carriage return (DEL and the C1
+  range included) and the explicit bidirectional embeddings, overrides and isolates.
 - **Resources (point 6), the Databricks flow.** **Add resource** opens an inline panel (no modal: a modal dialog needs
   the scroll lock that the CSP refuses). Step by step, as in the console: choose the type from a menu with an icon and
   a one-line description each; choose the object from a searchable list of what the person can see (warehouses,
