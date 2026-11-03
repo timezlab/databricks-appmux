@@ -34,6 +34,7 @@ src/lib/api/        the API client, one file per route group, schemas/ (Zod)
 src/lib/<feature>/  pure logic per page, no React
 tests/              unit/ (mirrors src/lib), components/ (RTL), contract/ and csp/ (guards), export/
 e2e/                the browser smoke test: server.ts (edge stand-in with the CSP and a mock API), fixtures.ts (scenarios), pages.ts, csp.spec.ts, screenshots.ts
+e2e/primitives/     a page of every interactive primitive, built and prerendered by Playwright's global setup (build.ts), never part of out/
 ```
 
 Tests never live in `src/`. `@/*` maps to `src/*`.
@@ -87,9 +88,11 @@ cover it.
   only from tokens: no opacity modifier on a colour, no arbitrary colour value, no
   default-palette colour (`tests/contract/color-utilities.test.ts`); every token pair is
   contrast-checked (`tests/contract/contrast.test.ts`).
-- **Form controls.** `Input`, `Textarea`, `NativeSelect`, `NativeCheckbox`, `NativeRadio`
-  inside `Field`. The Radix checkbox, radio, select, tabs and dialog primitives are not
-  used: they emit inline styles or a runtime `<style>`, which the CSP refuses.
+- **Form controls.** `Input`, `Textarea`, `Select`, `Combobox`, `NativeCheckbox`,
+  `NativeRadio` inside `Field`. `Select` is the choice from a fixed list; `Combobox` adds
+  search and, with `allowCustom`, a typed value. `NativeSelect` stays only where a phone's
+  own picker is better; its comment lists where it is still used. The Radix checkbox, radio,
+  select and dialog primitives are not used (see [Primitives](#primitives)).
 - **Layout rules.** One answer for each, so a new form or table looks like the others.
   - A field is a label, the control, then its hint or error _below_ the control
     (`Field`). Fields sit in `FORM_STACK_CLASSES` or `FieldGrid` (a grid whose rows share
@@ -117,6 +120,34 @@ cover it.
   syntax tree of every file under `src/` and fails on a raw HTML sink, dynamic code, a
   request outside `src/lib/api/client.ts`, a second `<main>` or an unreviewed URL
   expression. Adding to `TRUSTED_EXPRESSIONS` needs a reason in the entry.
+
+## Primitives
+
+The interactive shadcn primitives in `src/components/ui/` keep shadcn's names, props and
+classes. Where Radix writes a `style` attribute into the server HTML or injects a `<style>`,
+the primitive is adapted; each file's header says how. What floats (popover, menu, tooltip)
+goes through a Radix Portal, which prerenders nothing; once open, floating-ui places it with
+CSSOM writes, which the CSP allows. Colours that are opacity blends become tokens, and the
+focus ring is the global `:focus-visible` outline.
+
+| Primitive      | Built on                                       | Why it differs from shadcn                                                                                                                     |
+| -------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Popover`      | Radix Popover, never modal                     | a modal one locks scrolling through react-remove-scroll, which injects a `<style>`                                                             |
+| `Select`       | **Popover + Command**, shadcn's API            | Radix Select prerenders `style` attributes (its hidden native select, the value) and locks scrolling with a `<style>`                          |
+| `Combobox`     | **Popover + Command** (shadcn's recipe)        | same as `Select`; adds search and, with `allowCustom`, a typed value                                                                           |
+| `Command`      | cmdk, rendered only after hydration            | cmdk's screen-reader label has an inline `style`; `CommandDialog` is left out (it needs a modal Dialog)                                        |
+| `DropdownMenu` | Radix, `modal={false}` fixed                   | a modal menu locks scrolling the same way                                                                                                      |
+| `Tabs`         | Radix after hydration, plain ARIA markup until | Radix prerenders `style="outline:none"` on the list and `style="animation-duration:0s"` on the open panel; `variant="bar"` is the section tabs |
+| `ToggleGroup`  | Radix, roving focus only after hydration       | roving focus prerenders `style="outline:none"`; `spacing` picks a gap class instead of shadcn's `--gap` style                                  |
+| `Toggle`       | stock, kit sizes                               | focus ring and blend colours only                                                                                                              |
+| `Tooltip`      | stock, with its own provider                   | none                                                                                                                                           |
+| `Collapsible`  | stock                                          | none                                                                                                                                           |
+
+Not added, because the CSP refuses what they write: `ScrollArea` (style attributes and a
+`<style>`), Sonner (inserts a `<style>` when its module loads), and `Dialog` / `AlertDialog`
+(the modal scroll lock; `ConfirmButton` is the confirmation). A new primitive needs a sample in
+`tests/csp/rendered-markup.test.tsx`, which also hydrates it, and, if it opens, floats or moves
+focus, a place on the e2e primitives page with a step in `driveEveryPrimitive` (`e2e/csp.spec.ts`).
 
 ## Colour and the logo
 
@@ -156,9 +187,19 @@ a table squeezed below 96 px per column, a stacked table that scrolls sideways, 
 caption narrower than its table. A page that needs other people or other figures than the
 contract examples (a visitor with a dozen apps, a nearly full slot, a failed save) sends
 `X-E2E-Scenario: <name>`, and `e2e/fixtures.ts` answers the routes that scenario changes; an
-unknown name throws. Four negative controls (an inline style, an inline
-script outside the hash list, a missing hash, an overflow) prove the harness can fail. It
-observes the first load only: no polling cycle, no interaction, no other browser.
+unknown name throws. On the pages it observes the first load only: no polling cycle, no
+interaction, no other browser.
+
+The primitives are driven too. Playwright's global setup (`e2e/primitives/build.ts`) builds the
+primitives page with Vite into a temporary folder and prerenders it; `server.ts` serves it under
+`/_appmux/__e2e__/primitives/` with the same policy. At 1280 and 390 px the spec opens, types
+into, picks from and closes every primitive by pointer and keyboard, and fails on a CSP
+violation, a console error or an uncaught error. Five negative controls (an inline style, an
+inline script outside the hash list, a missing hash, an overflow, and Radix's own Tabs and
+ToggleGroup prerendered) prove the harness can fail.
 
 Dependency vetting (npm versions, publish dates, OSV result, why the `overrides` exist) is
-recorded in [research.md D2](../specs/001-appmux-v1/research.md#d2-layout-and-tooling).
+recorded in [research.md D2](../specs/001-appmux-v1/research.md#d2-layout-and-tooling). `cmdk`
+1.1.1, added for `Command`, was vetted on 2026-11-03: the exact name shadcn's `command.tsx`
+imports, published 2025-03-14, no OSV.dev advisory for any version, no install script; its
+Radix dependencies dedupe with `radix-ui`.
