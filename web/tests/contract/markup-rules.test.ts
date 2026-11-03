@@ -93,6 +93,8 @@ const URL_ATTRIBUTES = new Set([
   "ping",
   "cite",
   "formaction",
+  // AppSidebar's link back to the list.
+  "backhref",
 ]);
 // On a plain HTML element only: on a component `action` or `data` is a prop of
 // its own (a node to draw, rows to show), not a URL.
@@ -168,6 +170,21 @@ const TRUSTED_EXPRESSIONS: readonly {
     file: "components/launcher/launcher.tsx",
     text: "PLATFORM_INBOX_HREF",
     why: "a constant path of lib/launcher/requests.ts",
+  },
+  {
+    file: "components/route-strip.tsx",
+    text: "href",
+    why: "a prop: the scan checks the href each caller passes to <RouteStrip> (appLink(slug))",
+  },
+  {
+    file: "components/app-sidebar.tsx",
+    text: "href",
+    why: "SidebarItemData.href, a literal path or appPagePath; review each caller's item list as for SubNav",
+  },
+  {
+    file: "components/app-sidebar.tsx",
+    text: "backHref",
+    why: "a prop: the scan checks the backHref each caller passes to <AppSidebar>",
   },
 ];
 

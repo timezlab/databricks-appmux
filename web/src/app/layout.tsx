@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { DatabricksMark } from "@/components/databricks-mark";
 import { MainNav } from "@/components/main-nav";
 import { Notice } from "@/components/notice";
 import "./fonts.css";
@@ -32,21 +31,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         {/* Parked above the viewport until it takes focus. */}
         <a
-          className="absolute top-3 left-3 z-10 -translate-y-[200%] rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground no-underline focus:translate-y-0"
+          className="absolute top-3 left-3 z-10 -translate-y-[200%] rounded-control bg-primary px-4 py-2 font-medium text-primary-foreground no-underline focus:translate-y-0"
           href="#main"
         >
           Skip to main content
         </a>
-        {/* The band keeps its dark `chrome` colours in both schemes: the Databricks red mark and the selected-tab bar read on it. */}
-        <header className="bg-chrome text-chrome-foreground">
+        {/* The top bar is the page colour with one hairline under it; the wordmark is plain text, there is no logo. */}
+        <header className="border-b bg-background">
           <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-x-6 px-4">
             <Link
-              className="flex items-center gap-2 py-3 text-lg font-bold tracking-tight text-chrome-foreground no-underline hover:no-underline"
+              className="flex items-baseline gap-2 py-3 text-xl font-semibold tracking-heading text-foreground no-underline hover:no-underline"
               href="/"
             >
-              <DatabricksMark />
               <span>appmux</span>
-              <span className="hidden text-sm font-normal tracking-normal text-chrome-muted sm:inline">
+              <span className="hidden text-xs font-normal tracking-normal text-muted-foreground sm:inline">
                 for Databricks Apps
               </span>
             </Link>

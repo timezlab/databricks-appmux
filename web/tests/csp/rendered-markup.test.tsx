@@ -35,12 +35,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 
+import { InboxIcon, LayoutGridIcon } from "lucide-react";
+
 import { AppLink } from "@/components/app-link";
+import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/button";
 import { CapacityStrip } from "@/components/capacity-strip";
 import { ConfirmButton } from "@/components/confirm-button";
+import { CopyButton } from "@/components/copy-button";
 import { DataTable } from "@/components/data-table";
-import { DatabricksMark } from "@/components/databricks-mark";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorNotice } from "@/components/error-notice";
 import { Field } from "@/components/field";
@@ -51,12 +54,20 @@ import {
 } from "@/components/form-layout";
 import { LiveRegion } from "@/components/live-region";
 import { JumpLinks } from "@/components/jump-links";
+import { Lamp } from "@/components/lamp";
 import { Loading } from "@/components/loading";
 import { MainNav } from "@/components/main-nav";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { RelativeTime } from "@/components/relative-time";
+import { RouteStrip } from "@/components/route-strip";
 import { Section } from "@/components/section";
+import { SectionPanel } from "@/components/section-panel";
+import {
+  SkeletonFigure,
+  SkeletonLines,
+  SkeletonTable,
+} from "@/components/skeletons";
 import { AppStateBadge, StatusBadge } from "@/components/status-badge";
 import { SubNav } from "@/components/sub-nav";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -308,7 +319,6 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
       <DataTable caption="Empty" columns={[]} rows={[]} rowKey={() => ""} />
     </>
   ),
-  "databricks-mark.tsx": () => <DatabricksMark />,
   "empty-state.tsx": () => (
     <EmptyState title="No apps yet" action={<Button>Register</Button>}>
       Register the first one.
@@ -401,6 +411,7 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
       title="Apps"
       description="All of them."
       actions={<Button>Refresh</Button>}
+      route={<RouteStrip slug="sales" />}
     />
   ),
   "relative-time.tsx": () => (
@@ -438,6 +449,52 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
           description: "Serving.",
         }}
       />
+    </>
+  ),
+  "app-sidebar.tsx": () => (
+    <AppSidebar
+      label="App sections"
+      items={[
+        { href: "/app/?slug=sales", label: "Overview", icon: LayoutGridIcon },
+        {
+          href: "/app/requests/?slug=sales",
+          label: "Requests",
+          icon: InboxIcon,
+          count: 2,
+        },
+      ]}
+      current="/app/?slug=sales"
+      backHref="/"
+      backLabel="All apps"
+    />
+  ),
+  "copy-button.tsx": () => (
+    <CopyButton value="/sales/" label="the route" selectTargetId="route" />
+  ),
+  "lamp.tsx": () => (
+    <>
+      <Lamp state="running" label="Running" description="Serving." />
+      <Lamp state="starting" label="Starting" />
+      <Lamp state="stopped" label="Stopped" />
+      <Lamp state="failed" label="Failed" />
+    </>
+  ),
+  "route-strip.tsx": () => (
+    <>
+      <RouteStrip slug="sales" />
+      <RouteStrip slug="sales" href="/sales/" />
+    </>
+  ),
+  "section-panel.tsx": () => (
+    <SectionPanel>
+      <p>Body</p>
+    </SectionPanel>
+  ),
+  "skeletons.tsx": () => (
+    <>
+      <SkeletonLines lines={2} />
+      <SkeletonTable rows={2} columns={3} />
+      <SkeletonFigure />
     </>
   ),
 };

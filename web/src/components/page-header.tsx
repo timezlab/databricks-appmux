@@ -3,19 +3,29 @@ import type { ReactNode } from "react";
 export interface PageHeaderProps {
   /** The page's one `<h1>`. */
   title: string;
-  /** One sentence under the title. */
+  /** One line under the title. */
   description?: ReactNode;
   /** Buttons for the whole page (Refresh, Register app), at the right on a wide screen. */
   actions?: ReactNode;
+  /** A `RouteStrip` beside the title, on the page of one app. */
+  route?: ReactNode;
 }
 
-export function PageHeader({ title, description, actions }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  description,
+  actions,
+  route,
+}: PageHeaderProps) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6">
       <div className="flex min-w-0 flex-col gap-1">
-        <h1>{title}</h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1>{title}</h1>
+          {route}
+        </div>
         {description === undefined ? null : (
-          <div className="text-muted-foreground">{description}</div>
+          <div className="text-sm text-muted-foreground">{description}</div>
         )}
       </div>
       {actions === undefined ? null : (
