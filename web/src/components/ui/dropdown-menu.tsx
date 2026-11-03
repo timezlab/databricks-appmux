@@ -12,7 +12,8 @@ import type { ComponentProps } from "react";
 // 'self') refuses. The content goes through a Radix Portal, so none of it is
 // prerendered; floating-ui places it with CSSOM writes, which the CSP allows.
 // The destructive item's focus colour is the danger tone (a pair the contrast
-// test checks) instead of `bg-destructive/10`, an opacity blend it cannot see.
+// test checks) instead of shadcn's destructive at 10 % opacity, a blend it
+// cannot see.
 function DropdownMenu(
   props: Omit<ComponentProps<typeof DropdownMenuPrimitive.Root>, "modal">,
 ) {

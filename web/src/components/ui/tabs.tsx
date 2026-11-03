@@ -16,9 +16,10 @@ import { useIsClient } from "@/hooks/use-is-client";
 // hydrates (`useIsClient`), the list, tabs and panels render the same ARIA
 // markup by hand, with the chosen tab's panel; Radix takes over just after,
 // with its keyboard (arrows, Home, End) and focus handling.
-// Colours: `text-foreground/60` and `dark:bg-input/30` are opacity blends the
-// contrast test cannot see, so they are `text-muted-foreground` and gone; the
-// focus ring is the global `:focus-visible` outline of globals.css.
+// Colours: shadcn's tab text (foreground at 60 %) and dark-mode fill (input at
+// 30 %) are opacity blends the contrast test cannot see, so they are
+// `text-muted-foreground` and gone; the focus ring is the global
+// `:focus-visible` outline of globals.css.
 //
 // `variant="bar"` is the underline bar of the section tabs. Until lane F0a's
 // `bar-item` rule lands it uses the classes `SubNav` has today (a 3 px
