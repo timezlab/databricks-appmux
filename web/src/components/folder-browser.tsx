@@ -463,7 +463,8 @@ function BrowserPanel({
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {target === null ? (
+        {/* The reason Use this folder is off, so only while it is off. */}
+        {target === null && pickable === null ? (
           <p className="mr-auto text-sm text-muted-foreground">
             Open a folder first.
           </p>
