@@ -20,9 +20,12 @@ import {
 import { Section } from "@/components/section";
 import { Input } from "@/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionResult } from "./action-result";
 import { FormSummary } from "./form-summary";
@@ -159,18 +162,20 @@ export function AdminsSection({
           <FieldGrid>
             <Field label="Type">
               {(control) => (
-                <NativeSelect
-                  {...control}
+                <Select
                   value={newType}
-                  onChange={(event) => {
-                    setNewType(
-                      event.target.value === "group" ? "group" : "user",
-                    );
+                  onValueChange={(value) => {
+                    setNewType(value === "group" ? "group" : "user");
                   }}
                 >
-                  <NativeSelectOption value="user">User</NativeSelectOption>
-                  <NativeSelectOption value="group">Group</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger {...control} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent label="Type">
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="group">Group</SelectItem>
+                  </SelectContent>
+                </Select>
               )}
             </Field>
             <Field

@@ -36,9 +36,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatformContext } from "./platform-context";
 import { useUnsavedChangesGuard } from "./use-unsaved-changes-guard";
@@ -372,34 +375,30 @@ function SettingControl({
       );
     case "boolean":
       return (
-        <NativeSelect
-          {...control}
-          containerClassName="max-w-40"
-          value={draft}
-          onChange={(event) => {
-            onChange(event.target.value);
-          }}
-        >
-          <NativeSelectOption value="true">On</NativeSelectOption>
-          <NativeSelectOption value="false">Off</NativeSelectOption>
-        </NativeSelect>
+        <Select value={draft} onValueChange={onChange}>
+          <SelectTrigger {...control} className="w-full max-w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent label={descriptor.label}>
+            <SelectItem value="true">On</SelectItem>
+            <SelectItem value="false">Off</SelectItem>
+          </SelectContent>
+        </Select>
       );
     case "choice":
       return (
-        <NativeSelect
-          {...control}
-          containerClassName="max-w-64"
-          value={draft}
-          onChange={(event) => {
-            onChange(event.target.value);
-          }}
-        >
-          {editor.options.map((option) => (
-            <NativeSelectOption key={option} value={option}>
-              {option}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        <Select value={draft} onValueChange={onChange}>
+          <SelectTrigger {...control} className="w-full max-w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent label={descriptor.label}>
+            {editor.options.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     case "list":
       return (

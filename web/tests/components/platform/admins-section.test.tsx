@@ -8,6 +8,7 @@ import { PlatformView, PutAdminsRequest } from "@/lib/api";
 import { readExample } from "../../support/contract-examples";
 import { jsonResponse, stubFetch } from "../../support/fake-fetch";
 import type { RecordedCall } from "../../support/fake-fetch";
+import { chooseOption } from "../../support/select";
 
 const BASE_VIEW = PlatformView.parse(readExample("PlatformView"));
 const VIEW = {
@@ -65,7 +66,7 @@ describe("AdminsSection add form", () => {
       screen.getByLabelText(/^Reason for the next change/),
       "mirror Dana as a group",
     );
-    await user.selectOptions(screen.getByLabelText("Type"), "group");
+    await chooseOption(user, screen.getByLabelText("Type"), "Group");
     await user.type(screen.getByLabelText("Group name"), " dana@example.com ");
     await user.click(screen.getByRole("button", { name: "Add admin" }));
 
@@ -96,7 +97,7 @@ describe("AdminsSection add form", () => {
       screen.getByLabelText(/^Reason for the next change/),
       "again",
     );
-    await user.selectOptions(screen.getByLabelText("Type"), "group");
+    await chooseOption(user, screen.getByLabelText("Type"), "Group");
     await user.type(screen.getByLabelText("Group name"), "Data-Platform");
     await user.click(screen.getByRole("button", { name: "Add admin" }));
 

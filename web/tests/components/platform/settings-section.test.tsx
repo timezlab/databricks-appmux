@@ -7,6 +7,7 @@ import { SettingsGroups } from "@/components/platform/settings-section";
 import { ApiError, NETWORK_ERROR, putSetting } from "@/lib/api";
 import type { PlatformSetting } from "@/lib/api";
 import { platformView, renderInPlatform } from "./shell-fixtures";
+import { chooseOption } from "../../support/select";
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
@@ -179,7 +180,7 @@ describe("SettingsGroups", () => {
     const { user } = setup();
     await typeInto(user, "memory_reserve_mb", "512");
     await typeInto(user, "request_timeout_s", "200");
-    await user.selectOptions(control("child_cpu_pin"), "Off");
+    await chooseOption(user, control("child_cpu_pin"), "Off");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByText("Saved 3 settings")).toBeInTheDocument();
@@ -361,7 +362,7 @@ describe("SettingsGroups", () => {
       Promise.resolve(saved(key, 0)),
     );
     const { user } = setup();
-    await user.selectOptions(control("package_mode"), "index");
+    await chooseOption(user, control("package_mode"), "index");
     await user.type(
       control("default_wheel_sources"),
       "{Enter}{Enter}  /Workspace/Shared/more  ",
@@ -391,7 +392,7 @@ describe("SettingsGroups", () => {
       saved("shared_sp_delegation_allowed", true),
     );
     const { user } = setup();
-    await user.selectOptions(control("shared_sp_delegation_allowed"), "On");
+    await chooseOption(user, control("shared_sp_delegation_allowed"), "On");
 
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(
@@ -413,7 +414,7 @@ describe("SettingsGroups", () => {
   it("turning a switch off needs no confirmation", async () => {
     vi.mocked(putSetting).mockResolvedValue(saved("child_cpu_pin", false));
     const { user } = setup();
-    await user.selectOptions(control("child_cpu_pin"), "Off");
+    await chooseOption(user, control("child_cpu_pin"), "Off");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(within(bar() ?? document.body).queryByRole("group")).toBeNull();
     expect(putSetting).toHaveBeenCalledTimes(1);
