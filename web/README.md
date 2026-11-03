@@ -25,15 +25,15 @@ Run them in `web/` after `npm ci` (`.npmrc` turns install scripts off).
 ## Layout
 
 ```
-src/app/            pages (layout.tsx owns the only <main>), globals.css (tokens); app/ and platform/ each have a layout and five sub-pages
-src/components/     the kit (PageHeader, Section, Button, DataTable, Field, Notice, …)
+src/app/            pages (layout.tsx owns the only <main>), globals.css (tokens, radius scale, the bar, motion), fonts.css (IBM Plex, self-hosted); app/ and platform/ each have a layout and five sub-pages
+src/components/     the kit (PageHeader, Section, SectionPanel, AppSidebar, RouteStrip, Lamp, skeletons, CopyButton, Button, DataTable, Field, Notice, …)
 src/components/ui/  shadcn primitives, patched for the CSP (see below)
 src/components/{launcher,app,platform,dashboard}/   one folder per page
-src/hooks/          React hooks (usePoll)
+src/hooks/          React hooks (usePoll, useStoredFlag)
 src/lib/api/        the API client, one file per route group, schemas/ (Zod)
 src/lib/<feature>/  pure logic per page, no React
 tests/              unit/ (mirrors src/lib), components/ (RTL), contract/ and csp/ (guards), export/
-e2e/                the browser smoke test: server.ts (edge stand-in with the CSP and a mock API), fixtures.ts (scenarios), pages.ts, csp.spec.ts, screenshots.ts
+e2e/                the browser tests: server.ts (edge stand-in with the CSP and a mock API), fixtures.ts (scenarios), pages.ts, csp.spec.ts, fonts.spec.ts, motion.spec.ts, screenshots.ts
 ```
 
 Tests never live in `src/`. `@/*` maps to `src/*`.
@@ -87,6 +87,18 @@ cover it.
   only from tokens: no opacity modifier on a colour, no arbitrary colour value, no
   default-palette colour (`tests/contract/color-utilities.test.ts`); every token pair is
   contrast-checked (`tests/contract/contrast.test.ts`).
+- **Radius, type and motion.** Radius is a scale: `rounded-strip` (3 px, the route strip),
+  `rounded-control` (8 px, buttons and fields), `rounded-surface` (12 px, panels and
+  menus). Text sizes are 13, 14, 16, 20, 24 and 28 px (`text-xs` to `text-3xl`; there is no
+  `text-lg`); weights 400, 500 and 600. Motion is only the `animate-*` utilities of
+  `globals.css` (`spinner`, `skeleton`, `lamp-breathe`, `menu-in`, `menu-out`), each with one
+  animation for `prefers-reduced-motion: no-preference` and a calmer one for `reduce`;
+  `tests/contract/motion.test.ts` fails on a rule that would stop one.
+- **Bars.** Every item of a navigation (top bar, tab bar, sidebar) carries `bar-item`: a
+  2 px bar under it (beside it inside `bar-axis-vertical`), transparent at rest, `input` on
+  hover, `primary` on the item with `aria-current="page"`, and no text underline.
+- **Apps and states.** An app's route is a `RouteStrip`; a state is a `Lamp` (a dot and its
+  word, through `StatusBadge`), never a coloured pill.
 - **Form controls.** `Input`, `Textarea`, `NativeSelect`, `NativeCheckbox`, `NativeRadio`
   inside `Field`. The Radix checkbox, radio, select, tabs and dialog primitives are not
   used: they emit inline styles or a runtime `<style>`, which the CSP refuses.
@@ -118,23 +130,25 @@ cover it.
   request outside `src/lib/api/client.ts`, a second `<main>` or an unreviewed URL
   expression. Adding to `TRUSTED_EXPRESSIONS` needs a reason in the entry.
 
-## Colour and the logo
+## Colour, type and the wordmark
 
-The primary colour is Databricks red. `--brand` (`#ff3621`, the fill of the official icon) paints
-only non-text marks (the logo, the selected-tab bar, the focus ring); the filled buttons and link
-text use darker shades of the same hue that reach 4.5:1 (`--primary`, `--link`). Red is also the
-colour of danger, so a destructive control is outlined until its confirm step and its label says
-what it does; never mark danger by hue alone. The header is a dark band (`--chrome`) in both
-colour schemes.
+The identity is the one of [admin-ui-design.md](../docs/product/admin-ui-design.md): a quiet
+paper page, one blue-teal action colour (`--primary`, `--link`, `--ring`), and two marks of its
+own, the route strip and the lamp. Red is only danger (`--destructive`), so a destructive control
+is no longer one hue away from the primary button; it still stays outlined until its confirm
+step, and its label says what it does. The header is the page colour with one hairline under it,
+in both colour schemes. Dark follows the OS (`prefers-color-scheme`).
 
-The mark beside the wordmark (`src/components/databricks-mark.tsx`) is the official Databricks icon
-from the press kit at databricks.com, inlined as an `<svg>` (a `data:` image would break the CSP),
-unmodified, decorative.
+The interface face is IBM Plex Sans (variable) and routes, paths and code are IBM Plex Mono,
+both self-hosted from npm by `src/app/fonts.css` (latin and latin-ext only, woff2), so the CSP's
+`font-src 'self'` holds.
+
+The header shows the word "appmux" in text, with no logo or icon.
 
 ### Trademarks
 
 Databricks is a trademark of Databricks, Inc.; appmux is not made or endorsed by Databricks. The
-mark is used only to say that appmux runs as a Databricks App.
+name appears only to say that appmux runs as a Databricks App.
 
 ## The CSP
 
@@ -160,5 +174,13 @@ unknown name throws. Four negative controls (an inline style, an inline
 script outside the hash list, a missing hash, an overflow) prove the harness can fail. It
 observes the first load only: no polling cycle, no interaction, no other browser.
 
+Two more specs use the same server. `fonts.spec.ts` checks that both Plex families load from
+the export's media folder as woff2 with no CSP violation. `motion.spec.ts` holds the launcher's
+app list call open and asks Chromium what the spinner and the skeleton animate, once with
+`reducedMotion: "no-preference"` and once with `"reduce"`; the names and durations must match
+the Motion table of the design.
+
 Dependency vetting (npm versions, publish dates, OSV result, why the `overrides` exist) is
-recorded in [research.md D2](../specs/001-appmux-v1/research.md#d2-layout-and-tooling).
+recorded in [research.md D2](../specs/001-appmux-v1/research.md#d2-layout-and-tooling); for the
+two font packages, in the Fonts note of
+[admin-ui-design.md](../docs/product/admin-ui-design.md#fonts-adr-note).
