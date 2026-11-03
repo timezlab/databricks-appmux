@@ -243,11 +243,11 @@ describe("globals.css consistency", () => {
     }
   });
 
-  it("imports only Tailwind and its animation preset, and loads nothing from outside the page (strict CSP: style-src, img-src and font-src are 'self')", () => {
+  it("imports only Tailwind, and loads nothing from outside the page (strict CSP: style-src, img-src and font-src are 'self')", () => {
     const imports = [...rules.matchAll(/@import\s+["']([^"']+)["']/g)].map(
       (match) => match[1],
     );
-    assert.deepEqual(imports, ["tailwindcss", "tw-animate-css"]);
+    assert.deepEqual(imports, ["tailwindcss"]);
     assert.doesNotMatch(rules, /url\(/i);
     assert.doesNotMatch(rules, /https?:\/\//i);
     assert.doesNotMatch(rules, /@font-face/i);

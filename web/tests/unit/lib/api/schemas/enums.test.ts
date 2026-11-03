@@ -37,7 +37,11 @@ describe("closed lists", () => {
       ],
     ],
     ["AccessAs", api.AccessAs, ["obo", "own_sp", "shared_sp"]],
-    ["GrantType", api.GrantType, ["user", "group", "everyone"]],
+    [
+      "GrantType",
+      api.GrantType,
+      ["user", "group", "everyone", "service_principal"],
+    ],
     ["DelegationKind", api.DelegationKind, ["obo", "shared_sp"]],
     ["RequestKind", api.RequestKind, ["register", "delegation", "settings"]],
     [

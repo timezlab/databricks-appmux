@@ -10,6 +10,8 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  // Builds the page of shadcn primitives the spec drives (e2e/primitives/).
+  globalSetup: "./e2e/primitives/build.ts",
   fullyParallel: true,
   // Each worker starts a server and a browser; the default (half the cores) is
   // more than a shared machine needs for 50 short tests.

@@ -21,6 +21,10 @@
  *  - Under `/_appmux/__e2e__/` live pages that violate the CSP on purpose. They
  *    are the negative controls: the spec loads them with the same listener as
  *    the real pages, so a listener that saw nothing would show itself.
+ *  - Under `/_appmux/__e2e__/primitives/` lives the page of shadcn primitives
+ *    that e2e/primitives/build.ts builds (Playwright's global setup), served
+ *    like the export and under the same CSP; `control/` below it is its
+ *    negative control.
  *
  * Node's `http` module only: this is test tooling, and a dependency would be
  * one more thing to vet.
@@ -39,6 +43,9 @@ import { SCENARIO_HEADER, scenarioAnswer } from "./fixtures.ts";
 export const BASE_PATH = process.env.APPMUX_BASE_PATH ?? "/_appmux";
 export const API_PREFIX = `${BASE_PATH}/api/v1`;
 export const CONTROL_PREFIX = `${BASE_PATH}/__e2e__`;
+export const PRIMITIVES_PREFIX = `${CONTROL_PREFIX}/primitives`;
+/** Names the folder e2e/primitives/build.ts built the primitives page into. */
+export const PRIMITIVES_DIR_ENV = "APPMUX_E2E_PRIMITIVES_DIR";
 
 const EXPORT_DIR = path.resolve(import.meta.dirname, "../out");
 const EXAMPLES_DIR = path.resolve(
@@ -665,7 +672,7 @@ function replyHtml(
   );
 }
 
-/** What a request path under the prefix names in `out/`, or why it names nothing. */
+/** What a request path under a site's prefix names in its folder, or why it names nothing. */
 type Resolved =
   | { kind: "file"; file: string }
   | { kind: "redirect"; location: string }
@@ -690,13 +697,20 @@ async function isFile(file: string): Promise<boolean> {
   }
 }
 
-async function resolveExportPath(
+/** A folder served under a path prefix: the export, or the primitives page. */
+interface StaticSite {
+  root: string;
+  prefix: string;
+}
+
+async function resolveSitePath(
+  site: StaticSite,
   pathname: string,
   search: string,
 ): Promise<Resolved> {
   let decoded: string;
   try {
-    decoded = decodeURIComponent(pathname.slice(BASE_PATH.length));
+    decoded = decodeURIComponent(pathname.slice(site.prefix.length));
   } catch {
     return { kind: "bad-request" };
   }
@@ -709,8 +723,8 @@ async function resolveExportPath(
     segments.some((segment) => segment === ".." || segment === ".");
   if (ambiguous) return { kind: "bad-request" };
 
-  const target = path.resolve(EXPORT_DIR, ...segments);
-  if (target !== EXPORT_DIR && !target.startsWith(EXPORT_DIR + path.sep)) {
+  const target = path.resolve(site.root, ...segments);
+  if (target !== site.root && !target.startsWith(site.root + path.sep)) {
     return { kind: "bad-request" };
   }
   if (await isDirectory(target)) {
@@ -727,13 +741,16 @@ async function resolveExportPath(
     : { kind: "missing" };
 }
 
-async function serveExport(
+/** Answers a GET under `site.prefix`; a missing file answers `replyMissing`. */
+async function serveSite(
   request: IncomingMessage,
   response: ServerResponse,
+  site: StaticSite,
   pathname: string,
   search: string,
+  replyMissing: () => Promise<void>,
 ): Promise<void> {
-  const resolved = await resolveExportPath(pathname, search);
+  const resolved = await resolveSitePath(site, pathname, search);
   switch (resolved.kind) {
     case "bad-request":
       replyText(request, response, 400, "bad request");
@@ -745,11 +762,9 @@ async function serveExport(
       });
       response.end();
       return;
-    case "missing": {
-      const notFound = path.join(EXPORT_DIR, "404.html");
-      replyHtml(request, response, 404, await readFile(notFound, "utf8"));
+    case "missing":
+      await replyMissing();
       return;
-    }
     case "file": {
       const extension = path.extname(resolved.file);
       if (extension === ".html") {
@@ -774,6 +789,54 @@ async function serveExport(
       return;
     }
   }
+}
+
+async function serveExport(
+  request: IncomingMessage,
+  response: ServerResponse,
+  pathname: string,
+  search: string,
+): Promise<void> {
+  await serveSite(
+    request,
+    response,
+    { root: EXPORT_DIR, prefix: BASE_PATH },
+    pathname,
+    search,
+    async () => {
+      const notFound = path.join(EXPORT_DIR, "404.html");
+      replyHtml(request, response, 404, await readFile(notFound, "utf8"));
+    },
+  );
+}
+
+async function servePrimitives(
+  request: IncomingMessage,
+  response: ServerResponse,
+  pathname: string,
+  search: string,
+): Promise<void> {
+  const root = process.env[PRIMITIVES_DIR_ENV];
+  if (root === undefined) {
+    replyText(
+      request,
+      response,
+      404,
+      "no primitives page: Playwright's global setup (e2e/primitives/build.ts) builds it",
+    );
+    return;
+  }
+  await serveSite(
+    request,
+    response,
+    { root, prefix: PRIMITIVES_PREFIX },
+    pathname,
+    search,
+    () => {
+      replyText(request, response, 404, "not found");
+      return Promise.resolve();
+    },
+  );
 }
 
 async function serveControl(
@@ -897,6 +960,11 @@ export async function startServer(): Promise<E2eServer> {
           handleApi(request, response, pathname, url.searchParams, calls);
         } else if (method !== "GET" && method !== "HEAD") {
           replyText(request, response, 405, "method not allowed");
+        } else if (
+          pathname === PRIMITIVES_PREFIX ||
+          pathname.startsWith(`${PRIMITIVES_PREFIX}/`)
+        ) {
+          await servePrimitives(request, response, pathname, url.search);
         } else if (pathname.startsWith(`${CONTROL_PREFIX}/`)) {
           await serveControl(
             request,

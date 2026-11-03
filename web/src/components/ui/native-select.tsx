@@ -2,9 +2,20 @@ import { cn } from "cn";
 import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 
-// shadcn's native-select: a real `<select>` (no Radix Select, whose server
-// HTML carries inline styles) drawn like `Input`. `className` goes to the
-// select; `containerClassName` to the box around it and its chevron.
+// shadcn's native-select: a real `<select>` drawn like `Input`. `className`
+// goes to the select; `containerClassName` to the box around it and its
+// chevron. Pick `Select` (./select.tsx, on Popover + Command, since Radix
+// Select's inline styles break the CSP) for new code; keep a native one only
+// where a phone's own picker is better than a popover.
+//
+// Still used here (as of T198), each a short fixed list the page lanes move
+// to `Select`:
+// - app/attach-resource-form.tsx: resource type, permission, access as
+// - app/grant-form.tsx: who (the grant type), permission
+// - dashboard/dashboard-controls.tsx: scope, time range
+// - platform/admins-section.tsx: a new admin's type (user or group)
+// - platform/egress-editor.tsx: a rule's action
+// - platform/settings-section.tsx: an on/off setting, a setting's options
 function NativeSelect({
   className,
   containerClassName,

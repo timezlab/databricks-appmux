@@ -31,7 +31,6 @@
  */
 
 @import "tailwindcss" source("..");
-@import "tw-animate-css";
 
 /* `dark:` follows the OS, like the token overrides below. */
 @custom-variant dark (@media (prefers-color-scheme: dark));

@@ -11,9 +11,15 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { API_PREFIX, BASE_PATH, startServer } from "./server.ts";
+import {
+  API_PREFIX,
+  BASE_PATH,
+  PRIMITIVES_PREFIX,
+  startServer,
+} from "./server.ts";
 import type { E2eServer } from "./server.ts";
 import { READY_TIMEOUT_MS } from "./pages.ts";
+import { READY_ATTRIBUTE } from "./primitives/ready.ts";
 
 let server: E2eServer;
 
@@ -48,6 +54,32 @@ const PARTS = {
   spinner: ".animate-spinner",
   skeleton: ".animate-skeleton",
 } as const;
+
+/** What a menu or popover plays when it opens (globals.css, `animate-menu-in`): a fade and a 4 px slide, or the fade alone. */
+const OPENING = {
+  "no-preference": { name: "menu-in", durationMs: 140 },
+  reduce: { name: "menu-fade-in", durationMs: 120 },
+} as const;
+
+/**
+ * The primitives whose floating content opens with `animate-menu-in`: the trigger to press, how
+ * its library opens (Radix's menu opens on `pointerdown`, its popover on `click`) and the
+ * content's slot.
+ */
+const FLOATING = [
+  {
+    part: "popover",
+    trigger: "Open popover",
+    opensOn: "click",
+    slot: "popover-content",
+  },
+  {
+    part: "dropdown menu",
+    trigger: "Actions",
+    opensOn: "pointerdown",
+    slot: "dropdown-menu-content",
+  },
+] as const;
 
 /** Opens the launcher with its app list call never answered, so it stays in its loading state. */
 async function openLauncherStillLoading(page: Page): Promise<void> {
@@ -114,5 +146,54 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
 
       await page.unrouteAll({ behavior: "ignoreErrors" });
     });
+
+    for (const floating of FLOATING) {
+      test(`a ${floating.part} opens with the animation the table sets`, async ({
+        page,
+      }) => {
+        await page.goto(`${server.origin}${PRIMITIVES_PREFIX}/`);
+        await expect(page.locator(`html[${READY_ATTRIBUTE}]`)).toBeAttached();
+
+        // Press the trigger and look on the next frame: the animation lasts
+        // 120 to 140 ms, too short to race a separate round trip to the page.
+        const animations = await page
+          .getByRole("button", { name: floating.trigger })
+          .evaluate(
+            async (trigger, { slot, opensOn }) => {
+              if (!(trigger instanceof HTMLElement)) {
+                throw new Error("the trigger is not an HTML element");
+              }
+              if (opensOn === "click") {
+                trigger.click();
+              } else {
+                trigger.dispatchEvent(
+                  new PointerEvent("pointerdown", {
+                    bubbles: true,
+                    button: 0,
+                    pointerType: "mouse",
+                  }),
+                );
+              }
+              await new Promise((resolve) => requestAnimationFrame(resolve));
+              const content = document.querySelector(`[data-slot="${slot}"]`);
+              return (content?.getAnimations() ?? []).map((animation) => {
+                const duration = animation.effect?.getComputedTiming().duration;
+                return {
+                  name:
+                    animation instanceof CSSAnimation
+                      ? animation.animationName
+                      : "",
+                  durationMs: typeof duration === "number" ? duration : -1,
+                };
+              });
+            },
+            { slot: floating.slot, opensOn: floating.opensOn },
+          );
+
+        expect(animations, `${floating.part} animations`).toEqual([
+          OPENING[reducedMotion],
+        ]);
+      });
+    }
   });
 }
