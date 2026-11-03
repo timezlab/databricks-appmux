@@ -1,0 +1,6 @@
+/* The admin UI's own stylesheet, plus the classes of this page. Imported from
+   here, globals.css's `source("..")` resolves against this file rather than its
+   own, so both folders are named. */
+@import "../../src/app/globals.css";
+@source "../../src";
+@source "./";

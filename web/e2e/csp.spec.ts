@@ -1,7 +1,9 @@
 /**
  * Loads every page of the built export in a real Chromium, served the way the
  * edge will serve it (e2e/server.ts), and fails on a CSP violation, a console
- * error, a page error, an empty page or a horizontal overflow.
+ * error, a page error, an empty page or a horizontal overflow. It also drives
+ * each shadcn primitive that opens or moves focus (e2e/primitives/) under the
+ * same policy.
  *
  * `npm run build` first; `npm run test:e2e` runs this.
  */
@@ -20,7 +22,8 @@ import {
 } from "./pages.ts";
 import type { PageEntry } from "./pages.ts";
 import { FAILING_SETTING_KEY } from "./fixtures.ts";
-import { CONTROL_PREFIX, startServer } from "./server.ts";
+import { READY_ATTRIBUTE } from "./primitives/ready.ts";
+import { CONTROL_PREFIX, PRIMITIVES_PREFIX, startServer } from "./server.ts";
 import type { E2eServer } from "./server.ts";
 
 let server: E2eServer;
@@ -431,6 +434,163 @@ test.describe("pages under the production CSP", () => {
   }
 });
 
+// ------------------------------------------------- the shadcn primitives
+
+/** Opens, types into and picks from each primitive, checking that each one did. */
+async function driveEveryPrimitive(page: Page): Promise<void> {
+  const lastAction = page.getByLabel("Last action");
+
+  // Popover
+  await page.getByRole("button", { name: "Open popover" }).click();
+  const popover = page.getByRole("dialog");
+  await expect(popover).toContainText("Popover body");
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
+
+  // Command: filters as one types, Enter runs the highlighted item.
+  const commandInput = page.getByRole("combobox", { name: "Search apps" });
+  await commandInput.fill("fin");
+  await expect(page.getByRole("option", { name: "Finance" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Sales" })).toBeHidden();
+  await commandInput.fill("sal");
+  await commandInput.press("Enter");
+  await expect(lastAction).toHaveText("open sales");
+
+  // Select: by pointer, then by keyboard (ArrowDown opens, Home, Enter). The
+  // Command above is a listbox too, so the open list is found by its slot.
+  const range = page.getByRole("combobox", { name: "Range" });
+  const selectList = page.locator("[data-slot=select-list]");
+  await range.click();
+  await expect(selectList).toBeVisible();
+  await selectList.getByRole("option", { name: "24 hours" }).click();
+  await expect(selectList).toBeHidden();
+  await expect(range).toHaveText("24 hours");
+  await range.press("ArrowDown");
+  await expect(selectList).toBeVisible();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Enter");
+  await expect(range).toHaveText("15 minutes");
+
+  // Select with a search field. cmdk matches letters in order, not words
+  // ("us" is in "Europe (west)" too); only "US (east)" has "east".
+  const region = page.getByRole("combobox", { name: "Region", exact: true });
+  await region.click();
+  await page.keyboard.type("east");
+  for (const name of ["Europe (west)", "Asia Pacific (south)"]) {
+    await expect(page.getByRole("option", { name })).toBeHidden();
+  }
+  await page.keyboard.press("Enter");
+  await expect(region).toHaveText("US (east)");
+
+  // Combobox: a listed option, then a typed one. Reopened before its closing
+  // animation ends, a Radix popover keeps its content and does not move focus
+  // into it again, so the second open waits for the first to finish closing.
+  const principal = page.getByRole("combobox", { name: "Principal" });
+  await principal.click();
+  await page.keyboard.type("ops");
+  await page.getByRole("option", { name: /Ops team/ }).click();
+  await expect(principal).toContainText("Ops team");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await principal.click();
+  await page.keyboard.type("someone");
+  await page.getByRole("option", { name: "Use “someone”" }).click();
+  await expect(principal).toContainText("someone");
+
+  // Dropdown menu: a checkbox item by pointer, a sub menu by keyboard.
+  const actions = page.getByRole("button", { name: "Actions" });
+  const menu = page.getByRole("menu", { name: "Actions" });
+  await actions.click();
+  const wrapLines = page.getByRole("menuitemcheckbox", { name: "Wrap lines" });
+  await expect(wrapLines).toHaveAttribute("aria-checked", "true");
+  await wrapLines.click();
+  await expect(menu).toBeHidden();
+  // Radix moves the focus in a timeout after each key, so each step waits
+  // for it to land, as a person would.
+  await actions.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "Restart" })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(page.getByRole("menuitem", { name: "More" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("menuitem", { name: "Copy slug" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(lastAction).toHaveText("copy slug");
+  await expect(menu).toBeHidden();
+
+  // Tabs, both looks: a click, then the arrow keys.
+  for (const variant of ["default", "bar"]) {
+    const list = page.getByRole("tablist", { name: `Sections (${variant})` });
+    await list.getByRole("tab", { name: "Logs" }).click();
+    await expect(page.getByText(`Logs panel (${variant})`)).toBeVisible();
+    await page.keyboard.press("ArrowLeft");
+    await expect(list.getByRole("tab", { name: "Overview" })).toBeFocused();
+    await expect(page.getByText(`Overview panel (${variant})`)).toBeVisible();
+  }
+
+  // Tooltip
+  await page.getByRole("button", { name: "Copy", exact: true }).hover();
+  await expect(page.getByRole("tooltip")).toHaveText("Copy the URL");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toBeHidden();
+
+  // Collapsible
+  await page.getByRole("button", { name: "Show details" }).click();
+  await expect(page.getByText("Collapsible details")).toBeVisible();
+
+  // Toggle and toggle groups (roving focus in the single one).
+  const wrap = page.getByRole("button", { name: "Wrap log lines" });
+  await wrap.click();
+  await expect(wrap).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("radio", { name: "1 hour" }).focus();
+  await page.keyboard.press("ArrowRight");
+  const day = page.getByRole("radio", { name: "24 hours" });
+  await expect(day).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(day).toHaveAttribute("aria-checked", "true");
+  const stderr = page.getByRole("button", { name: "stderr" });
+  await stderr.click();
+  await expect(stderr).toHaveAttribute("aria-pressed", "true");
+}
+
+test.describe("shadcn primitives under the production CSP", () => {
+  for (const viewport of VIEWPORTS) {
+    test.describe(`${viewport.width}px`, () => {
+      test.use({ viewport });
+
+      test("opened, typed into and picked from: no CSP violation or console error", async ({
+        page,
+      }) => {
+        const observation = await observe(page);
+        const response = await page.goto(
+          `${server.origin}${PRIMITIVES_PREFIX}/`,
+        );
+        expect(response?.status(), "status of the document").toBe(200);
+        await expect(page.locator(`html[${READY_ATTRIBUTE}]`)).toBeAttached();
+
+        await driveEveryPrimitive(page);
+
+        const violations = await observation.violations();
+        // The run's evidence, as counts, in the reporter's output.
+        console.log(
+          `primitives at ${viewport.width}px: ${violations.length} CSP violations, ${observation.consoleErrors.length} console errors, ${observation.pageErrors.length} page errors`,
+        );
+        expect(
+          violations.map(describeViolation),
+          "CSP violations the browser reported",
+        ).toEqual([]);
+        expect(
+          observation.consoleErrors.map(
+            (error) => `${error.text} (${error.url})`,
+          ),
+          "console errors",
+        ).toEqual([]);
+        expect(observation.pageErrors, "uncaught page errors").toEqual([]);
+      });
+    });
+  }
+});
+
 // -------------------------------------------------- the header, not vacuous
 
 /** The policy of design 7.3 and FR-021, spelled out on its own (the server builds it from a list). */
@@ -544,6 +704,28 @@ test.describe("negative controls: the same harness catches a violation", () => {
     expect(violations.map((violation) => violation.target)).toEqual([
       expect.stringMatching(/^<script/),
     ]);
+  });
+
+  // Why ui/tabs.tsx and ui/toggle-group.tsx prerender by hand: the same page
+  // build, with Radix's own parts, is refused.
+  test("Radix's own Tabs and ToggleGroup, prerendered, are refused", async ({
+    page,
+  }) => {
+    const observation = await observe(page);
+    await page.goto(`${server.origin}${PRIMITIVES_PREFIX}/control/`);
+    await expect
+      .poll(async () =>
+        (await observation.violations()).map(
+          (violation) => `${violation.effectiveDirective} ${violation.target}`,
+        ),
+      )
+      .toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^style-src-attr .*role="tablist"/),
+          expect.stringMatching(/^style-src-attr .*role="tabpanel"/),
+          expect.stringMatching(/^style-src-attr .*role="radiogroup"/),
+        ]),
+      );
   });
 
   test("the overflow check reports a page wider than the window", async ({
