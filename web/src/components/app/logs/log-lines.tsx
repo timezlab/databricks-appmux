@@ -8,10 +8,16 @@ import type { LogEntry, LogStream } from "@/lib/app/logs";
 import { gapText, isScrolledToBottom, logLineTime } from "@/lib/app/logs";
 import { formatAbsoluteTime } from "@/lib/format";
 
-/** The stream column carries its name in words; the colour only backs it up. */
+/**
+ * The stream column carries its name in words; the colour only backs it up.
+ * stderr is a pipe, not a severity: Python's logging and uvicorn write their
+ * INFO lines to it (uvicorn's access log goes to stdout), so a danger tone would
+ * mark every start-up line of a healthy app as an error. It is only a step
+ * brighter than stdout.
+ */
 const STREAM_CLASSES: Record<LogStream, string> = {
   stdout: "text-muted-foreground",
-  stderr: "font-semibold text-tone-danger-text",
+  stderr: "text-foreground",
   appmux: "text-tone-info-text",
 };
 
