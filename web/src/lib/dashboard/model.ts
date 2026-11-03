@@ -70,29 +70,34 @@ export type ChartTone =
 
 /**
  * The pattern laid over a mark (and its legend swatch) besides its colour. The
- * tones differ little in lightness, so a person who cannot tell the hues apart
- * still tells a plain segment from a striped one from a dotted one. Each app
- * has a hue of its own (`--chart-1..8`), and only the first app is plain: two
- * plain apps would differ by hue alone (tests/contract/chart-tones.test.ts).
- * The others alternate striped and dotted, so two neighbours in a stack always
- * differ in pattern; some neighbouring tokens fail the colour-blind check
- * (`--chart-2` and `--chart-3` in dark mode), and the pattern is what tells
- * those apart. The grey of `other`, on top of the striped eighth app, is dotted.
+ * tones differ little in lightness, so a person who cannot tell some hues
+ * apart (deuteranopia, protanopia, tritanopia) still tells the patterns apart:
+ * plain, stripes rising to the right (`/`), stripes falling to the right
+ * (`\`), a crosshatch of both, and dots. Each app has a hue of its own
+ * (`--chart-1..8`), and only the first app is plain: two plain apps would
+ * differ by hue alone. No pattern serves more than two tones of the
+ * breakdown, and the two that share one are far apart in colour for every
+ * kind of colour vision in both themes (CIEDE2000 10 or more,
+ * tests/contract/chart-tones.test.ts): 2 and 4 rise, 6 and 8 fall, 5 and 7
+ * are crosshatched, 3 and the grey of `other` are dotted. Two neighbours in a
+ * stack always differ in pattern, since some neighbouring tokens look alike
+ * to a colour-blind reader (`--chart-2` and `--chart-3` in dark mode).
  */
-export type ToneTexture = "none" | "stripes" | "dots";
+export type ToneTexture =
+  "none" | "rising-stripes" | "falling-stripes" | "crosshatch" | "dots";
 
 export const TONE_TEXTURE: Record<ChartTone, ToneTexture> = {
   primary: "none",
-  warning: "stripes",
+  warning: "rising-stripes",
   danger: "dots",
   "series-1": "none",
-  "series-2": "stripes",
+  "series-2": "rising-stripes",
   "series-3": "dots",
-  "series-4": "stripes",
-  "series-5": "dots",
-  "series-6": "stripes",
-  "series-7": "dots",
-  "series-8": "stripes",
+  "series-4": "rising-stripes",
+  "series-5": "crosshatch",
+  "series-6": "falling-stripes",
+  "series-7": "crosshatch",
+  "series-8": "falling-stripes",
   other: "dots",
 };
 

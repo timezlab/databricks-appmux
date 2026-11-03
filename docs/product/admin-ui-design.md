@@ -213,6 +213,10 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
   a copy button.
 - **Dashboard (points 10 and 11).** The Platform view has the same charts as an app (requests, response time,
   memory) from the platform row, then the same charts broken down by app (stacked by app, top eight and "other").
+  Each tone of the breakdown is a colour and a texture, so a colour-blind reader tells them apart too: app 1 plain,
+  2 and 4 striped rising (`/`), 6 and 8 striped falling (`\`), 5 and 7 crosshatched, 3 and "other" dotted. The two
+  tones that share a texture are at least CIEDE2000 10 apart for normal vision and under deuteranopia, protanopia
+  and tritanopia, in both themes, and neighbours in a stack never share one.
   Ranges: 15 minutes, 1 hour, 6 hours, 24 hours, 3 days, 7 days; longer ranges are summed per 5 minutes or per hour
   by the server.
 

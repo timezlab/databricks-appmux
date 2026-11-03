@@ -103,7 +103,11 @@
    shadcn's names, plus what appmux needs and shadcn lacks: a hover colour for
    the filled buttons, `link`, the route strip, the five tones (text on its
    tint, and the border that frames it, which is also the colour of a lamp) and
-   six chart series.
+   eight chart series. Each series is paired with a texture
+   (src/lib/dashboard/model.ts, `TONE_TEXTURE`); the two series that share a
+   texture must stay CIEDE2000 10 apart for every kind of colour vision
+   (tests/contract/chart-tones.test.ts), so a new value here is checked there
+   as well as for contrast.
 
    `primary` is the colour of a patch cord: the filled buttons, links, the
    focus ring and the bar of the selected navigation item. Danger is the only
