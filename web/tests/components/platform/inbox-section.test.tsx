@@ -25,7 +25,6 @@ const REGISTER_REQUEST = RequestRow.parse({
     slug: "hr",
     display_name: "HR portal",
     source_path: "/Workspace/Shared/apps/hr",
-    memory_budget_mb: 256,
   },
   reason: "the people team needs a leave calendar",
   requested_by: "erin@example.com",
@@ -152,6 +151,14 @@ describe("InboxSection", () => {
     expect(
       screen.getByRole("heading", { name: /^Request #4:/ }),
     ).toBeInTheDocument();
+  });
+
+  it("shows a registration with the platform default as its memory budget, not as missing", () => {
+    setup([REGISTER_REQUEST]);
+
+    expect(VIEW.settings.default_memory_budget_mb).toBe(512);
+    expect(card(5).getByText("512 MB")).toBeInTheDocument();
+    expect(card(5).queryByText("(missing)")).not.toBeInTheDocument();
   });
 
   it("asks before it denies, and Cancel sends nothing", async () => {

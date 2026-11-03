@@ -116,7 +116,7 @@ describe("SettingsGroups", () => {
     expect(row.getByText(/Per-request timeout/)).toBeInTheDocument();
     expect(row.getByText("120 s")).toBeInTheDocument();
     expect(row.getByText(/reaches all children/)).toBeInTheDocument();
-    expect(screen.getAllByRole("listitem")).toHaveLength(13);
+    expect(screen.getAllByRole("listitem")).toHaveLength(14);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(bar()).toBeNull();
   });

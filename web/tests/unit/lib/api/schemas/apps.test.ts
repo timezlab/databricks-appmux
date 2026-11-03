@@ -6,7 +6,10 @@
 import { describe, it } from "vitest";
 
 import * as api from "@/lib/api";
-import { readExampleObject } from "../../../../support/contract-examples";
+import {
+  readExampleObject,
+  without,
+} from "../../../../support/contract-examples";
 import {
   accepts,
   rejects,
@@ -25,14 +28,16 @@ describe("registration fields", () => {
     }
   });
 
-  it("memory budget: 64 to 16384, an integer", () => {
-    for (const good of [64, 16384]) {
+  it("memory budget: 64 to 16384, an integer, and optional (the platform default)", () => {
+    for (const good of [64, 16384, null]) {
       accepts(
         api.RegisterAppRequest,
         variant(register, { memory_budget_mb: good }),
+        String(good),
       );
     }
-    for (const bad of [63, 16385, 64.5, "64", null]) {
+    accepts(api.RegisterAppRequest, without(register, "memory_budget_mb"));
+    for (const bad of [63, 16385, 64.5, "64"]) {
       rejects(
         api.RegisterAppRequest,
         variant(register, { memory_budget_mb: bad }),

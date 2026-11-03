@@ -65,7 +65,6 @@ function registerRow(
       slug,
       display_name: "Team wiki",
       source_path: "/Workspace/Shared/apps/wiki",
-      memory_budget_mb: 128,
     },
     current: null,
     requires_reason: true,
@@ -96,14 +95,28 @@ const me = (overrides: Partial<MeResponse> = {}): MeResponse => ({
 });
 
 describe("describeRequest", () => {
-  it("a register request names the app, its slug, folder and budget", () => {
+  it("a register request names the app, its slug and folder, and no budget: the platform sets it", () => {
     const described = describeRequest(registerRow(1, "wiki"));
     assert.equal(described.summary, "New app: Team wiki");
     assert.equal(described.shortLabel, "new app wiki");
     assert.deepEqual(described.details, [
       "Slug: wiki",
       "Source folder: /Workspace/Shared/apps/wiki",
-      "Memory budget: 128 MB",
+    ]);
+  });
+
+  it("a register request stored with a budget before the platform default existed shows none, since approving ignores it", () => {
+    const older = registerRow(1, "wiki", {
+      payload: {
+        slug: "wiki",
+        display_name: "Team wiki",
+        source_path: "/Workspace/Shared/apps/wiki",
+        memory_budget_mb: 128,
+      },
+    });
+    assert.deepEqual(describeRequest(older).details, [
+      "Slug: wiki",
+      "Source folder: /Workspace/Shared/apps/wiki",
     ]);
   });
 

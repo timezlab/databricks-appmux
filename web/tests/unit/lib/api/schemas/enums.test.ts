@@ -59,6 +59,7 @@ describe("closed lists", () => {
       api.SettingKey,
       [
         "memory_reserve_mb",
+        "default_memory_budget_mb",
         "package_mode",
         "default_wheel_sources",
         "shared_sp_delegation_allowed",

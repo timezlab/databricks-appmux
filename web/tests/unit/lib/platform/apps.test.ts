@@ -89,6 +89,22 @@ describe("parseRegisterForm", () => {
     });
   });
 
+  it("leaves the budget out of the body when its field is blank, for the platform default", () => {
+    for (const memory_budget_mb of ["", "   "]) {
+      const result = parseRegisterForm({ ...filled, memory_budget_mb }, []);
+      assert.equal(result.ok, true, JSON.stringify(memory_budget_mb));
+      if (result.ok) {
+        assert.equal("memory_budget_mb" in result.value, false);
+        assert.deepEqual(result.value, {
+          slug: "forecast",
+          display_name: "Forecast",
+          source_path: "/Workspace/Shared/apps/forecast",
+          owner: "dave@example.com",
+        });
+      }
+    }
+  });
+
   it("ignores spaces around the text", () => {
     const result = parseRegisterForm(
       { ...filled, slug: " forecast ", owner: " dave@example.com " },
@@ -107,12 +123,10 @@ describe("parseRegisterForm", () => {
     if (!result.ok) {
       assert.deepEqual(Object.keys(result.errors).toSorted(), [
         "display_name",
-        "memory_budget_mb",
         "owner",
         "slug",
         "source_path",
       ]);
-      assert.equal(result.errors.memory_budget_mb, "is required");
     }
   });
 

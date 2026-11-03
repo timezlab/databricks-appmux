@@ -7,7 +7,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
 import * as api from "@/lib/api";
-import { readExampleObject } from "../../../../support/contract-examples";
+import {
+  readExampleObject,
+  without,
+} from "../../../../support/contract-examples";
 import {
   accepts,
   rejects,
@@ -22,7 +25,6 @@ describe("request rules of the contract", () => {
       slug: "wiki",
       display_name: "Wiki",
       source_path: "/Workspace/Shared/wiki",
-      memory_budget_mb: 128,
     },
     reason: "a small app",
   };
@@ -34,6 +36,19 @@ describe("request rules of the contract", () => {
         .success,
       false,
     );
+  });
+
+  it("refuses a register request that names a memory budget: the platform sets one", () => {
+    for (const memory_budget_mb of [128, 63, null]) {
+      assert.equal(
+        api.CreatePermissionRequest.safeParse({
+          ...register,
+          payload: { ...register.payload, memory_budget_mb },
+        }).success,
+        false,
+        String(memory_budget_mb),
+      );
+    }
   });
 
   it("refuses a blank reason, a reason over 500 characters and an empty settings payload", () => {
@@ -98,6 +113,11 @@ describe("request rules of the contract", () => {
       owner: "a@example.com",
     };
     assert.ok(api.RegisterAppRequest.safeParse(base).success);
+    // Left out, the app gets the platform's default budget.
+    assert.ok(
+      api.RegisterAppRequest.safeParse(without(base, "memory_budget_mb"))
+        .success,
+    );
     for (const bad of [
       { slug: "Wiki" },
       { slug: "-wiki" },
