@@ -19,8 +19,9 @@ the person. What it shows:
   wheels it recorded, and, for a Python app, the distributions of the platform's environment.
 
 A declared line or dependency that is not a plain requirement or version (a URL, a git or path
-specifier, an option, another file, an npm alias or workspace) is left out without being echoed,
-because a URL can hold a credential. A release that this container has not built (an app not
+specifier, an option, another file, a requirement by arbitrary equality ``===``, an npm alias,
+workspace or tarball file name) is left out without being echoed, because a URL can hold a
+credential. A release that this container has not built (an app not
 started since appmux started) has no directory, so it lists no declared package. Nothing is
 audited: this is a read of what an app admin can already see on the release.
 """
@@ -74,6 +75,9 @@ _NODE_VERSION: Final = re.compile(r"v(\d+\.\d+\.\d+[0-9A-Za-z.+-]*)")
 # A semver range (``^1.2.0``, ``>=1 <2 || 3.x``, ``*``) or a dist-tag (``latest``); npm reads a
 # specifier that starts with a dot as a directory.
 _PLAIN_NPM_VERSION: Final = re.compile(r"(?!\.)[0-9A-Za-z.+*^~<>=| _-]*")
+# npm reads a specifier ending in one of these, in any case, as a tarball file next to package.json
+# (``isFileType`` of npm-package-arg 13).
+_NPM_TARBALL_SUFFIXES: Final = (".tgz", ".tar.gz", ".tar")
 
 NodeVersionSource = Callable[[], Awaitable[str | None]]
 RuntimeKind = Literal["python", "node", "unknown"]
@@ -288,6 +292,8 @@ def _requirement_rows(text: str) -> list[EnvironmentPackage]:
             continue  # a path or a line pip alone understands; never echoed
         if requirement.url is not None:
             continue  # a URL can hold a credential
+        if any(spec.operator == "===" for spec in requirement.specifier):
+            continue  # arbitrary equality takes any text, a URL with its credential included
         specifier = str(requirement.specifier)
         rows.append(
             EnvironmentPackage(name=requirement.name, version=specifier or None, source="release")
@@ -309,7 +315,7 @@ def _package_json_rows(text: str) -> list[EnvironmentPackage]:
             continue
         for name, version in dependencies.items():
             if isinstance(version, str) and not _is_plain_npm_version(version):
-                continue  # a URL, git, path, alias or workspace specifier; never echoed
+                continue  # a URL, git, path, alias, workspace or tarball specifier; never echoed
             rows.append(
                 EnvironmentPackage(
                     name=name,
@@ -323,11 +329,13 @@ def _package_json_rows(text: str) -> list[EnvironmentPackage]:
 def _is_plain_npm_version(specifier: str) -> bool:
     """Whether ``specifier`` is a version, a range or a dist-tag, which npm resolves by name.
 
-    An allow-list, so a specifier shape not named here is left out rather than shown: every other
-    kind (``git+https://``, ``file:``, ``link:``, ``workspace:``, ``npm:`` aliases, ``org/repo``,
-    ``../path``) has a ``:``, a ``/``, a ``#``, an ``@`` or a leading ``.``, which this refuses.
+    An allow-list, so a specifier shape not named here is left out rather than shown: most other
+    kinds (``git+https://``, ``file:``, ``link:``, ``workspace:``, ``npm:`` aliases, ``org/repo``,
+    ``../path``) have a ``:``, a ``/``, a ``#``, an ``@`` or a leading ``.``, which this refuses,
+    and a tarball file name (``lib-1.0.0.tgz``) is refused by its ending.
     """
-    return _PLAIN_NPM_VERSION.fullmatch(specifier) is not None
+    is_plain = _PLAIN_NPM_VERSION.fullmatch(specifier) is not None
+    return is_plain and not specifier.lower().endswith(_NPM_TARBALL_SUFFIXES)
 
 
 def _wheel_package(filename: str) -> EnvironmentPackage:
