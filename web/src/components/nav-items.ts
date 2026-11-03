@@ -53,9 +53,9 @@ export function isCurrentNavEntry(
 
 /**
  * Whether `pathname` is exactly the page `href` names, ignoring a trailing
- * slash and the query string. For the tabs of a section (`SubNav`): the first
- * tab, `/platform/`, must not stay lit on `/platform/apps/`, which
- * `isCurrentNavItem` would do.
+ * slash and the query string. For the pages of a section (the platform page
+ * picks its title with it): the first page, `/platform/`, must not stay
+ * current on `/platform/apps/`, which `isCurrentNavItem` would do.
  */
 export function isCurrentSubNavItem(
   pathname: string | null,

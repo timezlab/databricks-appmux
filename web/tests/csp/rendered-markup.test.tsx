@@ -84,7 +84,6 @@ import {
   SkeletonTable,
 } from "@/components/skeletons";
 import { AppStateBadge, StatusBadge } from "@/components/status-badge";
-import { SubNav } from "@/components/sub-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBar } from "@/components/top-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -881,19 +880,6 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
     <Section title="Releases" actions={<Button>Add</Button>}>
       <p>Body</p>
     </Section>
-  ),
-  "sub-nav.tsx": () => (
-    <SubNav
-      label="Sections"
-      items={[
-        {
-          label: "Overview",
-          href: "/platform/",
-          badge: { text: "3", description: "3 requests waiting" },
-        },
-        { label: "Apps", href: "/platform/apps/" },
-      ]}
-    />
   ),
   "status-badge.tsx": () => (
     <>
