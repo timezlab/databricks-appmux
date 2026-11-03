@@ -19,10 +19,12 @@ import type { GrantType, PrincipalList } from "@/lib/api";
 import { SUGGESTION_DELAY_MS, createDebouncedSearch } from "@/lib/app/forms";
 import type { DebouncedSearch, SearchOutcome } from "@/lib/app/forms";
 import {
+  ALL_PRINCIPAL_TYPES,
   PRINCIPAL_TYPE_LABEL,
   isSearchablePrincipalText,
   principalRows,
   principalSuggestionsNote,
+  principalTypesPhrase,
 } from "@/lib/app/sharing";
 import type { PrincipalChoice } from "@/lib/app/sharing";
 import { Button } from "@/components/ui/button";
@@ -83,11 +85,32 @@ type SearchState =
   /** Text the server cannot search (`*`, a long text): only the Use row. */
   | { status: "skipped"; text: string };
 
+/** What a person may type for each kind, for the line shown while nothing matches. */
+const TYPING_HINT: Readonly<Record<GrantType, readonly string[]>> = {
+  user: ["a name", "an e-mail address"],
+  group: ["a group name"],
+  service_principal: ["a service principal id"],
+  everyone: [],
+};
+
+function typingHint(allowedTypes: readonly GrantType[]): string {
+  const parts = allowedTypes.flatMap((type) => TYPING_HINT[type]);
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} or ${parts.at(-1) ?? ""}`;
+}
+
 export interface PrincipalComboboxProps {
   /** From `Field`: ties the label to the trigger. */
   id?: string;
   value: PrincipalChoice | null;
   onValueChange: (choice: PrincipalChoice | null) => void;
+  /**
+   * The kinds of principal this field takes, suggested or typed (all of them
+   * by default). Platform admins are users and groups only.
+   */
+  allowedTypes?: readonly GrantType[];
+  /** Names the list for a screen reader. */
+  label?: string;
   disabled?: boolean;
   "aria-describedby"?: string;
   "aria-invalid"?: true;
@@ -107,6 +130,8 @@ export function PrincipalCombobox({
   id,
   value,
   onValueChange,
+  allowedTypes = ALL_PRINCIPAL_TYPES,
+  label = "Who to share with",
   disabled = false,
   ...aria
 }: PrincipalComboboxProps) {
@@ -134,7 +159,11 @@ export function PrincipalCombobox({
         setState(outcome);
         if (outcome.status === "done") {
           setLastList(outcome.result);
-          const [first] = principalRows(outcome.result.items, outcome.text);
+          const [first] = principalRows(
+            outcome.result.items,
+            outcome.text,
+            allowedTypes,
+          );
           if (first !== undefined) setHighlighted(first.id);
         }
       },
@@ -144,7 +173,7 @@ export function PrincipalCombobox({
       search.cancel();
       searchRef.current = null;
     };
-  }, []);
+  }, [allowedTypes]);
 
   function changeText(next: string): void {
     setText(next);
@@ -179,13 +208,19 @@ export function PrincipalCombobox({
 
   const isSkipped = state.status === "skipped";
   const suggestions = isSkipped ? [] : (lastList?.items ?? []);
-  const rows = principalRows(suggestions, text);
+  const rows = principalRows(suggestions, text, allowedTypes);
+  const canNameServicePrincipal = allowedTypes.includes("service_principal");
   const note =
     state.status === "failed"
       ? principalSuggestionsNote(null)
       : isSkipped || lastList === null
         ? null
-        : principalSuggestionsNote(lastList.sources);
+        : principalSuggestionsNote(
+            canNameServicePrincipal
+              ? lastList.sources
+              : // Not asked for here, so not worth a word about.
+                { ...lastList.sources, service_principals: "not_read" },
+          );
   const isLoading = state.status === "loading";
 
   return (
@@ -207,7 +242,7 @@ export function PrincipalCombobox({
           >
             {value === null ? (
               <span className="truncate">
-                Search users, groups and service principals
+                Search {principalTypesPhrase(allowedTypes)}
               </span>
             ) : (
               <span className="flex min-w-0 items-center rounded-sm bg-secondary px-2 py-0.5 text-secondary-foreground">
@@ -225,14 +260,18 @@ export function PrincipalCombobox({
           className="w-(--radix-popover-trigger-width) min-w-72 p-0"
         >
           <Command
-            label="Who to share with"
+            label={label}
             shouldFilter={false}
             loop
             value={highlighted}
             onValueChange={setHighlighted}
           >
             <CommandInput
-              placeholder="Type a name, an e-mail, a group or an id"
+              placeholder={
+                canNameServicePrincipal
+                  ? "Type a name, an e-mail, a group or an id"
+                  : "Type a name, an e-mail or a group"
+              }
               value={text}
               onValueChange={changeText}
               autoCapitalize="none"
@@ -250,8 +289,7 @@ export function PrincipalCombobox({
               ) : null}
               {!isLoading && rows.length === 0 ? (
                 <p className="px-3 py-4 text-sm text-muted-foreground">
-                  Type a name, an e-mail address, a group name or a service
-                  principal id.
+                  Type {typingHint(allowedTypes)}.
                 </p>
               ) : null}
               {rows.map((row) => (

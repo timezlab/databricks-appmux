@@ -5,6 +5,9 @@ import type { FormEvent } from "react";
 
 import { putAdmins } from "@/lib/api";
 import type { PlatformView } from "@/lib/api";
+import { withoutError } from "@/lib/app/forms";
+import { ADMIN_PRINCIPAL_TYPES } from "@/lib/app/sharing";
+import type { PrincipalChoice } from "@/lib/app/sharing";
 import { adminRows, parseAdminChange } from "@/lib/platform/admins";
 import type { AdminChange, AdminRow, AdminViewer } from "@/lib/platform/admins";
 import type { FormErrors } from "@/lib/platform/forms";
@@ -17,21 +20,19 @@ import {
   FieldGrid,
   FormActions,
 } from "@/components/form-layout";
+import { PrincipalCombobox } from "@/components/principal-combobox";
 import { Section } from "@/components/section";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionResult } from "./action-result";
 import { FormSummary } from "./form-summary";
 import { useWriteAction } from "./use-write-action";
 
-type NewAdminType = "user" | "group";
+const CHOOSE_WHO_MESSAGE = "Choose a user or a group to add.";
+
+/** A platform admin is a user or a group; the field offers nothing else, but narrow the type for the request. */
+function adminType(choice: PrincipalChoice): "user" | "group" | null {
+  return choice.type === "user" || choice.type === "group" ? choice.type : null;
+}
 
 /**
  * The platform admins, who may open this page. Each change sends the whole
@@ -46,8 +47,7 @@ export function AdminsSection({
   viewer: AdminViewer;
 }) {
   const [reason, setReason] = useState("");
-  const [newType, setNewType] = useState<NewAdminType>("user");
-  const [newName, setNewName] = useState("");
+  const [newAdmin, setNewAdmin] = useState<PrincipalChoice | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const action = useWriteAction();
 
@@ -64,7 +64,7 @@ export function AdminsSection({
     void action.run(async () => {
       await putAdmins(body);
       setReason("");
-      if (next.kind === "add") setNewName("");
+      if (next.kind === "add") setNewAdmin(null);
       return {
         tone: "success",
         title:
@@ -77,7 +77,12 @@ export function AdminsSection({
 
   function handleAdd(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    change({ kind: "add", type: newType, name: newName });
+    const type = newAdmin === null ? null : adminType(newAdmin);
+    if (newAdmin === null || type === null) {
+      setErrors({ name: CHOOSE_WHO_MESSAGE });
+      return;
+    }
+    change({ kind: "add", type, name: newAdmin.name });
   }
 
   return (
@@ -140,7 +145,7 @@ export function AdminsSection({
           ]}
         />
 
-        <div className="flex max-w-140 flex-col gap-4">
+        <div className="flex flex-col gap-4">
           <FormSummary errors={errors} />
           <Field
             label="Reason for the next change"
@@ -160,47 +165,26 @@ export function AdminsSection({
         </div>
 
         <form
-          className={`${FORM_STACK_CLASSES} max-w-140 border-t pt-4`}
+          className={`${FORM_STACK_CLASSES} border-t pt-4`}
           onSubmit={handleAdd}
         >
           <h3>Add an admin</h3>
           <FieldGrid>
-            <Field label="Type">
-              {(control) => (
-                <Select
-                  value={newType}
-                  onValueChange={(value) => {
-                    setNewType(value === "group" ? "group" : "user");
-                  }}
-                >
-                  <SelectTrigger {...control} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent label="Type">
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="group">Group</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </Field>
             <Field
-              label={newType === "user" ? "Email address" : "Group name"}
-              hint={
-                newType === "user"
-                  ? "For example user@example.com."
-                  : "The name of a workspace group."
-              }
+              label="Who"
+              hint="A user or a group. Type to search, or type it in full."
               error={errors.name}
+              isRequired
             >
               {(control) => (
-                <Input
+                <PrincipalCombobox
                   {...control}
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={newName}
-                  onChange={(event) => {
-                    setNewName(event.target.value);
+                  value={newAdmin}
+                  allowedTypes={ADMIN_PRINCIPAL_TYPES}
+                  label="Who to make a platform admin"
+                  onValueChange={(choice) => {
+                    setNewAdmin(choice);
+                    setErrors((current) => withoutError(current, "name"));
                   }}
                 />
               )}

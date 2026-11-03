@@ -5,6 +5,7 @@ import * as api from "@/lib/api";
 import type { Actor } from "@/lib/app/actions";
 import { FORM_ERROR_KEY } from "@/lib/app/forms";
 import {
+  ADMIN_PRINCIPAL_TYPES,
   EMPTY_GRANT_FORM,
   buildGrantRequest,
   choosePrincipal,
@@ -13,6 +14,7 @@ import {
   isSearchablePrincipalText,
   principalRows,
   principalSuggestionsNote,
+  principalTypesPhrase,
   typedPrincipal,
   grantLevelChange,
   grantLevelChangePrompt,
@@ -181,6 +183,35 @@ describe("principalRows", () => {
   it("gives every row a distinct id", () => {
     const rows = principalRows(LIST.items, "new-group");
     assert.equal(new Set(rows.map((row) => row.id)).size, rows.length);
+  });
+
+  it("offers only the allowed types, suggested or typed", () => {
+    const rows = principalRows(LIST.items, "", ADMIN_PRINCIPAL_TYPES);
+    assert.deepEqual(
+      rows.map((row) => row.choice.type),
+      ["group", "user"],
+    );
+    // Typed text of a type that is not allowed is not offered back.
+    assert.deepEqual(principalRows([], SP_ID, ADMIN_PRINCIPAL_TYPES), []);
+    assert.deepEqual(principalRows([], "everyone", ADMIN_PRINCIPAL_TYPES), []);
+    assert.equal(
+      principalRows([], "frank@example.com", ADMIN_PRINCIPAL_TYPES)[0]?.choice
+        .type,
+      "user",
+    );
+  });
+});
+
+describe("principalTypesPhrase", () => {
+  it("names the kinds a field takes, and leaves everyone out", () => {
+    assert.equal(
+      principalTypesPhrase(),
+      "users, groups and service principals",
+    );
+    assert.equal(
+      principalTypesPhrase(ADMIN_PRINCIPAL_TYPES),
+      "users and groups",
+    );
   });
 });
 

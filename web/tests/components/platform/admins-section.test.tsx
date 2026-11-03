@@ -8,7 +8,6 @@ import { PlatformView, PutAdminsRequest } from "@/lib/api";
 import { readExample } from "../../support/contract-examples";
 import { jsonResponse, stubFetch } from "../../support/fake-fetch";
 import type { RecordedCall } from "../../support/fake-fetch";
-import { chooseOption } from "../../support/select";
 
 const BASE_VIEW = PlatformView.parse(readExample("PlatformView"));
 const VIEW = {
@@ -30,12 +29,15 @@ function bodyOf(call: RecordedCall): unknown {
 }
 
 function sentBodies(): unknown[] {
-  return calls.map(bodyOf);
+  return writes().map(bodyOf);
 }
 
 function setup() {
   stubFetch((call) => {
     calls.push(call);
+    if (call.url.includes("/principals")) {
+      return jsonResponse(200, readExample("PrincipalList"));
+    }
     const body = PutAdminsRequest.parse(bodyOf(call));
     return jsonResponse(200, { items: body.admins });
   });
@@ -50,6 +52,26 @@ function setup() {
   return { user, refresh, announce };
 }
 
+/** The calls that changed the list; the field's own searches are not among them. */
+function writes(): RecordedCall[] {
+  return calls.filter((call) => !call.url.includes("/principals"));
+}
+
+function whoField(): HTMLElement {
+  return screen.getByRole("combobox", { name: /^Who/ });
+}
+
+/** Opens the field, types `text`, and picks the row named `name`. */
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  text: string,
+  name: RegExp,
+): Promise<void> {
+  await user.click(whoField());
+  await user.type(screen.getByPlaceholderText(/^Type a name/), text);
+  await user.click(await screen.findByRole("option", { name }));
+}
+
 beforeEach(() => {
   calls = [];
 });
@@ -59,35 +81,88 @@ afterEach(() => {
 });
 
 describe("AdminsSection add form", () => {
-  it("lists a group named like a listed user as a new entry, because the type is compared too", async () => {
+  it("adds a group chosen from the directory's suggestions, and offers only users and groups", async () => {
     const { user, announce, refresh } = setup();
 
     await user.type(
       screen.getByLabelText(/^Reason for the next change/),
-      "mirror Dana as a group",
+      "the sales team runs the platform",
     );
-    await chooseOption(user, screen.getByLabelText("Type"), "Group");
-    await user.type(screen.getByLabelText("Group name"), " dana@example.com ");
+    await user.click(whoField());
+    await user.type(screen.getByPlaceholderText(/^Type a name/), "sa");
+    // Users and groups are suggested; a service principal and everyone are not.
+    expect(
+      await screen.findByRole("option", { name: /sales-team/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Erin Ng/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /sales-agent/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /Everyone/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("option", { name: /sales-team/ }));
     await user.click(screen.getByRole("button", { name: "Add admin" }));
 
     expect(
-      await screen.findByText("Added dana@example.com to the platform admins"),
+      await screen.findByText("Added sales-team to the platform admins"),
     ).toBeInTheDocument();
     expect(sentBodies()).toEqual([
       {
-        admins: [...VIEW.admins, { type: "group", name: "dana@example.com" }],
-        reason: "mirror Dana as a group",
+        admins: [...VIEW.admins, { type: "group", name: "sales-team" }],
+        reason: "the sales team runs the platform",
       },
     ]);
     expect(announce).toHaveBeenCalledWith(
-      "Added dana@example.com to the platform admins",
+      "Added sales-team to the platform admins",
     );
     expect(refresh).toHaveBeenCalledTimes(1);
     // The form is ready for the next change.
     expect(screen.getByLabelText(/^Reason for the next change/)).toHaveValue(
       "",
     );
-    expect(screen.getByLabelText("Group name")).toHaveValue("");
+    expect(whoField()).toHaveTextContent("Search users and groups");
+  });
+
+  it("takes a typed e-mail address as a user when the directory does not list it", async () => {
+    const { user } = setup();
+
+    await user.type(
+      screen.getByLabelText(/^Reason for the next change/),
+      "new on call",
+    );
+    await pick(user, "frank@example.com", /Use .*frank@example\.com/);
+    await user.click(screen.getByRole("button", { name: "Add admin" }));
+
+    expect(
+      await screen.findByText("Added frank@example.com to the platform admins"),
+    ).toBeInTheDocument();
+    expect(sentBodies()).toEqual([
+      {
+        admins: [...VIEW.admins, { type: "user", name: "frank@example.com" }],
+        reason: "new on call",
+      },
+    ]);
+  });
+
+  it("does not offer a service principal id typed in full: only users and groups can be admins", async () => {
+    const { user } = setup();
+
+    await user.click(whoField());
+    await user.type(
+      screen.getByPlaceholderText(/^Type a name/),
+      "4f3c1b2a-9d8e-4f7a-b6c5-0123456789ab",
+    );
+
+    // The answer has arrived (the stub returns the same list whatever is typed).
+    await screen.findByRole("option", { name: /sales-team/ });
+    expect(
+      screen.queryByRole("option", { name: /^Use/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /sales-agent/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("refuses a name already listed under the same type, whatever its case, and sends nothing", async () => {
@@ -97,32 +172,44 @@ describe("AdminsSection add form", () => {
       screen.getByLabelText(/^Reason for the next change/),
       "again",
     );
-    await chooseOption(user, screen.getByLabelText("Type"), "Group");
-    await user.type(screen.getByLabelText("Group name"), "Data-Platform");
+    await pick(user, "Data-Platform", /Use .*Data-Platform/);
     await user.click(screen.getByRole("button", { name: "Add admin" }));
 
-    const name = screen.getByLabelText("Group name");
-    expect(name).toBeInvalid();
-    expect(name).toHaveAccessibleDescription(/is already a platform admin/);
+    const who = whoField();
+    expect(who).toBeInvalid();
+    expect(who).toHaveAccessibleDescription(/is already a platform admin/);
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Some fields need attention",
     );
-    expect(calls).toHaveLength(0);
+    expect(writes()).toHaveLength(0);
+  });
+
+  it("asks who to add before anything is sent", async () => {
+    const { user } = setup();
+
+    await user.type(
+      screen.getByLabelText(/^Reason for the next change/),
+      "no one chosen",
+    );
+    await user.click(screen.getByRole("button", { name: "Add admin" }));
+
+    expect(whoField()).toBeInvalid();
+    expect(whoField()).toHaveAccessibleDescription(
+      /Choose a user or a group to add\./,
+    );
+    expect(writes()).toHaveLength(0);
   });
 
   it("asks for a reason before anything is sent", async () => {
     const { user } = setup();
 
-    await user.type(
-      screen.getByLabelText("Email address"),
-      "frank@example.com",
-    );
+    await pick(user, "frank@example.com", /Use .*frank@example\.com/);
     await user.click(screen.getByRole("button", { name: "Add admin" }));
 
     expect(
       screen.getByLabelText(/^Reason for the next change/),
     ).toHaveAccessibleDescription(/must not be blank/);
-    expect(calls).toHaveLength(0);
+    expect(writes()).toHaveLength(0);
   });
 });
 
@@ -142,11 +229,11 @@ describe("AdminsSection remove", () => {
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(calls).toHaveLength(0);
+    expect(writes()).toHaveLength(0);
 
     const erin = within(screen.getByRole("row", { name: /erin@example\.com/ }));
     await user.click(erin.getByRole("button", { name: "Remove" }));
-    expect(calls).toHaveLength(0);
+    expect(writes()).toHaveLength(0);
     await user.click(
       screen.getByRole("button", { name: "Yes, remove erin@example.com" }),
     );

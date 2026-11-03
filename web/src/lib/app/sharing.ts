@@ -157,29 +157,68 @@ export interface PrincipalRow {
   text: string;
 }
 
+/** Every kind of principal a grant can name. */
+export const ALL_PRINCIPAL_TYPES: readonly GrantType[] = [
+  "user",
+  "group",
+  "service_principal",
+  "everyone",
+];
+
+/** Who may be a platform admin: a person or a group, never a service principal or everyone. */
+export const ADMIN_PRINCIPAL_TYPES: readonly GrantType[] = ["user", "group"];
+
+const PRINCIPAL_TYPE_PLURAL: Readonly<Record<GrantType, string>> = {
+  user: "users",
+  group: "groups",
+  service_principal: "service principals",
+  everyone: "everyone",
+};
+
+/** The kinds a field takes, as words for its placeholder: "users, groups and service principals". */
+export function principalTypesPhrase(
+  allowedTypes: readonly GrantType[] = ALL_PRINCIPAL_TYPES,
+): string {
+  // `everyone` is a special name, not something to search for.
+  return joinWords(
+    allowedTypes
+      .filter((type) => type !== "everyone")
+      .map((type) => PRINCIPAL_TYPE_PLURAL[type]),
+  );
+}
+
 /**
  * The rows of the principal field: the suggestions in the server's order
  * (everyone, groups, users, service principals), then the typed text as a
  * "Use" row with its inferred type, unless a suggestion is that principal.
+ * Only `allowedTypes` are offered, suggested or typed (all of them by default).
  */
 export function principalRows(
   suggestions: readonly PrincipalSuggestion[],
   typed: string,
+  allowedTypes: readonly GrantType[] = ALL_PRINCIPAL_TYPES,
 ): PrincipalRow[] {
-  const rows = suggestions.map((suggestion): PrincipalRow => {
-    const choice = suggestionChoice(suggestion);
-    return {
-      id: `${choice.type}:${choice.name}`,
-      choice,
-      isTyped: false,
-      text: [choice.label, choice.identifier, PRINCIPAL_TYPE_LABEL[choice.type]]
-        .filter((part) => part !== null)
-        .join(", "),
-    };
-  });
+  const rows = suggestions
+    .filter((suggestion) => allowedTypes.includes(suggestion.type))
+    .map((suggestion): PrincipalRow => {
+      const choice = suggestionChoice(suggestion);
+      return {
+        id: `${choice.type}:${choice.name}`,
+        choice,
+        isTyped: false,
+        text: [
+          choice.label,
+          choice.identifier,
+          PRINCIPAL_TYPE_LABEL[choice.type],
+        ]
+          .filter((part) => part !== null)
+          .join(", "),
+      };
+    });
   const typedChoice = typedPrincipal(typed);
   if (
     typedChoice === null ||
+    !allowedTypes.includes(typedChoice.type) ||
     rows.some((row) => isSamePrincipal(row.choice, typedChoice))
   ) {
     return rows;
