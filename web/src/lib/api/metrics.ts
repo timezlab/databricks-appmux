@@ -1,5 +1,10 @@
-/** The metrics route. */
-import { MetricsQuery, MetricsResponse } from "@/lib/api/schemas";
+/** The metrics routes: the rows, and the per-app breakdown. */
+import {
+  MetricsBreakdown,
+  MetricsBreakdownQuery,
+  MetricsQuery,
+  MetricsResponse,
+} from "@/lib/api/schemas";
 
 import { callJson, parseQuery } from "./client";
 import type { RequestOptions } from "./client";
@@ -16,6 +21,21 @@ export async function getMetrics(
 ): Promise<MetricsResponse> {
   return callJson("GET /metrics", MetricsResponse, {
     query: parseQuery(MetricsQuery, query),
+    signal: options?.signal,
+  });
+}
+
+/**
+ * The top apps by requests in the window, each as a series, and the rest summed
+ * as `other`. The window rules are those of `getMetrics`; `limit` is 1 to 20.
+ * `async` for the same reason as `getMetrics`.
+ */
+export async function getMetricsBreakdown(
+  query: MetricsBreakdownQuery = {},
+  options?: RequestOptions,
+): Promise<MetricsBreakdown> {
+  return callJson("GET /metrics/breakdown", MetricsBreakdown, {
+    query: parseQuery(MetricsBreakdownQuery, query),
     signal: options?.signal,
   });
 }

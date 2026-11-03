@@ -286,6 +286,41 @@ describe("client", () => {
         (options) => api.getMetrics(undefined, options),
         "/metrics",
       ],
+      [
+        "GET /principals",
+        (options) => api.searchPrincipals(undefined, options),
+        "/principals",
+      ],
+      [
+        "GET /workspace/browse",
+        (options) => api.browseWorkspace(undefined, options),
+        "/workspace/browse",
+      ],
+      [
+        "GET /apps/{app}/logs",
+        (options) => api.getAppLogs("a", undefined, options),
+        "/apps/a/logs",
+      ],
+      [
+        "GET /apps/{app}/environment",
+        (options) => api.getAppEnvironment("a", options),
+        "/apps/a/environment",
+      ],
+      [
+        "GET /resources/types",
+        (options) => api.listResourceTypes(options),
+        "/resources/types",
+      ],
+      [
+        "GET /resources/suggestions",
+        (options) => api.suggestResources({ type: "job" }, options),
+        "/resources/suggestions?type=job",
+      ],
+      [
+        "GET /metrics/breakdown",
+        (options) => api.getMetricsBreakdown(undefined, options),
+        "/metrics/breakdown",
+      ],
     ];
 
     const contractRoutes = new Set(manifest.ErrorBody?.routes);
@@ -311,9 +346,20 @@ describe("client", () => {
       text.indexOf("## Routes"),
       text.indexOf("## Schemas"),
     );
-    const documented = [
-      ...routesSection.matchAll(/^\| `([A-Z]+) (\/[^`?]*)(?:\?[^`]*)?` \|/gm),
-    ].map(([, method, route]) => `${method} ${route}`);
-    assert.deepEqual([...api.API_ROUTES].sort(), documented.sort());
+    // The addendum for the admin UI adds routes in a table of its own, and
+    // restates `GET /metrics` (changed), which is one route and not two.
+    const addendumStart = text.indexOf("## Addendum: routes and fields");
+    const addendumRoutes = text.slice(
+      text.indexOf("### Routes", addendumStart),
+      text.indexOf("### Changed schemas", addendumStart),
+    );
+    const rowPattern = /^\| `([A-Z]+) (\/[^`?]*)(?:\?[^`]*)?` \|/gm;
+    const documented = new Set(
+      [
+        ...routesSection.matchAll(rowPattern),
+        ...addendumRoutes.matchAll(rowPattern),
+      ].map(([, method, route]) => `${method} ${route}`),
+    );
+    assert.deepEqual([...api.API_ROUTES].sort(), [...documented].sort());
   });
 });
