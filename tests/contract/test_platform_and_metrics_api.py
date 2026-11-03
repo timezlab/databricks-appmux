@@ -19,7 +19,13 @@ reconciler's books are a seam: ``PlatformRoutes(memory=...)``). What is pinned:
   (a manual row, say) is withheld, never repeated;
 * ``GET /metrics`` is open to ``CAN_MANAGE`` on the app asked for, or to a platform admin for any
   app, for ``_platform`` and for all of them; a window over 1440 minutes is ``400``; more rows than
-  the cap drop the oldest whole minutes, move ``from`` to the oldest minute kept and say so.
+  the cap drop the oldest whole minutes, move ``from`` to the oldest minute kept and say so;
+* ``GET /metrics?step=`` (T193) sums the minutes of each step by the rule of each column (counts
+  and histograms added, peaks maximised, gauges the last minute's value), starts every step on its
+  UTC boundary, leaves empty steps out, and takes a window of up to 7 days if it holds at most 1440
+  steps (else ``400 window_too_long`` naming the step that fits); ``GET /metrics/breakdown``
+  (``platform.view``) ranks the apps by requests, returns the top ``limit`` as series and sums the
+  rest as ``other``.
 
 A reader of a response never sees the visitor's access token, a stack trace or a submitted value.
 Starting data: see ``edge_harness`` (``sales`` owned by alice, bob ``CAN_USE``, carol
@@ -31,7 +37,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Any, Final
+from typing import Any, Final, get_args
 
 import httpx
 import pytest
@@ -56,16 +62,20 @@ from stub_registry import StubRegistry
 
 from appmux.admin.api import RouteProvider
 from appmux.admin.authorizer import RegistryAuthorizer
-from appmux.admin.metrics import MAX_METRIC_ROWS, MetricsRoutes
+from appmux.admin.metrics import MAX_METRIC_ROWS, METRIC_STEPS, MetricsRoutes
 from appmux.admin.platform import SETTABLE_KEYS, PlatformRoutes
 from appmux.admin.schemas import (
     AuditList,
+    MetricsBreakdown,
+    MetricsPoint,
     MetricsResponse,
     MetricsRow,
+    MetricStep,
     PlatformSetting,
     PlatformView,
 )
 from appmux.reconciler.admission import MemoryLedger
+from appmux.registry.metric_steps import BREAKDOWN_COLUMNS
 from appmux.registry.models import AuditLogRow, DroppedByRule, MetricRow
 from appmux.sandbox.self_check import CANARY_CHECK_NAME, CHECK_IDS, SelfCheckState
 from appmux.settings import PlatformSettings
@@ -1166,3 +1176,440 @@ def test_every_settable_key_is_a_key_the_settings_model_validates() -> None:
         "platform_admins",
         "egress_global",
     }
+
+
+def test_the_step_names_are_the_schemas_and_a_point_holds_the_breakdown_columns() -> None:
+    assert set(METRIC_STEPS) == set(get_args(MetricStep))
+    assert set(MetricsPoint.model_fields) == {"minute", *BREAKDOWN_COLUMNS}
+
+
+# --- GET /metrics?step= (T193) ------------------------------------------------------------------
+
+PLATFORM_FIGURES: Final[dict[str, int]] = {
+    "mem_used_mb": 1500,
+    "mem_limit_mb": 6144,
+    "children_running": 1,
+    "children_registered": 2,
+    "admission_rejections": 0,
+    "registry_errors": 0,
+    "registry_ms_max": 14,
+    "edge_rss_mb": 160,
+}
+
+
+def minute_row(app: str, minute: datetime, **values: Any) -> MetricRow:
+    """A stored minute whose every column may be set; the platform row gets its figures."""
+    figures = PLATFORM_FIGURES if app == "_platform" else {}
+    return MetricRow.model_validate(
+        {"app_slug": app, "minute": minute, "lat_hist": [0] * 11, **figures, **values}
+    )
+
+
+def hist(*counts: int) -> list[int]:
+    """A latency histogram whose first buckets are ``counts`` and the rest zero."""
+    return [*counts, *([0] * (11 - len(counts)))]
+
+
+def items_of(response: httpx.Response) -> list[dict[str, Any]]:
+    assert response.status_code == 200, response.text
+    items: list[dict[str, Any]] = response.json()["items"]
+    return items
+
+
+def test_a_15m_step_sums_the_counts_and_histograms_of_its_minutes_from_the_quarter() -> None:
+    platform = platform_with_metrics(
+        [
+            minute_row(
+                "sales",
+                at(1),
+                requests=10,
+                r2xx=8,
+                r5xx=2,
+                bytes_out=100,
+                restarts=1,
+                lat_hist=hist(1, 1, 1),
+                egress_dropped=1,
+                egress_dropped_by_rule=DroppedByRule({"app:1": 1}),
+            ),
+            minute_row(
+                "sales",
+                at(14),
+                requests=5,
+                r2xx=5,
+                bytes_out=50,
+                lat_hist=hist(0, 2),
+                egress_dropped=2,
+                egress_dropped_by_rule=DroppedByRule({"app:1": 1, "global:1": 1}),
+            ),
+            minute_row("sales", at(15), requests=7, r2xx=7),
+        ]
+    )
+
+    first, second = items_of(platform.call("GET", "/metrics?app=sales&step=15m", DANA))
+
+    assert first["minute"] == "2026-10-30T11:00:00Z"
+    assert (first["requests"], first["r2xx"], first["r5xx"]) == (15, 13, 2)
+    assert (first["bytes_out"], first["restarts"]) == (150, 1)
+    assert first["lat_hist"] == hist(1, 3, 1)
+    assert first["egress_dropped"] == 3
+    assert first["egress_dropped_by_rule"] == {"app:1": 2, "global:1": 1}
+    assert (second["minute"], second["requests"]) == ("2026-10-30T11:15:00Z", 7)
+    assert second["egress_dropped_by_rule"] == {}
+
+
+def test_a_step_keeps_the_peaks_and_the_last_value_of_each_gauge() -> None:
+    platform = platform_with_metrics(
+        [
+            minute_row("sales", at(1), in_flight_max=9, rss_mb_max=300, ws_open=4),
+            minute_row("sales", at(10), in_flight_max=3, rss_mb_max=340, ws_open=1),
+            minute_row(
+                "_platform",
+                at(1),
+                mem_used_mb=2000,
+                edge_rss_mb=170,
+                mem_limit_mb=8192,
+                children_running=2,
+                children_registered=3,
+                registry_ms_max=40,
+                registry_errors=1,
+                admission_rejections=1,
+            ),
+            minute_row(
+                "_platform",
+                at(10),
+                mem_used_mb=1800,
+                edge_rss_mb=180,
+                mem_limit_mb=6144,
+                children_running=1,
+                children_registered=4,
+                registry_ms_max=12,
+                registry_errors=2,
+                admission_rejections=0,
+            ),
+        ]
+    )
+
+    platform_row, sales = items_of(platform.call("GET", "/metrics?step=15m", DANA))
+
+    assert platform_row["app_slug"] == "_platform"
+    assert (platform_row["mem_used_mb"], platform_row["edge_rss_mb"]) == (2000, 180)  # peaks
+    assert platform_row["registry_ms_max"] == 40
+    assert platform_row["mem_limit_mb"] == 6144  # the last minute's gauges
+    assert (platform_row["children_running"], platform_row["children_registered"]) == (1, 4)
+    assert (platform_row["registry_errors"], platform_row["admission_rejections"]) == (3, 1)
+    assert (sales["in_flight_max"], sales["rss_mb_max"], sales["ws_open"]) == (9, 340, 1)
+    assert sales["mem_used_mb"] is None and sales["children_running"] is None
+
+
+def test_a_window_that_cuts_a_step_counts_only_its_own_minutes() -> None:
+    platform = platform_with_metrics(
+        [minute_row("sales", at(minute), requests=1) for minute in (5, 7, 14, 20)]
+    )
+
+    response = platform.call(
+        "GET",
+        "/metrics?app=sales&step=15m&from=2026-10-30T11:07:00Z&to=2026-10-30T11:20:00Z",
+        DANA,
+    )
+
+    # 11:05 is before the window and 11:20 is its end: the cut quarter holds 11:07 and 11:14.
+    [step] = items_of(response)
+    assert (step["minute"], step["requests"]) == ("2026-10-30T11:00:00Z", 2)
+    assert response.json()["from"] == "2026-10-30T11:07:00Z"
+
+
+def test_an_hour_step_starts_on_the_hour_and_an_empty_step_is_left_out() -> None:
+    platform = platform_with_metrics(
+        [
+            minute_row("sales", at(59, hour=8), requests=3),
+            minute_row("sales", at(0), requests=2),
+            minute_row("sales", at(1), requests=4),
+        ]
+    )
+
+    response = platform.call(
+        "GET",
+        "/metrics?app=sales&step=1h&from=2026-10-30T08:30:00Z&to=2026-10-30T11:30:00Z",
+        DANA,
+    )
+
+    # 09:00 to 10:59 hold no minute: two steps, not four.
+    assert [(item["minute"], item["requests"]) for item in items_of(response)] == [
+        ("2026-10-30T08:00:00Z", 3),
+        ("2026-10-30T11:00:00Z", 6),
+    ]
+
+
+def test_a_window_with_no_minutes_has_no_steps() -> None:
+    platform = platform_with_metrics([minute_row("sales", at(5))])
+
+    response = platform.call(
+        "GET", "/metrics?step=5m&from=2026-10-30T10:00:00Z&to=2026-10-30T11:00:00Z", DANA
+    )
+
+    assert items_of(response) == []
+    assert response.json()["truncated"] is False
+
+
+def test_steps_over_the_cap_drop_the_oldest_whole_step_and_say_so() -> None:
+    # Three apps over three five-minute steps are nine rows; room for seven keeps two steps.
+    rows = [
+        minute_row(app, at(minute))
+        for minute in (0, 1, 5, 10)
+        for app in ("sales", "docs", "_platform")
+    ]
+    platform = platform_with_metrics(rows, max_rows=7)
+
+    response = platform.call("GET", "/metrics?step=5m", DANA)
+
+    kept = items_of(response)
+    assert [(item["minute"][11:16], item["app_slug"]) for item in kept] == [
+        ("11:05", "_platform"),
+        ("11:05", "docs"),
+        ("11:05", "sales"),
+        ("11:10", "_platform"),
+        ("11:10", "docs"),
+        ("11:10", "sales"),
+    ]
+    assert response.json()["truncated"] is True
+    assert response.json()["from"] == "2026-10-30T11:05:00Z"
+
+
+def test_a_step_of_1m_is_the_default() -> None:
+    platform = platform_with_metrics([minute_row("sales", at(m), requests=m) for m in (1, 2)])
+
+    assert (
+        platform.call("GET", "/metrics?app=sales&step=1m", DANA).json()
+        == platform.call("GET", "/metrics?app=sales", DANA).json()
+    )
+
+
+@pytest.mark.parametrize("query", ["step=2m", "step=15M", "step=", "step=1m&step=5m"])
+def test_a_step_outside_the_list_is_400(query: str) -> None:
+    response = platform_with_metrics([]).call("GET", f"/metrics?{query}", DANA)
+
+    assert response.status_code == 400
+    code, message = error_of(response)
+    assert code == "bad_request"
+    assert "step" in message
+
+
+@pytest.mark.parametrize(
+    ("start", "step"),
+    [
+        ("2026-10-29T12:00:00Z", "1m"),  # 24 hours
+        ("2026-10-25T12:00:00Z", "5m"),  # 5 days: exactly 1440 steps
+        ("2026-10-23T12:00:00Z", "15m"),  # 7 days
+        ("2026-10-23T12:00:00Z", "1h"),
+    ],
+)
+def test_a_window_of_up_to_7_days_and_1440_steps_is_allowed(start: str, step: str) -> None:
+    platform = platform_with_metrics([])
+
+    response = platform.call(
+        "GET", f"/metrics?from={start}&to=2026-10-30T12:00:00Z&step={step}", DANA
+    )
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize(
+    ("start", "step", "named"),
+    [
+        ("2026-10-23T12:00:00Z", "1m", "15m"),  # 7 days at 1m
+        ("2026-10-29T11:59:00Z", "1m", "5m"),  # 1441 minutes
+        ("2026-10-25T11:59:00Z", "1m", "15m"),  # one minute over 5 days
+        ("2026-10-25T11:59:00Z", "5m", "15m"),
+    ],
+)
+def test_a_window_of_more_than_1440_steps_names_the_smallest_step_that_fits(
+    start: str, step: str, named: str
+) -> None:
+    platform = platform_with_metrics([])
+
+    response = platform.call(
+        "GET", f"/metrics?from={start}&to=2026-10-30T12:00:00Z&step={step}", DANA
+    )
+
+    assert response.status_code == 400
+    code, message = error_of(response)
+    assert code == "window_too_long"
+    assert f"step={named}" in message
+    assert "1440" in message
+
+
+def test_a_window_of_more_than_7_days_is_too_long_at_every_step() -> None:
+    platform = platform_with_metrics([])
+
+    response = platform.call(
+        "GET", "/metrics?from=2026-10-23T11:59:00Z&to=2026-10-30T12:00:00Z&step=1h", DANA
+    )
+
+    assert response.status_code == 400
+    code, message = error_of(response)
+    assert code == "window_too_long"
+    assert "7 days" in message
+    assert "step=" not in message  # no step makes it fit
+
+
+# --- GET /metrics/breakdown (T193) ---------------------------------------------------------------
+
+
+def breakdown_platform(**options: Any) -> Platform:
+    """docs 25 requests, sales 10, two apps no longer registered 3 each, and the platform row."""
+    return platform_with_metrics(
+        [
+            minute_row(
+                "docs",
+                at(1),
+                requests=20,
+                r4xx=2,
+                bytes_out=200,
+                rss_mb_max=100,
+                lat_hist=hist(2),
+                ws_open=5,
+            ),
+            minute_row("docs", at(20), requests=5, r5xx=1, rss_mb_max=120),
+            minute_row("sales", at(1), requests=10, rss_mb_max=300),
+            minute_row("old", at(1), requests=3, rss_mb_max=70, egress_dropped=2, lat_hist=hist(1)),
+            minute_row(
+                "gone", at(2), requests=3, rss_mb_max=50, egress_dropped=1, lat_hist=hist(0, 1)
+            ),
+            minute_row("_platform", at(1), requests=41),
+        ],
+        **options,
+    )
+
+
+def breakdown_of(response: httpx.Response) -> MetricsBreakdown:
+    assert response.status_code == 200, response.text
+    return MetricsBreakdown.model_validate_json(response.content)
+
+
+def test_the_breakdown_ranks_apps_by_requests_and_sums_the_rest_as_other() -> None:
+    platform = breakdown_platform()
+
+    response = platform.call("GET", "/metrics/breakdown?step=15m&limit=2", DANA)
+
+    body = breakdown_of(response)
+    assert body.step == "15m"
+    assert (body.from_, body.to) == (HOUR_START, CLOCK_NOW)
+    assert [(series.app_slug, series.display_name) for series in body.series] == [
+        ("docs", "Docs"),
+        ("sales", "Sales"),
+    ]
+    docs_points = response.json()["series"][0]["points"]
+    assert docs_points == [
+        {
+            "minute": "2026-10-30T11:00:00Z",
+            "requests": 20,
+            "r4xx": 2,
+            "r5xx": 0,
+            "rss_mb_max": 100,
+            "bytes_out": 200,
+            "egress_dropped": 0,
+            "lat_hist": hist(2),
+        },
+        {
+            "minute": "2026-10-30T11:15:00Z",
+            "requests": 5,
+            "r4xx": 0,
+            "r5xx": 1,
+            "rss_mb_max": 120,
+            "bytes_out": 0,
+            "egress_dropped": 0,
+            "lat_hist": hist(),
+        },
+    ]
+    # old and gone, summed per step: their memory peaks add up, as their requests do.
+    assert body.other is not None
+    [other] = body.other
+    assert (other.requests, other.rss_mb_max, other.egress_dropped) == (6, 120, 3)
+    assert other.lat_hist == hist(1, 1)
+
+
+def test_a_tie_is_ranked_by_slug_and_an_app_no_longer_registered_has_no_display_name() -> None:
+    body = breakdown_of(breakdown_platform().call("GET", "/metrics/breakdown?limit=3", DANA))
+
+    assert [(series.app_slug, series.display_name) for series in body.series] == [
+        ("docs", "Docs"),
+        ("sales", "Sales"),
+        ("gone", None),
+    ]
+    assert body.other is not None
+    assert [(point.minute, point.requests) for point in body.other] == [(at(1), 3)]
+
+
+def test_other_is_null_when_every_app_fits_and_the_platform_row_is_not_an_app() -> None:
+    body = breakdown_of(breakdown_platform().call("GET", "/metrics/breakdown", DANA))
+
+    assert [series.app_slug for series in body.series] == ["docs", "sales", "gone", "old"]
+    assert body.other is None
+    assert body.step == "1m"
+
+
+def test_a_breakdown_of_a_window_with_no_rows_is_empty() -> None:
+    body = breakdown_of(
+        breakdown_platform().call(
+            "GET", "/metrics/breakdown?from=2026-10-30T10:00:00Z&to=2026-10-30T11:00:00Z", DANA
+        )
+    )
+
+    assert (body.series, body.other) == ([], None)
+
+
+@pytest.mark.parametrize("limit", ["1", "20"])
+def test_a_limit_from_1_to_20_is_allowed(limit: str) -> None:
+    body = breakdown_of(breakdown_platform().call("GET", f"/metrics/breakdown?limit={limit}", DANA))
+
+    assert len(body.series) == min(int(limit), 4)
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["limit=0", "limit=21", "limit=-1", "limit=two", "limit=1.5", "limit=", "limit=2&limit=3"],
+)
+def test_a_limit_outside_1_to_20_is_400(query: str) -> None:
+    response = breakdown_platform().call("GET", f"/metrics/breakdown?{query}", DANA)
+
+    assert response.status_code == 400
+    code, message = error_of(response)
+    assert code == "bad_request"
+    assert "limit" in message
+
+
+def test_the_breakdown_follows_the_step_and_window_rules_of_get_metrics() -> None:
+    platform = breakdown_platform()
+    week = "from=2026-10-23T12:00:00Z&to=2026-10-30T12:00:00Z"
+
+    too_fine = platform.call("GET", f"/metrics/breakdown?{week}", DANA)
+    allowed = platform.call("GET", f"/metrics/breakdown?{week}&step=15m", DANA)
+    unknown = platform.call("GET", "/metrics/breakdown?step=10m", DANA)
+
+    assert too_fine.status_code == 400
+    assert error_of(too_fine)[0] == "window_too_long"
+    assert "step=15m" in error_of(too_fine)[1]
+    assert allowed.status_code == 200
+    assert unknown.status_code == 400
+    assert error_of(unknown)[0] == "bad_request"
+
+
+def test_the_breakdown_needs_can_manage_on_the_platform() -> None:
+    platform = breakdown_platform()
+
+    for person in NON_ADMINS:  # an owner and a CAN_MANAGE holder of an app included
+        response = platform.call("GET", "/metrics/breakdown", person)
+        assert response.status_code == 403, person
+        assert "requests" not in response.text
+    assert platform.call("GET", "/metrics/breakdown", None).status_code == 401
+    assert platform.call("GET", "/metrics/breakdown", DANA).status_code == 200
+
+
+def test_the_breakdown_needs_the_registry() -> None:
+    platform = breakdown_platform()
+    platform.registry.go_down()
+
+    down = platform.call("GET", "/metrics/breakdown", DANA)
+
+    assert down.status_code == 503
+    assert_no_leak(down)

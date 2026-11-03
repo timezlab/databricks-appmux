@@ -46,6 +46,7 @@ from appmux.registry.errors import (
     RowAlreadyExists,
     RowMissing,
 )
+from appmux.registry.metric_steps import STEP_ORIGIN, STEP_RULES
 from appmux.registry.models import (
     App,
     AuditLogRow,
@@ -1525,7 +1526,93 @@ async def test_a_window_with_no_room_returns_nothing_without_a_query() -> None:
 
     assert await client.read_metrics(app_slug=None, start=NOW, end=NOW, limit=0) == ()
     assert await client.read_audit(app_slug=None, start=NOW, end=NOW, limit=0) == ()
+    assert (
+        await client.read_metric_steps(
+            app_slug=None, start=NOW, end=NOW, step=timedelta(minutes=5), limit=0
+        )
+        == ()
+    )
     assert database.connections == []
+
+
+QUARTER = timedelta(minutes=15)
+
+
+async def test_read_metric_steps_bins_from_a_utc_origin_and_keeps_the_newest_steps() -> None:
+    database = FakeDatabase()
+    database.on("SELECT", [metric_row("a", NOW) | {"egress_dropped_by_rule": {"app:1": 2}}])
+    client = make_client(database)
+    start, end = NOW - timedelta(days=7), NOW
+
+    rows = await client.read_metric_steps(
+        app_slug=None, start=start, end=end, step=QUARTER, limit=5
+    )
+    await client.read_metric_steps(app_slug="a", start=start, end=end, step=QUARTER, limit=5)
+
+    assert [(row.app_slug, row.minute, row.requests) for row in rows] == [("a", NOW, 3)]
+    assert rows[0].egress_dropped_by_rule.root == {"app:1": 2}
+    first, second = database.connections[0].reads()
+    assert 'date_bin(%s, "minute", %s) AS "step_start"' in first.sql
+    assert 'WHERE "minute" >= %s AND "minute" < %s GROUP BY "app_slug", "step_start"' in first.sql
+    assert 'ORDER BY "step_start" DESC, "app_slug" DESC LIMIT %s' in first.sql
+    assert first.sql.endswith('ORDER BY "minute", "app_slug"')
+    assert first.params == (QUARTER, STEP_ORIGIN, start, end, 5)
+    assert 'AND "app_slug" = %s' in second.sql
+    assert second.params == (QUARTER, STEP_ORIGIN, start, end, "a", 5)
+
+
+async def test_each_column_of_a_step_is_aggregated_by_its_rule() -> None:
+    database = FakeDatabase()
+    client = make_client(database)
+
+    await client.read_metric_steps(app_slug=None, start=NOW, end=NOW, step=QUARTER, limit=1)
+
+    [statement] = database.connections[0].reads()
+    text = statement.sql
+    assert 'sum("requests")::bigint AS "requests"' in text
+    assert 'sum("admission_rejections")::bigint AS "admission_rejections"' in text
+    assert 'max("rss_mb_max") AS "rss_mb_max"' in text
+    assert 'max("mem_used_mb") AS "mem_used_mb"' in text
+    assert '(array_agg("ws_open" ORDER BY "minute" DESC))[1] AS "ws_open"' in text
+    assert '(array_agg("mem_limit_mb" ORDER BY "minute" DESC))[1] AS "mem_limit_mb"' in text
+    buckets = ", ".join(f'sum("lat_hist"[{n}])::bigint' for n in range(1, 12))
+    assert f'ARRAY[{buckets}] AS "lat_hist"' in text
+    assert 'jsonb_agg("egress_dropped_by_rule") AS "egress_dropped_by_rule"' in text
+    assert "jsonb_each_text" in text  # the drops by rule are added up key by key
+    for column in STEP_RULES:
+        assert text.count(f'AS "{column}"') >= 1, column
+
+
+async def test_read_metric_breakdown_ranks_by_requests_and_names_the_rest_none() -> None:
+    database = FakeDatabase()
+    point = {
+        "minute": NOW,
+        "r4xx": 0,
+        "r5xx": 0,
+        "rss_mb_max": 90,
+        "bytes_out": 10,
+        "egress_dropped": 0,
+        "lat_hist": [0] * 11,
+    }
+    database.on(
+        "WITH",
+        [point | {"app_slug": "a", "requests": 4}, point | {"app_slug": None, "requests": 2}],
+    )
+    client = make_client(database)
+    start, end = NOW - timedelta(days=1), NOW
+
+    rows = await client.read_metric_breakdown(start=start, end=end, step=timedelta(hours=1), top=3)
+
+    assert [(row.app_slug, row.requests, row.rss_mb_max) for row in rows] == [
+        ("a", 4, 90),
+        (None, 2, 90),
+    ]
+    [statement] = database.connections[0].executed
+    assert statement.sql.startswith("WITH")
+    assert 'row_number() OVER (ORDER BY sum("requests") DESC, "app_slug")' in statement.sql
+    assert '"app_slug" <> %s' in statement.sql  # the platform row is not an app
+    assert statement.sql.endswith('ORDER BY "series_rank", "step_start"')
+    assert statement.params == (timedelta(hours=1), STEP_ORIGIN, start, end, "_platform", 3, 3)
 
 
 async def test_read_audit_is_newest_first_within_the_window() -> None:
