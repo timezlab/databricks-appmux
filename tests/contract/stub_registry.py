@@ -24,10 +24,11 @@ and ``come_back``.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import Final
+from datetime import UTC, datetime, timedelta
+from typing import Any, Final
 
 from pydantic import AwareDatetime, SecretStr, ValidationError
 
@@ -40,11 +41,20 @@ from appmux.registry.errors import (
     RowAlreadyExists,
     RowMissing,
 )
+from appmux.registry.metric_steps import (
+    BREAKDOWN_COLUMNS,
+    STEP_RULES,
+    MetricBreakdownRow,
+    StepRule,
+    step_start,
+)
 from appmux.registry.models import (
+    PLATFORM_METRICS_SLUG,
     ROW_MODELS,
     App,
     AppConfig,
     AuditLogRow,
+    DroppedByRule,
     MetricRow,
     PermissionRequest,
     Release,
@@ -119,6 +129,40 @@ def _validated(table: str, values: Mapping[str, object]) -> RowModel:
         fields = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})
         # `from None`: pydantic's message repeats the rejected input, which may hold a secret.
         raise InvalidRow(f"the values do not fit {table}: {', '.join(fields)}") from None
+
+
+def _folded(rule: StepRule, values: Sequence[Any]) -> object:
+    """One column over the minutes of a step, oldest first, as the client's SQL computes it."""
+    present = [value for value in values if value is not None]
+    if rule == "sum":
+        return sum(present) if present else None
+    if rule == "max":
+        return max(present) if present else None
+    if rule == "last":
+        return values[-1]
+    if rule == "histogram":
+        return [sum(bucket) for bucket in zip(*values, strict=True)]
+    dropped: Counter[str] = Counter()
+    for by_rule in values:
+        dropped.update(by_rule.root)
+    return DroppedByRule(dict(dropped))
+
+
+def _steps(rows: Iterable[MetricRow], step: timedelta) -> list[MetricRow]:
+    """The rows added up per app and step, ordered by step start, then app."""
+    groups: dict[tuple[datetime, str], list[MetricRow]] = {}
+    for row in sorted(rows, key=lambda row: row.minute):
+        groups.setdefault((step_start(row.minute, step), row.app_slug), []).append(row)
+    return [
+        MetricRow.model_validate(
+            {"app_slug": slug, "minute": began}
+            | {
+                column: _folded(rule, [getattr(row, column) for row in minutes])
+                for column, rule in STEP_RULES.items()
+            }
+        )
+        for (began, slug), minutes in sorted(groups.items())
+    ]
 
 
 class StubRegistry:
@@ -199,6 +243,62 @@ class StubRegistry:
             key=lambda row: (row.minute, row.app_slug),
         )
         return tuple(rows[-limit:]) if limit > 0 else ()
+
+    async def read_metric_steps(
+        self,
+        *,
+        app_slug: str | None,
+        start: AwareDatetime,
+        end: AwareDatetime,
+        step: timedelta,
+        limit: int,
+    ) -> tuple[MetricRow, ...]:
+        self._require_up()
+        steps = _steps(
+            (
+                row
+                for row in self._metrics.values()
+                if start <= row.minute < end and (app_slug is None or row.app_slug == app_slug)
+            ),
+            step,
+        )
+        return tuple(steps[-limit:]) if limit > 0 else ()
+
+    async def read_metric_breakdown(
+        self, *, start: AwareDatetime, end: AwareDatetime, step: timedelta, top: int
+    ) -> tuple[MetricBreakdownRow, ...]:
+        self._require_up()
+        per_app = _steps(
+            (
+                row
+                for row in self._metrics.values()
+                if start <= row.minute < end and row.app_slug != PLATFORM_METRICS_SLUG
+            ),
+            step,
+        )
+        requests: Counter[str] = Counter()
+        for row in per_app:
+            requests[row.app_slug] += row.requests
+        ranked = sorted(requests, key=lambda slug: (-requests[slug], slug))
+        rank = {slug: place for place, slug in enumerate(ranked, start=1)}
+        series: dict[tuple[int, datetime], tuple[str | None, list[MetricRow]]] = {}
+        for row in per_app:
+            place = min(rank[row.app_slug], top + 1)
+            slug = row.app_slug if place <= top else None
+            series.setdefault((place, row.minute), (slug, []))[1].append(row)
+        return tuple(
+            MetricBreakdownRow.model_validate(
+                {"app_slug": slug, "minute": began}
+                | {
+                    column: _folded(
+                        "histogram" if column == "lat_hist" else "sum",
+                        [getattr(row, column) for row in apps],
+                    )
+                    for column in BREAKDOWN_COLUMNS
+                }
+            )
+            for (_, began), (slug, apps) in sorted(series.items(), key=lambda item: item[0])
+        )
 
     # --- Registry: metrics writes ------------------------------------------------------------
 
