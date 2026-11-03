@@ -83,6 +83,24 @@ describe("PrincipalCombobox", () => {
     expect(trigger()).toHaveTextContent("Erin Ng");
   });
 
+  it("highlights the first suggestion once the answer arrives, even when the text was typed before it", async () => {
+    stubApi(() => jsonResponse(200, readExample("PrincipalList")));
+    const { user } = renderCombobox();
+
+    await user.click(trigger());
+    // Typed at once, before the opened list has arrived: only the Use row is there yet.
+    await user.paste("erin");
+    const first = await screen.findByRole("option", { name: /Everyone/ });
+
+    await waitFor(() => {
+      expect(first).toHaveAttribute("aria-selected", "true");
+    });
+    expect(screen.getByRole("option", { name: /Use “erin”/ })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
   it("says quietly which directories are unavailable, and still takes the typed e-mail", async () => {
     stubApi(() =>
       jsonResponse(200, {
