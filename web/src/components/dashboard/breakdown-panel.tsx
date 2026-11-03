@@ -27,9 +27,16 @@ import { ChartFrame, PanelFrame } from "./chart-frame";
 import { Swatch } from "./chart-legend";
 import { MetricsError } from "./metrics-error";
 
-/** The app, named the way the charts' legend names it, and linked to its Insights when it is one app. */
+/**
+ * The app, named the way the charts' legend names it, and linked to its
+ * Insights when it is one registered app. An app no longer registered keeps
+ * its metrics but has no page, so its name is text and says why.
+ */
 function AppName({ app }: { app: BreakdownApp }) {
-  const insights = app.slug === null ? null : appPagePath(app.slug, "insights");
+  const insights =
+    app.slug === null || !app.isRegistered
+      ? null
+      : appPagePath(app.slug, "insights");
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <Swatch kind="columns" item={app} idPrefix="texture-apps-table" />
@@ -41,6 +48,9 @@ function AppName({ app }: { app: BreakdownApp }) {
       {app.slug === null || app.slug === app.label ? null : (
         <RouteStrip slug={app.slug} />
       )}
+      {app.slug !== null && !app.isRegistered ? (
+        <span className="text-muted-foreground">(no longer registered)</span>
+      ) : null}
     </span>
   );
 }
@@ -77,7 +87,7 @@ function BreakdownFrames({ model }: { model: BreakdownModel }) {
           isCaptionHidden
           columns={appColumns(model.appHeaders)}
           rows={model.apps}
-          rowKey={(app) => app.slug ?? "other"}
+          rowKey={(app) => app.key}
         />
       </PanelFrame>
     </>

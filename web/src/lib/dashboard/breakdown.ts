@@ -45,6 +45,9 @@ import { formatAbsoluteTime, formatCount, parseTime } from "@/lib/format";
 
 export const OTHER_APPS_LABEL = "Other apps";
 
+/** The row key of the apps below the cut: a slug starts with a letter or a digit, so no app can take it. */
+const OTHER_APPS_KEY = "_other";
+
 /** One tone per app, in stacking order. The page asks for 8 apps; any more are added to "Other apps", never given a recycled tone. */
 const APP_TONES = [
   "series-1",
@@ -62,8 +65,16 @@ const TAIL_PERCENT = 95;
 // ----------------------------------------------------------------- types
 
 export interface BreakdownApp {
+  /** Unique in the table: the slug, or for the apps below the cut a key no slug can take. */
+  key: string;
   /** The app's slug, for its route strip and the link to its Insights; `null` for the apps below the cut. */
   slug: string | null;
+  /**
+   * `false` for an app no longer registered (the server's `display_name` is
+   * `null`): it has no Insights page to link to. `false` for the apps below
+   * the cut too, which are not one app.
+   */
+  isRegistered: boolean;
   label: string;
   tone: ChartTone;
   /** The cells after the app's name, in the order of `appHeaders`. */
@@ -108,6 +119,8 @@ interface PointTotals {
 /** One stack of the charts: an app, or the apps below the cut. */
 interface Entry {
   slug: string | null;
+  /** See `BreakdownApp.isRegistered`. */
+  isRegistered: boolean;
   label: string;
   tone: ChartTone;
   /** Where the server put the app, busiest first; the apps below the cut come last. */
@@ -372,6 +385,7 @@ export function buildBreakdownModel(response: MetricsBreakdown): BreakdownView {
       const buckets = bucketPoints(timedPoints(series.points), layout, stepMs);
       return {
         slug: series.app_slug,
+        isRegistered: series.display_name !== null,
         label: series.display_name ?? series.app_slug,
         tone: APP_TONES[index] ?? "other",
         rank,
@@ -388,6 +402,7 @@ export function buildBreakdownModel(response: MetricsBreakdown): BreakdownView {
     );
     entries.push({
       slug: null,
+      isRegistered: false,
       label: OTHER_APPS_LABEL,
       tone: "other",
       rank: kept.length,
@@ -451,7 +466,9 @@ export function buildBreakdownModel(response: MetricsBreakdown): BreakdownView {
   const apps = entries
     .toSorted((a, b) => a.rank - b.rank)
     .map((entry): BreakdownApp => ({
+      key: entry.slug ?? OTHER_APPS_KEY,
       slug: entry.slug,
+      isRegistered: entry.isRegistered,
       label: entry.label,
       tone: entry.tone,
       cells: [
