@@ -31,6 +31,24 @@ describe("CopyButton", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Copied");
   });
 
+  it("keeps an ESC of the value off the clipboard", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    render(
+      <CopyButton
+        value={"\u001b[31mTraceback\u001b[0m\tline 1\n"}
+        label="the shown lines"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy the shown lines" }),
+    );
+
+    expect(writeText).toHaveBeenCalledWith("[31mTraceback[0m\tline 1\n");
+  });
+
   it("selects the text and says how to copy it when the clipboard is refused", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(() => Promise.reject(new Error("denied")));
