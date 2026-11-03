@@ -335,7 +335,7 @@ Each requirement is testable. The cited document gives the detail and the number
 
 **Requests**
 
-- **FR-040**: `permission_requests` MUST carry exactly three kinds from a catalogue in code: `register`, `delegation` (`obo`, `shared_sp`), `settings` (`slug`, `display_name`, `source_path`, `memory_budget_mb`); the gates are `register`/`source_path`, OBO and the shared SP.
+- **FR-040**: `permission_requests` MUST carry exactly three kinds from a catalogue in code: `register` (`slug`, `display_name`, `source_path`; no memory budget: the new app starts with the platform setting `default_memory_budget_mb`), `delegation` (`obo`, `shared_sp`), `settings` (`slug`, `display_name`, `source_path`, `memory_budget_mb`); the gates are `register`/`source_path`, OBO and the shared SP.
 - **FR-041**: There MUST be at most one pending request per (app, kind) (for `register`, per proposed slug) and at most 3 pending `register` per person; a reason of up to 500 characters is required; only the asker withdraws, and only while pending.
 - **FR-042**: Approval MUST be one transaction under the platform admin's own role that applies every field or none, needs a reason when it holds a gate field, and records both names when asker and approver are the same person.
 - **FR-043**: A slug taken at approval MUST close the request as `denied` at once with the automatic note, recorded under the admin who pressed Approve.
