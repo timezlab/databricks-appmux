@@ -18,5 +18,15 @@ class ResizeObserverStub implements ResizeObserver {
 }
 globalThis.ResizeObserver ??= ResizeObserverStub;
 
+// jsdom does not scroll, and has no scrollIntoView, which cmdk (Command,
+// Select, Combobox) calls on the highlighted row.
+if (!("scrollIntoView" in Element.prototype)) {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    value: () => undefined, // nothing to scroll in jsdom
+    configurable: true,
+    writable: true,
+  });
+}
+
 // With `globals: false` Testing Library cannot register its own cleanup.
 afterEach(cleanup);

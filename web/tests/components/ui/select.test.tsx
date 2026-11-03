@@ -74,7 +74,9 @@ function highlightedOption(): HTMLElement {
     .getAllByRole("option")
     .filter((option) => option.getAttribute("aria-selected") === "true");
   expect(highlighted).toHaveLength(1);
-  return highlighted[0] as HTMLElement;
+  const [only] = highlighted;
+  if (only === undefined) throw new Error("no option is highlighted");
+  return only;
 }
 
 describe("Select (Popover + Command)", () => {
