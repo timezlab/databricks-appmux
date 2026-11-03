@@ -49,7 +49,6 @@ const STILL_PLACEHOLDERS: readonly AppSection[] = [
   "logs",
   "security",
   "environment",
-  "insights",
   "settings",
 ];
 
