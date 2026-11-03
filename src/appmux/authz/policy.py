@@ -63,6 +63,7 @@ class Reason(StrEnum):
     NO_ACCESS = "no_access"
     INSUFFICIENT_LEVEL = "insufficient_level"
     NOT_PLATFORM_ADMIN = "not_platform_admin"
+    NO_MANAGED_APP = "no_managed_app"
     # Denied by a rule of the data model.
     NOT_OBO_APP = "not_obo_app"
     ALREADY_HAS_ACCESS = "already_has_access"
@@ -241,6 +242,10 @@ def _decide(
 
     if requirement is Requirement.PLATFORM_CAN_MANAGE:
         return _platform_decision(email, data, groups)
+    if requirement is Requirement.ANY_VISITOR:
+        return Decision(True, Reason.ANY_VISITOR, None)
+    if requirement is Requirement.ANY_APP_MANAGER:
+        return _any_app_manager_decision(email, data, groups)
     if requirement is Requirement.APP_CAN_MANAGE_OR_NO_APP and app is None:
         return Decision(True, Reason.ANY_VISITOR, None)
 
@@ -263,6 +268,23 @@ def _platform_decision(email: str, data: AuthzData, groups: frozenset[str] | Non
     if is_platform_admin(email, data, groups):
         return Decision(True, Reason.PLATFORM_ADMIN, Permission.CAN_MANAGE)
     return Decision(False, Reason.NOT_PLATFORM_ADMIN, None)
+
+
+def _any_app_manager_decision(
+    email: str, data: AuthzData, groups: frozenset[str] | None
+) -> Decision:
+    """`resource.suggest`: a platform admin, or anyone with `CAN_MANAGE` on at least one app.
+
+    The first app that gives `CAN_MANAGE` decides; a group grant counts only while the groups are
+    known, as everywhere else, so an unknown lookup never widens who is let in.
+    """
+    if is_platform_admin(email, data, groups):
+        return Decision(True, Reason.PLATFORM_ADMIN, Permission.CAN_MANAGE)
+    for app in data.apps.values():
+        level, source = effective_permission(email, app, data, groups)
+        if level is Permission.CAN_MANAGE and source is not None:
+            return Decision(True, source, level)
+    return Decision(False, Reason.NO_MANAGED_APP, None)
 
 
 def _view_as_user_decision(

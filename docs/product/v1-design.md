@@ -687,6 +687,8 @@ All checks go through `authorize(actor, action, app)`, driven by a table and uni
 | `delegation.grant`, `delegation.revoke` | `CAN_MANAGE` on the platform | grant is a review gate and needs a reason; revoke records one |
 | `app.register`, `app.delete`, `app.set_owner`, `app.edit_platform_fields` | `CAN_MANAGE` on the platform | the fields are `slug` (a change also writes `app.rename`), `display_name`, `source_path` and the budget; `app.register` is the direct path, and the same registration by request goes through `request.decide` |
 | `platform_admin.add`, `platform_admin.remove`, `settings.edit`, `egress.edit`; the platform page and all metrics | `CAN_MANAGE` on the platform | `egress.edit` is not a gate; it covers an app's own list and the global list |
+| `workspace.browse` | any visitor | lists one workspace folder with the visitor's own token (the folder browser beside the source folder field); writes nothing and records nothing; the route needs the token, so it answers `403` `user_token_missing` without one |
+| `resource.suggest` | a platform admin, or `CAN_MANAGE` on at least one app | the catalogue of resource types and the objects of a type the person can see, read with their own token (the Add resource form); it reads, writes and records nothing |
 
 | Actor | Action | App | Expected |
 |---|---|---|---|
