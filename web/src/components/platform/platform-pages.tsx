@@ -72,7 +72,7 @@ export function PlatformEgressPage() {
 export function PlatformSettingsPage() {
   const { view } = usePlatformData();
   return (
-    <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+    <div className="flex flex-col gap-6">
       <JumpLinks
         label="Setting groups"
         items={SETTING_GROUPS.map((group) => ({
