@@ -162,7 +162,7 @@ const TRUSTED_EXPRESSIONS: readonly {
   {
     file: "components/sub-nav.tsx",
     text: "item.href",
-    why: "PLATFORM_PAGES holds literal paths, and appNavItems builds its hrefs with appPagePath",
+    why: "PLATFORM_PAGES holds literal paths",
   },
   {
     file: "components/jump-links.tsx",
@@ -187,7 +187,7 @@ const TRUSTED_EXPRESSIONS: readonly {
   {
     file: "components/app-sidebar.tsx",
     text: "href",
-    why: "SidebarItemData.href, a literal path or appPagePath; review each caller's item list as for SubNav",
+    why: "SidebarItemData.href, a literal path or appPagePath (appNavItems builds the app's with it); review each caller's item list as for SubNav",
   },
   {
     file: "components/app-sidebar.tsx",
@@ -1012,7 +1012,7 @@ describe("the sources of the reviewed expressions are safe", () => {
     }
   });
 
-  it("every tab of an app is a safe path, and a hostile slug leaves no tab (sub-nav.tsx: item.href)", () => {
+  it("every section of an app is a safe path, and a hostile slug leaves no section (app-sidebar.tsx: href)", () => {
     const app = AppDetail.parse(readExample("AppDetail"));
     const items = appNavItems(app, []);
     assert.ok(items.length > 0);

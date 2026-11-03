@@ -1,6 +1,11 @@
 /** GET /resources/types and GET /resources/suggestions: the catalogue as data, and what exists. */
 import { z } from "./zod.ts";
 import { AccessAs } from "./enums.ts";
+import { NotBlank, plainText } from "./primitives.ts";
+
+/** admin-api.md addendum, GET /resources/suggestions: `q` is at most 256 characters, `limit` 1 to 50. */
+const QUERY_MAX_LENGTH = 256;
+const LIMIT_MAX = 50;
 
 export const ResourceTypeEntry = z.object({
   type: z.string(),
@@ -42,3 +47,19 @@ export const ResourceSuggestionList = z.object({
 });
 
 export type ResourceSuggestionList = z.infer<typeof ResourceSuggestionList>;
+
+/**
+ * The query string of `GET /resources/suggestions`. It is no body of the
+ * contract, so it has no example file; `suggestResources` checks it before it
+ * builds the URL. `type` is a name from `GET /resources/types`: the catalogue
+ * is data, so the client holds no list of the names and the server answers
+ * `400` `unknown_type` for one it does not know. The server defaults `q` to
+ * nothing and `limit` to 20.
+ */
+export const ResourceSuggestionQuery = z.strictObject({
+  type: NotBlank,
+  q: plainText(QUERY_MAX_LENGTH).optional(),
+  limit: z.int().min(1).max(LIMIT_MAX).optional(),
+});
+
+export type ResourceSuggestionQuery = z.infer<typeof ResourceSuggestionQuery>;

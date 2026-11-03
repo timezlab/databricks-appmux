@@ -25,7 +25,7 @@ Run them in `web/` after `npm ci` (`.npmrc` turns install scripts off).
 ## Layout
 
 ```
-src/app/            pages (layout.tsx owns the only <main>), globals.css (tokens, radius scale, the bar, motion), fonts.css (IBM Plex, self-hosted); app/ and platform/ each have a layout and five sub-pages
+src/app/            pages (layout.tsx owns the only <main>), globals.css (tokens, radius scale, the bar, motion), fonts.css (IBM Plex, self-hosted); app/ has a layout and ten sections, platform/ a layout and five sub-pages
 src/components/     the kit (PageHeader, Section, SectionPanel, AppSidebar, RouteStrip, Lamp, skeletons, CopyButton, Button, DataTable, Field, Notice, …)
 src/components/ui/  shadcn primitives, patched for the CSP (see below)
 src/components/{launcher,app,platform,dashboard}/   one folder per page
@@ -41,20 +41,23 @@ Tests never live in `src/`. `@/*` maps to `src/*`.
 
 ## Pages
 
-| Route                                                                                            | Page                                                                               |
-| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `/`                                                                                              | Apps: the launcher                                                                 |
-| `/app/?slug=`, `/app/releases/`, `/app/resources/`, `/app/sharing/`, `/app/requests/`            | one app: Status, Releases, Resources, Sharing, Requests                            |
-| `/platform/`, `/platform/apps/`, `/platform/access/`, `/platform/egress/`, `/platform/settings/` | the platform: Overview (inbox, memory, self-check), Apps, Access, Egress, Settings |
-| `/dashboard/`                                                                                    | metrics                                                                            |
+| Route                                                                                            | Page                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`                                                                                              | Apps: the launcher                                                                                                                   |
+| `/app/?slug=`, `/app/authorization/`, `/app/deployments/`, `/app/resources/`, `/app/requests/`   | one app: Overview (the earlier Status), Authorization (the earlier Sharing), Deployments (the earlier Releases), Resources, Requests |
+| `/app/logs/`, `/app/security/`, `/app/environment/`, `/app/insights/`, `/app/settings/`          | one app: Logs, Security, Environment, Insights, Settings; each route exists and its page says it is being built                      |
+| `/platform/`, `/platform/apps/`, `/platform/access/`, `/platform/egress/`, `/platform/settings/` | the platform: Overview (inbox, memory, self-check), Apps, Access, Egress, Settings                                                   |
+| `/dashboard/`                                                                                    | metrics                                                                                                                              |
 
-The five pages of the app and of the platform sit behind a tab bar (`SubNav`). Each area has a
-server `layout.tsx` around a client shell (`AppView`, `PlatformPage`) that fetches and polls
-once and hands the data to the sub-page through context, so a tab change keeps the poll and any
-half-typed form. The sub-pages are thin (`app-pages.tsx`, `platform-pages.tsx`); the tab names
-and badge counts are in `src/lib/app/sections.ts` and `src/lib/platform/sections.ts`. A new
-sub-page is a route, an entry in `e2e/pages.ts` and a tab; the e2e run and the screenshots then
-cover it.
+The ten sections of an app sit behind a sidebar (`AppSidebar`), the five pages of the platform
+behind a tab bar (`SubNav`). Each area has a server `layout.tsx` around a client shell
+(`AppView`, `PlatformPage`) that fetches and polls once and hands the data to the sub-page
+through context, so moving between pages keeps the poll and any half-typed form. The sub-pages
+are thin (one file per section under `src/components/app/pages/`, and `platform-pages.tsx`); the
+section names, icons and counts are in `src/lib/app/sections.ts` and `src/lib/platform/sections.ts`.
+A new sub-page is a route, an entry in `e2e/pages.ts` and a sidebar or tab item; the e2e run and
+the screenshots then cover it. The earlier `/app/releases/` and `/app/sharing/` are gone: a static
+export has no redirects, so an old link there gets the 404 page.
 
 ## Writing a page
 

@@ -1,20 +1,23 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { getApp, getMe, listApps, listRequests } from "@/lib/api";
 import { resolveActor } from "@/lib/app/actions";
+import { appPagePath, appSectionAt } from "@/lib/app/params";
 import { appNavItems } from "@/lib/app/sections";
 import { appLoadView, pollData } from "@/lib/app/view";
 import type { WriteNotice } from "@/lib/app/writes";
 import { usePoll } from "@/hooks/use-poll";
+import { AppSidebar } from "@/components/app-sidebar";
 import { ErrorNotice } from "@/components/error-notice";
 import { LiveRegion } from "@/components/live-region";
 import { Loading } from "@/components/loading";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
-import { SubNav } from "@/components/sub-nav";
+import { SectionPanel } from "@/components/section-panel";
 import { AppPageProvider } from "./app-context";
 import { AppTitle } from "./app-header";
 import { AppProblem } from "./app-problem";
@@ -28,12 +31,15 @@ const REQUESTS_POLL_INTERVAL_MS = 15_000;
 
 export interface AppViewProps {
   slug: string;
-  /** The page of the app being shown (status, releases, ...): it reads the app from the context. */
+  /** The section of the app being shown (overview, deployments, ...): it reads the app from the context. */
   children: ReactNode;
 }
 
 /**
- * The shell of one app's pages. Four polls feed it: the app (needs `CAN_MANAGE`), who
+ * The shell of one app's pages: the app's name on top, then the sidebar of its
+ * sections beside the one panel the section sits in
+ * (docs/product/admin-ui-design.md, Layout); below 768 px the sidebar stacks
+ * above the panel. Four polls feed it: the app (needs `CAN_MANAGE`), who
  * the person is, the launcher list (their level on this app) and the requests.
  * What each section shows and decides is in `lib/app/*.ts`; this component
  * only wires them together. A write refreshes the app, the list and the
@@ -63,6 +69,7 @@ export function AppView({ slug, children }: AppViewProps) {
   });
 
   const [notice, setNotice] = useState<WriteNotice | null>(null);
+  const section = appSectionAt(usePathname());
 
   function refreshAll(): void {
     app.refresh();
@@ -123,32 +130,44 @@ export function AppView({ slug, children }: AppViewProps) {
     >
       <div className="flex flex-col gap-6">
         <AppTitle app={view.app} />
-        <SubNav
-          label={`${view.app.display_name} sections`}
-          items={appNavItems(view.app, pollData(requests)?.items ?? null)}
-        />
-        <LiveRegion message={notice?.text ?? null} />
-        {notice === null ? null : (
-          <Notice tone={notice.tone} title={notice.text} />
-        )}
-        {view.refreshError === null ? null : (
-          <ErrorNotice
-            error={view.refreshError}
-            context="Could not refresh the app; showing the last copy"
-            onRetry={app.refresh}
+        <div className="flex flex-col gap-6 md:flex-row md:items-start">
+          <AppSidebar
+            label={`${view.app.display_name} sections`}
+            items={appNavItems(view.app, pollData(requests)?.items ?? null)}
+            current={
+              (section === null ? null : appPagePath(slug, section)) ?? ""
+            }
+            backHref="/"
+            backLabel="All apps"
           />
-        )}
-        {actorFailure === null ? null : (
-          <ErrorNotice
-            error={actorFailure}
-            context="Could not check what you may do here"
-            onRetry={() => {
-              me.refresh();
-              apps.refresh();
-            }}
-          />
-        )}
-        {children}
+          {/* `min-w-0` lets a wide table shrink the panel instead of pushing it past the screen. */}
+          <div className="min-w-0 flex-1">
+            <SectionPanel>
+              <LiveRegion message={notice?.text ?? null} />
+              {notice === null ? null : (
+                <Notice tone={notice.tone} title={notice.text} />
+              )}
+              {view.refreshError === null ? null : (
+                <ErrorNotice
+                  error={view.refreshError}
+                  context="Could not refresh the app; showing the last copy"
+                  onRetry={app.refresh}
+                />
+              )}
+              {actorFailure === null ? null : (
+                <ErrorNotice
+                  error={actorFailure}
+                  context="Could not check what you may do here"
+                  onRetry={() => {
+                    me.refresh();
+                    apps.refresh();
+                  }}
+                />
+              )}
+              {children}
+            </SectionPanel>
+          </div>
+        </div>
       </div>
     </AppPageProvider>
   );

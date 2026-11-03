@@ -64,6 +64,28 @@ export const NotBlank = z
 
 export const Reason = NotBlank.max(REASON_MAX_LENGTH);
 
+/** Unicode category `Cc`, which is what the server's `unicodedata.category(character) == "Cc"` calls a control character. */
+const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
+
+/**
+ * Text of at most `maxLength` characters with no control character, for the
+ * query values the server refuses on those two counts (`q` of the resource
+ * suggestions, `path` of the workspace browser). Characters are code points, as
+ * the server counts them, so an emoji is one and not two.
+ */
+export function plainText(maxLength: number) {
+  return z
+    .string()
+    .refine(
+      (text) => Array.from(text).length <= maxLength,
+      `at most ${maxLength} characters`,
+    )
+    .refine(
+      (text) => !CONTROL_CHARACTER_PATTERN.test(text),
+      "must not hold a control character",
+    );
+}
+
 export const PLATFORM_FIELDS = {
   slug: Slug,
   display_name: NotBlank,
