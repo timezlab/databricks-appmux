@@ -1,49 +1,62 @@
 /**
  * The pages of the platform area (design 10.1) and the groups of the settings
- * page. Plain data, so the tab bar, the page titles and the tests read one list.
+ * page. Plain data, so the sidebar, the page titles and the tests read one list.
  */
-import type { SettingKey } from "@/lib/api";
-import { pluralize } from "@/lib/format";
+import type { LucideIcon } from "lucide-react";
+import {
+  AppWindowIcon,
+  KeyRoundIcon,
+  LayoutGridIcon,
+  NetworkIcon,
+  SettingsIcon,
+} from "lucide-react";
 
-export interface PlatformNavItem {
+import type { SettingKey } from "@/lib/api";
+
+/** What `AppSidebar` takes for one item (`SidebarItemData`). */
+export interface PlatformSidebarItem {
   label: string;
   /** A literal path of the export; `next/link` adds the base path. */
   href: string;
-  badge: { text: string; description: string } | null;
+  icon: LucideIcon;
+  /** Left out when there is nothing to do there. */
+  count?: number;
 }
 
 /** Where a deleted app's Settings page sends the person: the list of apps. */
 export const PLATFORM_APPS_PATH = "/platform/apps/";
 
-/** In tab order. The first is the page an admin lands on: what waits for them. */
-export const PLATFORM_PAGES: readonly { label: string; href: string }[] = [
-  { label: "Overview", href: "/platform/" },
-  { label: "Apps", href: PLATFORM_APPS_PATH },
-  { label: "Access", href: "/platform/access/" },
-  { label: "Egress", href: "/platform/egress/" },
-  { label: "Settings", href: "/platform/settings/" },
+const PLATFORM_OVERVIEW_PATH = "/platform/";
+
+/** In sidebar order. The first is the page an admin lands on: what waits for them. */
+export const PLATFORM_PAGES: readonly {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+}[] = [
+  { label: "Overview", href: PLATFORM_OVERVIEW_PATH, icon: LayoutGridIcon },
+  { label: "Apps", href: PLATFORM_APPS_PATH, icon: AppWindowIcon },
+  { label: "Access", href: "/platform/access/", icon: KeyRoundIcon },
+  { label: "Egress", href: "/platform/egress/", icon: NetworkIcon },
+  { label: "Settings", href: "/platform/settings/", icon: SettingsIcon },
 ];
 
 /**
- * The tabs of the platform area. Overview carries the number of requests that
- * wait for an answer (`null` while the request list has not loaded), so an
- * admin on any tab sees that the inbox is not empty.
+ * The sidebar of the platform area. Overview carries the number of requests
+ * that wait for an answer, so an admin on any page sees that the inbox is not
+ * empty; there is no count while the request list has not loaded (`null`) or
+ * at zero, so a count always means something to do.
  */
-export function platformNavItems(
+export function platformSidebarItems(
   pendingRequests: number | null,
-): PlatformNavItem[] {
-  return PLATFORM_PAGES.map((page) => ({
-    ...page,
-    badge:
-      page.href === "/platform/" &&
-      pendingRequests !== null &&
-      pendingRequests > 0
-        ? {
-            text: String(pendingRequests),
-            description: `${pluralize(pendingRequests, "request")} waiting`,
-          }
-        : null,
-  }));
+): PlatformSidebarItem[] {
+  return PLATFORM_PAGES.map((page) =>
+    page.href === PLATFORM_OVERVIEW_PATH &&
+    pendingRequests !== null &&
+    pendingRequests > 0
+      ? { ...page, count: pendingRequests }
+      : { ...page },
+  );
 }
 
 export interface SettingGroup {
