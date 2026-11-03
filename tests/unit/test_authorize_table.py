@@ -158,6 +158,8 @@ ROWS: dict[Action, frozenset[Kind]] = {
     Action.PLATFORM_ADMIN_REMOVE: PLATFORM_ONLY,
     Action.SETTINGS_EDIT: PLATFORM_ONLY,
     Action.EGRESS_EDIT: PLATFORM_ONLY,
+    # The admin UI overhaul (contracts/admin-api.md, addendum): CAN_MANAGE on any app will do.
+    Action.PRINCIPAL_SEARCH: CAN_MANAGE,
 }
 
 
@@ -247,6 +249,36 @@ def test_platform_actions_decide_on_the_platform_admin_not_on_the_app(action: Ac
     assert decide(Kind.OWNER, action, app="nope") == Decision(
         False, Reason.NOT_PLATFORM_ADMIN, None
     )
+
+
+@pytest.mark.parametrize("app", [None, SALES, DOCS, "nope"])
+def test_principal_search_needs_can_manage_on_some_app_whatever_app_is_passed(
+    app: str | None,
+) -> None:
+    # The route names no app: the Sharing form of any app the person manages asks it.
+    assert decide(Kind.PLATFORM_ADMIN, Action.PRINCIPAL_SEARCH, app=app) == Decision(
+        True, Reason.PLATFORM_ADMIN, Permission.CAN_MANAGE
+    )
+    assert decide(Kind.OWNER, Action.PRINCIPAL_SEARCH, app=app) == Decision(
+        True, Reason.OWNER, Permission.CAN_MANAGE
+    )
+    assert decide(Kind.GROUP_MANAGER, Action.PRINCIPAL_SEARCH, app=app) == Decision(
+        True, Reason.GROUP_GRANT, Permission.CAN_MANAGE
+    )
+    for kind in (Kind.CAN_USE, Kind.EVERYONE, Kind.NO_GRANT, Kind.SERVICE_PRINCIPAL):
+        assert decide(kind, Action.PRINCIPAL_SEARCH, app=app) == Decision(
+            False, Reason.NO_ACCESS, None
+        )
+
+
+def test_principal_search_counts_a_manager_of_any_one_app() -> None:
+    # Carol manages `sales` only, Frank owns `docs` only (named in upper case): one app will do.
+    carol = WHO[Kind.CAN_MANAGE]
+    frank = Actor(email="FRANK@example.com")
+
+    for actor in (Actor(email=carol.email), frank):
+        decision = authorize(actor, Action.PRINCIPAL_SEARCH, None, make_data(), groups=None)
+        assert decision.allowed is True
 
 
 def test_an_actor_without_an_email_is_denied() -> None:

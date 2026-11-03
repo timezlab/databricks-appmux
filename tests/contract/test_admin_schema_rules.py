@@ -132,6 +132,43 @@ def test_a_service_principal_name_that_is_not_a_lower_case_uuid_is_refused(name:
     )
 
 
+# `GET /principals`: q goes into a SCIM filter, so the allow-list is the only thing between a
+# person's text and Databricks' filter parser (contracts/admin-api.md addendum).
+@pytest.mark.parametrize("query", ['a"b', "a\\b", "a)b", "a(b", "a\x00b", "é", "x" * 65])
+def test_a_principal_query_holds_only_the_allowed_characters(query: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        schemas.PrincipalSearchQuery.from_query({"q": query})
+    assert [error["loc"] for error in caught.value.errors()] == [("q",)]
+
+
+def test_a_principal_query_takes_64_allowed_characters_and_defaults_the_rest() -> None:
+    query = "Aa0 ._@+-" * 7 + "a"
+
+    parsed = schemas.PrincipalSearchQuery.from_query({"q": query})
+
+    assert (parsed.q, parsed.types, parsed.limit) == (
+        query,
+        ["user", "group", "service_principal", "everyone"],
+        10,
+    )
+
+
+@pytest.mark.parametrize(
+    ("params", "field"),
+    [
+        ({"types": "user,robot"}, "types"),
+        ({"types": ""}, "types"),
+        ({"limit": "0"}, "limit"),
+        ({"limit": "51"}, "limit"),
+        ({"limit": "1e1"}, "limit"),
+    ],
+)
+def test_principal_types_and_limit_are_closed(params: dict[str, str], field: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        schemas.PrincipalSearchQuery.from_query(params)
+    assert {error["loc"][0] for error in caught.value.errors()} == {field}
+
+
 @pytest.mark.parametrize(
     ("principal_type", "name"), [("user", "carol@example.com"), ("group", "sales-team")]
 )
