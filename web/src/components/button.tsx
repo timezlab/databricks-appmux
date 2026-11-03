@@ -7,8 +7,8 @@ import { Button as UiButton } from "./ui/button";
 
 /**
  * `danger` is the outlined look of a destructive control at rest; `danger-filled`
- * is for the confirm step that goes through with it. Red is also the primary
- * colour, so danger is told apart by its outline, its words and the confirm step.
+ * is for the confirm step that goes through with it. Danger is told apart by its
+ * outline, its words and the confirm step, never by its red alone.
  *
  * Two rules for every row of buttons: the primary one comes last (Cancel or
  * Discard, then Save), and a button is `normal` (the height of a field control,
@@ -90,10 +90,7 @@ export function Button({
       onClick={handleClick}
     >
       {isBusy ? (
-        <LoaderCircleIcon
-          className="animate-spin motion-reduce:animate-none"
-          aria-hidden="true"
-        />
+        <LoaderCircleIcon className="animate-spinner" aria-hidden="true" />
       ) : null}
       {isBusy && busyLabel !== undefined ? busyLabel : children}
     </UiButton>

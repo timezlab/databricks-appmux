@@ -22,9 +22,10 @@ export interface SubNavProps {
 /**
  * The tabs of a section whose pages are routes of their own (the platform's,
  * one app's). They are links, not ARIA tabs: each opens a page of the export.
- * The current one carries `aria-current`, is bold and has the brand-red bar,
- * so it does not depend on hue. The row wraps rather than scrolls, so at phone
- * width every tab is visible without a hidden scroll area.
+ * The current one carries `aria-current` and the `primary` bar of the shared
+ * `bar-item` geometry (globals.css), the same as the top navigation and the
+ * sidebar. The row wraps rather than scrolls, so at phone width every tab is
+ * visible without a hidden scroll area.
  */
 export function SubNav({ label, items }: SubNavProps) {
   const pathname = usePathname();
@@ -34,7 +35,7 @@ export function SubNav({ label, items }: SubNavProps) {
         {items.map((item) => (
           <li key={item.label}>
             <Link
-              className="inline-flex items-center gap-2 border-b-[3px] border-transparent px-3 py-2.5 text-muted-foreground no-underline hover:text-foreground hover:underline aria-[current=page]:border-brand aria-[current=page]:font-bold aria-[current=page]:text-foreground aria-[current=page]:hover:no-underline forced-colors:aria-[current=page]:border-[color:Highlight]"
+              className="bar-item px-3 py-2.5 text-sm"
               href={item.href}
               aria-current={
                 isCurrentSubNavItem(pathname, item.href) ? "page" : undefined
@@ -45,7 +46,7 @@ export function SubNav({ label, items }: SubNavProps) {
                 <>
                   <span
                     aria-hidden="true"
-                    className="rounded-full bg-primary px-2 text-xs font-bold text-primary-foreground"
+                    className="rounded-full bg-primary px-1.5 text-xs leading-5 text-primary-foreground tabular-nums"
                   >
                     {item.badge.text}
                   </span>

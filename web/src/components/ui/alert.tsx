@@ -7,7 +7,7 @@ import type { ComponentProps } from "react";
 // colour with a thick bar on the left (a shape, so the tone is not carried by
 // colour alone). `default` and `destructive` are replaced by the five tones.
 const alertVariants = cva(
-  "relative grid w-full grid-cols-[0_1fr] items-start gap-y-1 rounded-lg border border-l-8 px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&_a]:text-inherit [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current",
+  "relative grid w-full grid-cols-[0_1fr] items-start gap-y-1 rounded-control border border-l-4 px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&_a]:text-inherit [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current",
   {
     variants: {
       variant: {
@@ -47,7 +47,7 @@ function AlertTitle({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="alert-title"
-      className={cn("col-start-2 min-h-4 font-bold tracking-tight", className)}
+      className={cn("col-start-2 min-h-4 font-semibold", className)}
       {...props}
     />
   );

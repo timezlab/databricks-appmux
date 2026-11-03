@@ -30,31 +30,67 @@ that world and keeps everything else plain:
 Everything around those two is deliberately quiet: no dark header band, no card grid, no gradients, no shadows beyond
 the one under a floating menu.
 
-## Tokens (starting values; `tests/contract/contrast.test.ts` is the judge)
+## Tokens (the shipped values; `tests/contract/contrast.test.ts` is the judge)
 
-Hex only, in `:root` and overridden for dark, as before ([globals.css](../../web/src/app/globals.css)). Danger is
-the only red: the old brand red is gone, so a destructive control is no longer one hue away from the primary button.
+Hex only, in `:root` and overridden for dark in one `prefers-color-scheme: dark` block
+([globals.css](../../web/src/app/globals.css)). Danger is the only red: the old brand red is gone, so a destructive
+control is no longer one hue away from the primary button. The contrast test lists the pairs that meet and their
+thresholds, in both schemes: 4.5:1 for text, 3:1 for control edges, bars and the focus ring.
 
-| Role | Light | Dark | Use |
-|---|---|---|---|
-| paper (`background`) | `#f5f6f6` | `#0e1316` | page |
-| ink (`foreground`) | `#151b20` | `#e4eaed` | text |
-| cord (`primary`, `link`, `ring`) | `#0b6a84` (ring `#0a87a8`) | `#4cc3e2` | actions, links, focus, the selected tab |
-| strip (`strip`, `strip-foreground`, `strip-border`) | `#f1e8c6`, `#3a3010`, `#cdbf8a` | `#2d2812`, `#ede0a8`, `#5a4e22` | the route strip only |
-| lamps | existing `tone-*` sets | existing `tone-*` sets | state words, notices |
-| surfaces | `card` `#ffffff`, `muted` `#e9ecee`, `accent` `#e1e6e9` | `card` `#151c20`, `popover` `#182025` | menus, inputs, hover |
+| Role | Token | Light | Dark | Use |
+|---|---|---|---|---|
+| paper | `background` | `#f5f6f6` | `#0e1316` | page |
+| ink | `foreground` | `#151b20` | `#e4eaed` | text |
+| quiet ink | `muted-foreground` | `#4f5a61` | `#9aa7af` | descriptions, column headers, nav items at rest |
+| panel | `card`, `card-foreground` | `#ffffff`, `#151b20` | `#151c20`, `#e4eaed` | the inset panel, cards, fields, outline buttons |
+| menu | `popover`, `popover-foreground` | `#ffffff`, `#151b20` | `#182025`, `#e4eaed` | floating menus and popovers |
+| cord | `primary`, `primary-hover`, `primary-foreground` | `#0b6a84`, `#095a70`, `#ffffff` | `#4cc3e2`, `#79d3ea`, `#06181e` | filled buttons, the selected bar, counts |
+| cord text | `link` | `#0b6a84` | `#4cc3e2` | links, ghost buttons |
+| focus | `ring` | `#0a87a8` | `#4cc3e2` | the 2 px focus outline |
+| tints | `secondary`, `muted` | `#e9ecee` | `#1f282d` | secondary buttons, quiet fills |
+| hover | `accent` | `#e1e6e9` | `#263137` | hover fill, skeleton blocks |
+| hairline | `border` | `#d6dbde` | `#2a343a` | panel and table rules, the line under the top bar and the tabs |
+| control edge | `input` | `#6b767d` | `#7d8a92` | field and outline-button borders, the bar on hover |
+| danger | `destructive`, `destructive-hover`, `destructive-foreground` | `#b3261e`, `#8f1d17`, `#ffffff` | `#ff8077`, `#ffa099`, `#2a0705` | destructive actions only |
+| strip | `strip`, `strip-foreground`, `strip-border` | `#f1e8c6`, `#3a3010`, `#cdbf8a` | `#2d2812`, `#ede0a8`, `#5a4e22` | the route strip only |
+| lamps | `tone-*` | unchanged | unchanged | the lamp dots, notices |
+| charts | `chart-1..6` | unchanged | unchanged | chart series |
 
-The `chrome-*` tokens (the dark header band) are removed. Radius is a scale, not one value: the strip 3 px, controls
-8 px, floating surfaces 12 px.
+The `chrome-*` tokens (the dark header band) and `brand` are removed; the header is the page colour with one hairline
+under it. Radius is a scale, not one value: `rounded-strip` 3 px (the strip), `rounded-control` 8 px (buttons,
+fields, alerts), `rounded-surface` 12 px (panels, cards, menus).
 
 ## Type
 
 IBM Plex Sans (variable, self-hosted, latin and latin-ext) for the interface, IBM Plex Mono for routes, paths, keys
-and code only. Scale 13 / 14 / 16 / 20 / 24 / 28 px, weights 400, 500, 600; headings 600 with -0.01em tracking;
-tabular figures in tables and charts. No capitalised labels: table headers and field labels are sentence case, 13 px,
-medium weight, muted. Prose lines stop at 70 characters. The files come from npm (`@fontsource-variable/ibm-plex-sans`,
+and code only. Scale 13 / 14 / 16 / 20 / 24 / 28 px (`text-xs`, `sm`, `base`, `xl`, `2xl`, `3xl`; there is no
+`text-lg`), weights 400, 500, 600; headings 600 with -0.01em tracking (`tracking-heading`); tabular figures in tables
+and charts. No capitalised labels: table headers and field labels are sentence case, 13 px, medium weight, muted.
+Prose lines stop at 70 characters. The files come from npm (`@fontsource-variable/ibm-plex-sans`,
 `@fontsource/ibm-plex-mono`, OFL 1.1), are served by the edge from the export under `font-src 'self'`, and are
 measured under the reference CSP before they stay.
+
+### Fonts (ADR note)
+
+Recorded here rather than in a new ADR, because it carries out ADR 0019 and changes no earlier decision.
+
+- **Packages.** `@fontsource-variable/ibm-plex-sans` 5.3.0 and `@fontsource/ibm-plex-mono` 5.3.0, pinned exactly.
+  Vetted before install: published 2026-07-19 (months old), no install scripts and no dependencies, no OSV advisory
+  (none of the `MAL-` kind either), published from the `fontsource/font-files` repository.
+- **What ships.** `web/src/app/fonts.css` declares six faces, woff2 only, `font-display: swap`, with the packages'
+  `unicode-range`s: Sans variable 100–700 in latin and latin-ext, Mono 400 and 500 in latin and latin-ext. The
+  packages' own CSS is not imported, so no other subset, weight or format reaches the export. A browser fetches a
+  latin-ext file only for a page that uses one of its characters.
+- **Measured.** The six files in `out/_next/static/media/` total 133,052 bytes (Sans latin 45,712, latin-ext 30,964;
+  Mono latin 400 14,708, 500 14,888; latin-ext 400 13,348, 500 13,432). An English page loads the latin files it
+  uses: about 75 KB for Sans and both Mono weights.
+- **Under the CSP.** `e2e/fonts.spec.ts` loads the launcher and the app status page under the reference CSP and
+  asserts that both families load from the export's media folder as `font/woff2` with no violation.
+- **Guards changed.** `tests/export/css.test.ts` now lets a stylesheet name `url()`s that are relative `.woff2` files
+  inside the export and still refuses any other `url()`, `@import`, `data:` and absolute URL.
+  `tests/export/html.test.ts` lets through one tag Next adds once a stylesheet has fonts and none are preloaded:
+  `<link rel="preconnect" href="/" crossorigin="">`, a hint to this same origin; any other preconnect or preload is
+  still refused.
 
 ## Layout: the Databricks Apps console, in appmux's own skin
 
@@ -91,7 +127,8 @@ appmux's.
   aligned; forms stop at 560 px. Inside it sections are ruled, not boxed into further cards.
 - **One geometry for every bar** (point 8): the top navigation, the sidebar items and the Variables/Packages tabs share
   one rule, a 2 px bar that is transparent at rest, muted on hover and cord on the selected one, and none of them has a
-  text underline.
+  text underline. It is the `bar-item` utility of globals.css; a vertical list (the sidebar) puts the bar on the
+  start edge with `bar-axis-vertical` on its container, so every item keeps the same class.
 - **The dashboard** keeps its own page; its six identical figure cards become one strip of figures divided by
   hairlines, each with a sparkline. The same view, scoped to one app, is the app's Insights.
 
@@ -127,7 +164,9 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
   System. The choice is kept in `localStorage` (guarded), applied as `data-theme` on `<html>` by a small same-origin
   script in the head, so there is no flash and no inline script to hash. System follows the OS and stays the default.
 - **Skeletons.** Every data-dependent block has a skeleton with the shape of what will arrive (table rows, the
-  header, a chart frame); a spinner is for an action in progress, not for a page.
+  header, a chart frame); a spinner is for an action in progress, not for a page. The parts are `SkeletonLines`,
+  `SkeletonTable` and `SkeletonFigure` (`web/src/components/skeletons.tsx`). Until a page draws its own shaped
+  skeleton, the shared `Loading` still shows a spinner and its words, now over three skeleton lines.
 - **Principal field (point 1).** A combobox, like Databricks' share dialog: type a name and get groups, users and
   service principals as rows with an icon, the display name and the identifier; type `everyone` and get the
   "everyone" row; typing a full e-mail is always accepted when the directory cannot be read.
@@ -158,18 +197,25 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
 
 Every animation has a defined behaviour for both values of `prefers-reduced-motion`, and none of them vanishes:
 
-| Motion | `no-preference` | `reduce` |
-|---|---|---|
-| Spinner | rotates, 0.9 s linear | stays visible and shows a slow opacity pulse (1.6 s), no rotation |
-| Starting lamp | opacity breathe, 1.6 s | the same, 2.4 s |
-| Skeleton | opacity shimmer 1.4 s | the same, 2.2 s, no travelling gradient |
-| Menu, popover, tab bar | 120 to 160 ms fade and 4 px slide, bar slides between tabs | 120 ms fade only, bar jumps |
-| Page change | none | none |
+| Motion | Utility | `no-preference` | `reduce` |
+|---|---|---|---|
+| Spinner | `animate-spinner` | rotates (`spinner-turn`), 0.9 s linear | stays visible and pulses its opacity (`spinner-pulse`, 1.6 s), no rotation |
+| Starting lamp | `animate-lamp-breathe` | opacity breathe (`lamp-breathe`), 1.6 s | the same, 2.4 s |
+| Skeleton | `animate-skeleton` | opacity pulse (`skeleton-pulse`), 1.4 s | the same, 2.2 s; never a travelling gradient |
+| Menu, popover | `animate-menu-in`, `animate-menu-out` | 140 ms fade and 4 px slide in, 120 ms out | 120 ms fade only |
+| Bar (top bar, tabs, sidebar) | `bar-item` | the bar changes colour in 120 ms; it does not slide between items | the same |
+| Page change | none | none | none |
 
-The blanket rule that set every animation to 0.01 ms is removed, because it is what stopped the spinner. A test opens
-a page in Chromium with each value of `reducedMotion` and asserts that the spinner and the skeleton have a running
-animation whose name and duration match the table. No motion plays on its own except the spinner, the starting lamp
-and the skeleton, each of which says "something is happening".
+The bar does not slide: moving one bar between items needs its position measured and written as a style at run time,
+or CSS anchor positioning. The first breaks the CSP; the second would need its own check of browser support, which
+was not worth one moving bar. Each item draws its own bar and only the colour changes.
+
+The blanket rule that set every animation to 0.01 ms is removed, because it is what stopped the spinner. Each utility
+is defined once in globals.css with both behaviours, and `tests/contract/motion.test.ts` fails if a reduced-motion
+rule sets one of them to `none`, to a single run or to under 50 ms. `e2e/motion.spec.ts` holds the launcher's
+loading state open in Chromium with each value of `reducedMotion` and asserts that the spinner and the skeleton have
+a running, endless animation whose name and duration match the table. No motion plays on its own except the spinner,
+the starting lamp and the skeleton, each of which says "something is happening".
 
 ## Copy
 

@@ -41,6 +41,18 @@ function isOwnPath(reference: string): boolean {
   return reference.startsWith(`${BASE_PATH}/`) && !reference.includes("//", 1);
 }
 
+/**
+ * Next adds `<link rel="preconnect" href="/" crossorigin="">` to a page whose
+ * stylesheet ships font files that next/font did not make (src/app/fonts.css).
+ * It opens a connection to this origin and requests nothing, so it is the one
+ * link allowed outside the base path.
+ */
+function isSameOriginPreconnect(tag: string): boolean {
+  return (
+    /\srel\s*=\s*"preconnect"/i.test(tag) && attribute(tag, "href") === "/"
+  );
+}
+
 function violations(html: string): string[] {
   const markup = markupOnly(html);
   const found: string[] = [];
@@ -64,7 +76,7 @@ function violations(html: string): string[] {
       tag,
       tag.startsWith("<script") ? "src" : /^<link/i.test(tag) ? "href" : "src",
     );
-    if (reference === null) continue;
+    if (reference === null || isSameOriginPreconnect(tag)) continue;
     if (!isOwnPath(reference))
       found.push(`${reference} is not a path of this origin`);
     if (/^<link\b/i.test(tag) && /\srel\s*=\s*"stylesheet"/i.test(tag)) {
@@ -99,9 +111,25 @@ describe("the guard itself", () => {
         "//example.invalid/x.js is not a path of this origin",
       ],
       ["<p>no css</p>", "no linked stylesheet"],
+      [
+        `${css}<link rel="preconnect" href="https://example.invalid/"/>`,
+        "https://example.invalid/ is not a path of this origin",
+      ],
+      [
+        `${css}<link rel="preload" href="/x.woff2"/>`,
+        "/x.woff2 is not a path of this origin",
+      ],
     ] as const) {
       assert.ok(violations(html).includes(reason), `${reason}: ${html}`);
     }
+  });
+
+  it("lets the same-origin preconnect Next adds for the font files through", () => {
+    const html = `${css}<link rel="preconnect" href="/" crossorigin=""/>`;
+    assert.ok(
+      !violations(html).some((reason) => reason.includes("of this origin")),
+      violations(html).join(", "),
+    );
   });
 
   it("does not read the data inside an inline script as markup", () => {

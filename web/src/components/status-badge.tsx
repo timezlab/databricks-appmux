@@ -5,12 +5,13 @@ import {
   requestStatusPresentation,
 } from "@/lib/status-presentation";
 import type { StatusPresentation } from "@/lib/status-presentation";
-import { Badge } from "./ui/badge";
+import { Lamp, lampStateOfTone } from "./lamp";
 
 /**
- * A status as a word with a mark and a colour. The word carries the meaning;
- * the mark (one per tone) and the colour back it up, so nothing depends on
- * seeing colour. The sentence about it is the hover title.
+ * A status of the contract as a lamp and its word (`Lamp`). The word carries
+ * the meaning; the lamp's colour and shape back it up, so nothing depends on
+ * seeing colour. The sentence about it is the hover title. Kept as a thin
+ * wrapper so the pages name the status, not how it is drawn.
  */
 export function StatusBadge({
   presentation,
@@ -18,10 +19,11 @@ export function StatusBadge({
   presentation: StatusPresentation;
 }) {
   return (
-    <Badge variant={presentation.tone} title={presentation.description}>
-      <span aria-hidden="true">{presentation.mark}</span>
-      {presentation.label}
-    </Badge>
+    <Lamp
+      state={lampStateOfTone(presentation.tone)}
+      label={presentation.label}
+      description={presentation.description}
+    />
   );
 }
 

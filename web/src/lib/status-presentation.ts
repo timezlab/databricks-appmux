@@ -31,7 +31,8 @@ const MARK: Record<Tone, string> = {
  * The mark drawn beside a word of this tone. One per tone, so a person who
  * cannot see the colour still gets a different shape. For a page that has a
  * tone of its own (a check result, a memory level) instead of a status of the
- * contract; draw it in an `aria-hidden` span next to the word, as `StatusBadge` does.
+ * contract; draw it in an `aria-hidden` span next to the word, as `CapacityStrip`
+ * does. A status of the contract is drawn as a `Lamp` (`StatusBadge`) instead.
  */
 export function toneMark(tone: Tone): string {
   return MARK[tone];

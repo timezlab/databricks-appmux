@@ -33,6 +33,7 @@ import { ErrorNotice } from "@/components/error-notice";
 import { Field } from "@/components/field";
 import { LiveRegion } from "@/components/live-region";
 import { Loading } from "@/components/loading";
+import { RouteStrip } from "@/components/route-strip";
 import { AppStateBadge } from "@/components/status-badge";
 import { Input } from "@/components/ui/input";
 
@@ -108,11 +109,9 @@ export function AppsSection({
       header: "Name",
       isRowHeader: true,
       cell: (row) => (
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 flex-col items-start gap-1">
           <span className="wrap-break-word">{row.displayName}</span>
-          <span className="font-mono text-sm font-normal text-muted-foreground wrap-break-word">
-            {row.slug}
-          </span>
+          <RouteStrip slug={row.slug} />
         </div>
       ),
     },

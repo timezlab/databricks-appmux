@@ -15,7 +15,7 @@ function Card({
   return (
     <Comp
       data-slot="card"
-      className={cn("rounded-md border bg-card p-4", className)}
+      className={cn("rounded-surface border bg-card p-4", className)}
       {...props}
     />
   );
