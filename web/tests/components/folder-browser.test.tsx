@@ -204,7 +204,9 @@ describe("SourceFolderInput", () => {
     expect(
       within(panel).getByRole("button", { name: "Use this folder" }),
     ).toBeDisabled();
-    expect(within(panel).getByText("Open a folder first.")).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Use this folder" }),
+    ).toHaveAccessibleDescription("Open a folder first.");
 
     await user.click(within(panel).getByRole("option", { name: /My folder/ }));
     await within(panel).findByRole("option", { name: "archive" });
@@ -229,6 +231,45 @@ describe("SourceFolderInput", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       `Source folder set to ${MY_FOLDER}`,
     );
+  });
+
+  it("asks for the roots once when it opens at them", async () => {
+    const { user } = setup();
+    const panel = await openBrowser(user);
+    await within(panel).findByRole("option", { name: /My folder/ });
+    expect(calls).toEqual(["(roots)"]);
+  });
+
+  it("asks for the roots and the folder once each when it opens at a folder", async () => {
+    const { user } = setup({ initial: MY_FOLDER });
+    const panel = await openBrowser(user);
+    await within(panel).findByRole("option", { name: "archive" });
+    expect(calls.toSorted()).toEqual(["(roots)", MY_FOLDER]);
+  });
+
+  it("says why Use this folder is off while the folder loads", async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    stubFetch(async (call) => {
+      const path = new URL(call.url, "http://test").searchParams.get("path");
+      if (path === MY_FOLDER) await held;
+      return route(call);
+    });
+    const user = userEvent.setup();
+    render(<Form initial={MY_FOLDER} />);
+    const panel = await openBrowser(user);
+    const use = within(panel).getByRole("button", { name: "Use this folder" });
+    expect(use).toBeDisabled();
+    expect(use).toHaveAccessibleDescription("Wait for the folder to load.");
+
+    release();
+    await within(panel).findByRole("option", { name: "archive" });
+    expect(use).toBeEnabled();
+    expect(
+      within(panel).queryByText("Wait for the folder to load."),
+    ).not.toBeInTheDocument();
   });
 
   it("opens at the folder the field names, and goes up with the button and the crumbs", async () => {

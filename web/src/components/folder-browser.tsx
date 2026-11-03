@@ -191,11 +191,15 @@ function BrowserPanel({
   const [fetched, setFetched] = useState<Fetched | null>(null);
   const [roots, setRoots] = useState<readonly WorkspaceRoot[]>([]);
   const titleId = useId();
+  const reasonId = useId();
   const key = `${attempt}:${target ?? ""}`;
 
   // The roots name the crumbs ("My folder" instead of the person's address).
-  // Listing them calls nothing upstream, so it is asked once on opening.
+  // Listing them calls nothing upstream, so it is asked once on opening; when
+  // the browser opens at the roots, the listing below is that same call and
+  // keeps them, so it is not asked twice.
   useEffect(() => {
+    if (start === null) return;
     const controller = new AbortController();
     browseWorkspace({}, { signal: controller.signal }).then(
       (listing) => {
@@ -209,7 +213,7 @@ function BrowserPanel({
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [start]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -243,6 +247,15 @@ function BrowserPanel({
   const canGoUp = target !== null;
   // Only a folder that was listed can be used: a refused one may not exist.
   const pickable = listing?.path ?? null;
+  // Why Use this folder is off, while it is off; a refusal says why in its notice.
+  const pickReason =
+    pickable !== null
+      ? null
+      : target === null
+        ? "Open a folder first."
+        : current === null
+          ? "Wait for the folder to load."
+          : null;
 
   function open(path: string | null): void {
     setTarget(path);
@@ -463,16 +476,16 @@ function BrowserPanel({
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {/* The reason Use this folder is off, so only while it is off. */}
-        {target === null && pickable === null ? (
-          <p className="mr-auto text-sm text-muted-foreground">
-            Open a folder first.
+        {pickReason === null ? null : (
+          <p id={reasonId} className="mr-auto text-sm text-muted-foreground">
+            {pickReason}
           </p>
-        ) : null}
+        )}
         <Button
           variant="primary"
           size="small"
           disabled={pickable === null}
+          aria-describedby={pickReason === null ? undefined : reasonId}
           onClick={() => {
             if (pickable !== null) onPick(pickable);
           }}
