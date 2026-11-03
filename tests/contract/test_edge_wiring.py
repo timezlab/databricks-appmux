@@ -9,6 +9,7 @@ unknown path) when it is not given:
   page;
 * ``attach_checker`` -> the requirements and the attach and detach routes;
 * ``source_store`` -> the read-only source viewer;
+* ``workspace_client`` -> the workspace folder browser and the resource pickers;
 * ``open_mode_cookies`` -> ``POST /apps/{app}/open-mode`` writes the cookie *and* the pipeline reads
   that same cookie to decide whether a child receives an admin's token (one key, one instance);
 * ``bootstrap_admins`` is read once and shared: a one-shot iterable still reaches the authorizer
@@ -26,6 +27,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Final
 
+import httpx
 import pytest
 from edge_harness import (
     ALICE,
@@ -220,6 +222,82 @@ async def test_without_a_snapshot_store_the_edge_has_no_source_viewer() -> None:
     reply = await get(app, "/apps/sales/releases/7/source", DANA)
 
     assert reply.status == 404
+
+
+# --- the workspace folder browser and the resource pickers --------------------------------------
+
+
+def workspace_client_with_one_of_each() -> httpx.AsyncClient:
+    """A workspace with one file in /Workspace/Shared and one SQL warehouse."""
+    answers: dict[str, object] = {
+        "/api/2.0/workspace/list": {
+            "objects": [{"path": "/Workspace/Shared/app.yaml", "object_type": "FILE"}]
+        },
+        "/api/2.0/sql/warehouses": {"warehouses": [{"id": "w-1", "name": "Shared Serverless"}]},
+    }
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        found = answers.get(request.url.path)
+        if found is None:
+            return httpx.Response(404, json={"error_code": "NOT_FOUND", "message": "no"})
+        return httpx.Response(200, json=found)
+
+    return httpx.AsyncClient(
+        base_url="https://workspace.example.invalid", transport=httpx.MockTransport(answer)
+    )
+
+
+async def get_as_alice(app: App, route: str, **params: str) -> httpx.Response:
+    """``GET`` under the admin mount as Alice, query string included.
+
+    The harness's ``call`` has no query string, so this goes through httpx's ASGI transport.
+    """
+    headers = {"X-Forwarded-Email": ALICE, "X-Forwarded-Access-Token": VISITOR_TOKEN}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        return await client.get(f"{MOUNT}{route}", params=params, headers=headers)
+
+
+async def test_the_folder_browser_is_served_when_a_workspace_client_is_given() -> None:
+    app = create_edge_app(
+        registry=seeded_registry(),
+        group_source=FakeGroups(),
+        workspace_client=workspace_client_with_one_of_each(),
+    )
+
+    reply = await get_as_alice(app, "/workspace/browse", path="/Workspace/Shared")
+
+    assert reply.status_code == 200, reply.text
+    assert [entry["name"] for entry in reply.json()["entries"]] == ["app.yaml"]
+
+
+async def test_the_resource_pickers_are_served_when_a_workspace_client_is_given() -> None:
+    app = create_edge_app(
+        registry=seeded_registry(),
+        group_source=FakeGroups(),
+        workspace_client=workspace_client_with_one_of_each(),
+    )
+
+    types = await get_as_alice(app, "/resources/types")
+    suggestions = await get_as_alice(app, "/resources/suggestions", type="sql_warehouse")
+
+    assert types.status_code == 200, types.text
+    assert "sql_warehouse" in [entry["type"] for entry in types.json()["items"]]
+    assert suggestions.status_code == 200, suggestions.text
+    assert [item["target"] for item in suggestions.json()["items"]] == ["w-1"]
+
+
+async def test_without_a_workspace_client_the_edge_has_neither_the_browser_nor_the_pickers() -> (
+    None
+):
+    app = create_edge_app(registry=seeded_registry(), group_source=FakeGroups())
+
+    browse = await get_as_alice(app, "/workspace/browse", path="/Workspace/Shared")
+    types = await get_as_alice(app, "/resources/types")
+    suggestions = await get_as_alice(app, "/resources/suggestions", type="sql_warehouse")
+
+    assert (browse.status_code, types.status_code, suggestions.status_code) == (404, 404, 404)
 
 
 # --- Open as a user: one cookie key for the route and the pipeline ----------------------------

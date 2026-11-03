@@ -281,6 +281,7 @@ def _load_wiring(
             app_control=service,
             rename_cascade=service,
             memory=service.memory_ledger,
+            workspace_client=workspace,
         )
 
     steps = (

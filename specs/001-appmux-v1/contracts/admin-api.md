@@ -795,11 +795,11 @@ rest of the contract. A lane that finds a detail below wrong changes this sectio
 | Route | Needs | Response | Returns / does |
 |---|---|---|---|
 | `GET /principals?q=&types=&limit=` | `principal.search`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `PrincipalList` | suggestions for the Sharing form. `q` is at most 64 characters of `A-Z a-z 0-9 space . _ @ + -` (anything else is `400`, because the text goes into a SCIM filter); `types` is a comma list of `user`, `group`, `service_principal`, `everyone` (default all); `limit` 1 to 50 (default 10). An empty `q` returns only the `everyone` row. Each directory is read with the person's token first and the platform's service-principal token when that is refused; a directory that neither can read is named `unavailable` in `sources` and the UI keeps free typing. `403` `user_token_missing` is not raised: the fallback exists for that |
-| `GET /workspace/browse?path=` | `workspace.browse`: any visitor with a token | `WorkspaceListing` | the sub-folders and files of one workspace folder, read with the person's token (scope `workspace.workspace:read`). No `path` returns the roots (`My folder`, `Shared`). `400` for a path that does not start with `/Workspace/`, holds `..`, a control character or more than 512 characters; `404` `not_found`; `403` `no_access`; `503` `workspace_unavailable`. At most 200 entries, folders first, then by name (`truncated`). Writes nothing and records nothing |
+| `GET /workspace/browse?path=` | `workspace.browse`: any visitor with a token | `WorkspaceListing` | the sub-folders and files of one workspace folder, read with the person's token (scope `workspace.workspace:read`). No `path` returns the roots (`My folder` is `/Workspace/Users/<the person's e-mail>`, `Shared` is `/Workspace/Shared`) and calls nothing upstream. `400` `invalid_path` for a path that does not start with `/Workspace/`, has an empty, `.` or `..` segment (a name that merely contains two dots is fine), holds a control character or has more than 512 characters (one trailing `/` is dropped). `403` `user_token_missing` without the person's token, the roots included; `403` `session_expired` when Databricks does not accept the token; `404` `not_found` (the folder does not exist or the person cannot see it: Databricks answers the same); `403` `no_access` when Databricks answers 403; `503` `workspace_unavailable` for any other failure or no answer. At most 200 entries, folders first, then by name without regard to case (`truncated`). Writes nothing and records nothing |
 | `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500). Lines pass the same credential masking as `build_log_tail`. Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content) |
 | `GET /apps/{app}/environment` | `app.view_environment`: `CAN_MANAGE` on the app | `AppEnvironment` | what the app is started with: runtime versions, variables and packages (see schema). A value that belongs to a `secret` resource is never returned (`is_secret` is `true`, `value` is `null`) |
-| `GET /resources/types` | `resource.attach` on at least one app, or a platform admin | `ResourceTypeList` | the resource catalogue of [data model 4.7](../../../docs/product/v1-data-model.md#47-app_resources) with a label, the permission levels and the access modes of each type, so the UI holds no copy of it |
-| `GET /resources/suggestions?type=&q=&limit=` | the same | `ResourceSuggestionList` | objects of one type the person can see, read with their token: SQL warehouses, serving endpoints, secret scopes (and, for `q` of the form `scope/`, the keys of a scope; never values), MLflow experiments, jobs. A type with no safe list call answers `items: []` and `source: "not_supported"`. `limit` 1 to 50 (default 20); `400` `unknown_type` |
+| `GET /resources/types` | `resource.suggest`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `ResourceTypeList` | the resource catalogue of [data model 4.7](../../../docs/product/v1-data-model.md#47-app_resources) with a label, a description, the permission levels (the first is the default), the access modes and a target example for each type, so the UI holds no copy of it. Calls nothing upstream |
+| `GET /resources/suggestions?type=&q=&limit=` | the same | `ResourceSuggestionList` | objects of one type the person can see, read with their token: SQL warehouses, serving endpoints, secret scopes (and, for `q` of the form `scope/` or `scope/prefix`, the key names of that scope; never a value), MLflow experiments, jobs. `q` is matched as a case-insensitive substring of the label and the target. A type with no safe list call answers `items: []` and `source: "not_supported"`. A call Databricks refuses or does not answer (no token, a refused scope, a failure) is not an error page: it answers `200`, `items: []`, `source: "unavailable"` and a `note` in words, so the form keeps free typing. `limit` 1 to 50 (default 20); `400` `unknown_type` for a `type` that is missing or not in the catalogue; `400` `invalid_query` for a `q` of more than 256 characters or with a control character; `400` `invalid_limit`. Writes nothing and records nothing |
 | `GET /metrics?app=&from=&to=&step=` | as before | `MetricsResponse` | **changed**: `step` is `1m` (default), `5m`, `15m` or `1h`; rows are summed per step (counts and histograms added, `*_max` columns and the platform's memory peak maximised, the other platform gauges the last value of the step, `minute` the start of the step, aligned in UTC). The window may be up to 7 days provided it holds at most 1440 steps (so 24 h at `1m`, 3 days at `5m`, 7 days at `15m`); otherwise `400` `window_too_long` naming the smallest `step` that fits. The 10000-row cap and `truncated` are unchanged |
 | `GET /metrics/breakdown?from=&to=&step=&limit=` | `CAN_MANAGE` on the platform | `MetricsBreakdown` | the apps ranked by requests in the window, the top `limit` (1 to 20, default 8) each as a series of points, the rest summed as `other`; the same `step` and window rules as `GET /metrics` |
 
@@ -839,13 +839,13 @@ the e-mail of a user whose display name is shown, the application id of a servic
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
 | `path` | string or null | always | The folder listed; `null` for the roots |
-| `parent` | string or null | always | The folder above, `null` at a root |
+| `parent` | string or null | always | The folder above; `null` for the roots listing, for a root (`My folder`, `Shared`) and for a top-level folder such as `/Workspace/Repos`, so the UI goes back to the roots |
 | `roots` | array<{label, path}> | always | Filled only when `path` is `null`, else `[]` |
-| `entries` | array<{name, path, kind}> | always | `kind` is `folder` or `file` |
-| `truncated` | boolean | always | |
-| `markers` | array<string> | always | Which of `app.yaml`, `databricks.yml`, `requirements.txt`, `package.json`, `pyproject.toml` the folder holds |
+| `entries` | array<{name, path, kind}> | always | `kind` is `folder` (a directory or a repo) or `file` (a file, a notebook or any other object); folders first, then by name without regard to case |
+| `truncated` | boolean | always | `true` when the folder holds more than 200 entries and `entries` shows the first 200 |
+| `markers` | array<string> | always | Which of `app.yaml`, `databricks.yml`, `requirements.txt`, `package.json`, `pyproject.toml` the folder holds as files, in that order, counted over the whole folder (not only the 200 shown) |
 | `looks_like_app` | boolean | always | `true` when `app.yaml` or `requirements.txt` or `package.json` is a marker |
-| `runtime_hint` | string or null | always | `python`, `node` or `null` |
+| `runtime_hint` | string or null | always | `python` when `requirements.txt` is a marker, else `node` when `package.json` is, else `python` when `pyproject.toml` is, else `null`. A hint for the form: the Update decides the runtime from the snapshot |
 | `suggested_memory_mb` | integer or null | always | The smallest budget the hinted runtime needs (768 for `node`), else `null`; from the same constant the launcher's limit comes from |
 
 #### AppLogs
@@ -868,13 +868,43 @@ the e-mail of a user whose display name is shown, the application id of a servic
 | `variables` | array<{name, value, source, resource_key, is_secret}> | always | `source` is `config` (the release's env entries), `resource` (a `valueFrom`, shown by its key) or `platform` (set for every child: port, host, root path); `value` is `null` for a secret |
 | `packages` | array<{name, version, source}> | always | `source` is `release` (declared by `requirements.txt` or `package.json`), `wheel` (resolved for this release) or `platform` (provided by the platform's own environment) |
 
-#### ResourceTypeList and ResourceSuggestionList
+#### ResourceTypeList
 
-`ResourceTypeList.items`: `type`, `label`, `description`, `permissions` (the levels, first is the default),
-`access_as` (the modes the type allows, empty for a `secret`), `target_hint` (an example of a target, for the field's
-placeholder), `can_suggest` (boolean). `ResourceSuggestionList`: `items` of `target`, `label`, `detail` (string or
-null), `permissions`; `truncated`; `source` (`caller_token`, `unavailable`, `not_supported`); `note` (string or
-null, in words, for example why the list is empty).
+| Field | Type | Presence | Meaning |
+|---|---|---|---|
+| `items` | array<ResourceTypeEntry> | always | One entry per type of the catalogue, in the catalogue's order |
+
+`ResourceTypeEntry`: `type` (the name `AttachResourceRequest.type` takes), `label` (the noun the UI shows), `description`
+(one sentence), `permissions` (the levels, first is the default), `access_as` (the modes the type allows: `obo` and
+`own_sp` for every type, `shared_sp` too only for a type with an attach check, since `shared_sp` needs a verified check;
+empty for a `secret`, which has none), `target_hint` (an example of a target, for the field's placeholder), `can_suggest`
+(boolean: whether `GET /resources/suggestions` can list objects of the type).
+
+#### ResourceSuggestionList
+
+| Field | Type | Presence | Meaning |
+|---|---|---|---|
+| `items` | array<ResourceSuggestion> | always | At most `limit`, ordered by label |
+| `truncated` | boolean | always | `true` when more than `limit` matched, or when the list call returned a partial page so that more may exist |
+| `source` | string | always | `caller_token` (read with the person's token), `unavailable` (Databricks refused or did not answer), `not_supported` (the type has no safe list call) |
+| `note` | string or null | always | In words, why `items` is empty or short: for example that the session cannot list SQL warehouses and the id has to be typed. `null` when there is nothing to say |
+
+`ResourceSuggestion`: `target` (what `AttachResourceRequest.target` takes), `label` (the name the person knows it by),
+`detail` (string or null, for example the state of a warehouse), `permissions` (the levels the type allows, first is the
+default; the list calls give no finer fact about the person's rights on one object). Each type is read with one call
+made with the person's token and filtered by `q` here:
+
+| `type` | Databricks call | `target` | `label` |
+|---|---|---|---|
+| `sql_warehouse` | `GET /api/2.0/sql/warehouses` | `id` | `name` |
+| `serving_endpoint` | `GET /api/2.0/serving-endpoints` | `name` | `name` |
+| `secret`, `q` without `/` | `GET /api/2.0/secrets/scopes/list` | `<scope>/`, a prefix for the next keystrokes and not a complete target | `<scope>` |
+| `secret`, `q` of the form `scope/prefix` | `GET /api/2.0/secrets/list?scope=<scope>` (key names only; the value endpoint is never called) | `<scope>/<key>` | `<key>` |
+| `mlflow_experiment` | `POST /api/2.0/mlflow/experiments/search` (`max_results` 1000, `view_type` `ACTIVE_ONLY`) | `experiment_id` | `name` |
+| `job` | `GET /api/2.2/jobs/list?limit=100` (its `name` parameter is an exact match, so the filter is made here) | `job_id` | `settings.name` |
+
+Every other type answers `not_supported`. A scope named in `q` that does not exist or is not visible to the person
+answers `source: "caller_token"`, no items and a `note`, since Databricks answers `404` for both. A `q` whose scope part cannot be a scope name (empty, a character outside letters, digits and `. _ @ -`, or a second slash) answers the same without calling anything. An object whose target the attach form would refuse is left out of the list.
 
 #### MetricsBreakdown
 

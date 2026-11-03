@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "type": "secret",
+      "label": "secret",
+      "description": "One key of a secret scope; the app reads its value as an environment variable.",
+      "permissions": [
+        "READ"
+      ],
+      "access_as": [],
+      "target_hint": "my-scope/my-key",
+      "can_suggest": true
+    },
+    {
+      "type": "sql_warehouse",
+      "label": "SQL warehouse",
+      "description": "A SQL warehouse the app runs statements on.",
+      "permissions": [
+        "CAN_USE",
+        "CAN_MANAGE"
+      ],
+      "access_as": [
+        "obo",
+        "own_sp",
+        "shared_sp"
+      ],
+      "target_hint": "1234567890abcdef",
+      "can_suggest": true
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "target": "fedcba0987654321",
+      "label": "Reporting",
+      "detail": null,
+      "permissions": [
+        "CAN_USE",
+        "CAN_MANAGE"
+      ]
+    },
+    {
+      "target": "1234567890abcdef",
+      "label": "Shared Serverless",
+      "detail": "RUNNING, size Small",
+      "permissions": [
+        "CAN_USE",
+        "CAN_MANAGE"
+      ]
+    }
+  ],
+  "truncated": false,
+  "source": "caller_token",
+  "note": null
+}

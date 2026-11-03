@@ -151,6 +151,10 @@ ROWS: dict[Action, frozenset[Kind]] = {
     Action.PLATFORM_ADMIN_REMOVE: PLATFORM_ONLY,
     Action.SETTINGS_EDIT: PLATFORM_ONLY,
     Action.EGRESS_EDIT: PLATFORM_ONLY,
+    # Any signed-in visitor; the route itself needs the visitor's token (T194).
+    Action.WORKSPACE_BROWSE: EVERY_KIND,
+    # Anyone who can attach a resource somewhere: CAN_MANAGE on at least one app (T195).
+    Action.RESOURCE_SUGGEST: CAN_MANAGE,
 }
 
 
@@ -240,6 +244,57 @@ def test_platform_actions_decide_on_the_platform_admin_not_on_the_app(action: Ac
     assert decide(Kind.OWNER, action, app="nope") == Decision(
         False, Reason.NOT_PLATFORM_ADMIN, None
     )
+
+
+def test_workspace_browse_allows_any_visitor_whatever_the_app_slug() -> None:
+    for kind in Kind:
+        for app in (None, SALES, "nope"):
+            assert decide(kind, Action.WORKSPACE_BROWSE, app=app) == Decision(
+                True, Reason.ANY_VISITOR, None
+            ), (kind, app)
+
+
+def test_resource_suggest_reads_every_app_not_the_slug_it_is_given() -> None:
+    # Frank owns `docs` and nothing on `sales`: he manages one app, which is enough.
+    result = authorize(
+        Actor(email="frank@example.com"),
+        Action.RESOURCE_SUGGEST,
+        None,
+        make_data(),
+        groups=frozenset(),
+    )
+    assert result == Decision(True, Reason.OWNER, Permission.CAN_MANAGE)
+    for kind in (Kind.CAN_MANAGE, Kind.GROUP_MANAGER, Kind.OWNER, Kind.PLATFORM_ADMIN):
+        assert decide(kind, Action.RESOURCE_SUGGEST, app="nope").allowed, kind
+
+
+def test_resource_suggest_denies_a_visitor_who_manages_no_app() -> None:
+    for kind in (Kind.NO_GRANT, Kind.CAN_USE, Kind.EVERYONE, Kind.GROUP_MEMBER):
+        assert decide(kind, Action.RESOURCE_SUGGEST) == Decision(
+            False, Reason.NO_MANAGED_APP, None
+        ), kind
+
+
+def test_resource_suggest_does_not_count_a_group_grant_while_groups_are_unknown() -> None:
+    who = WHO[Kind.GROUP_MANAGER]
+    for groups in (None, frozenset()):
+        result = authorize(
+            Actor(email=who.email), Action.RESOURCE_SUGGEST, None, make_data(), groups=groups
+        )
+        assert result == Decision(False, Reason.NO_MANAGED_APP, None), groups
+
+
+def test_resource_suggest_ignores_group_grants_while_user_authorization_is_off() -> None:
+    who = WHO[Kind.GROUP_MANAGER]
+    off = make_data(user_authorization=False)
+    result = authorize(
+        Actor(email=who.email), Action.RESOURCE_SUGGEST, None, off, groups=who.groups
+    )
+    assert result.allowed is False
+    owner = authorize(
+        Actor(email="alice@example.com"), Action.RESOURCE_SUGGEST, None, off, groups=None
+    )
+    assert owner.allowed is True
 
 
 def test_an_actor_without_an_email_is_denied() -> None:

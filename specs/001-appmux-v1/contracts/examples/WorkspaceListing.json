@@ -1,0 +1,30 @@
+{
+  "path": "/Workspace/Users/alice@example.com/sales-board",
+  "parent": "/Workspace/Users/alice@example.com",
+  "roots": [],
+  "entries": [
+    {
+      "name": "server",
+      "path": "/Workspace/Users/alice@example.com/sales-board/server",
+      "kind": "folder"
+    },
+    {
+      "name": "app.yaml",
+      "path": "/Workspace/Users/alice@example.com/sales-board/app.yaml",
+      "kind": "file"
+    },
+    {
+      "name": "package.json",
+      "path": "/Workspace/Users/alice@example.com/sales-board/package.json",
+      "kind": "file"
+    }
+  ],
+  "truncated": false,
+  "markers": [
+    "app.yaml",
+    "package.json"
+  ],
+  "looks_like_app": true,
+  "runtime_hint": "node",
+  "suggested_memory_mb": 768
+}
