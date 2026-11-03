@@ -445,6 +445,16 @@ def test_the_keys_are_filtered_by_what_follows_the_slash() -> None:
     assert targets_of(response) == ["prod/db-password"]
 
 
+def test_the_scope_part_of_the_query_does_not_match_every_key() -> None:
+    # Every target starts with "prod/", which holds the "p" typed after the slash.
+    keys = [{"key": "db-password"}, {"key": "token"}, {"key": "host"}]
+    answers = {("GET", KEYS_PATH): (200, {"secrets": keys})}
+
+    response = Suggester(Workspace(answers)).suggest("secret", "prod/p")
+
+    assert targets_of(response) == ["prod/db-password"]
+
+
 def test_listing_the_keys_of_a_scope_never_asks_for_a_secret_value() -> None:
     answers = {
         ("GET", KEYS_PATH): (200, {"secrets": [{"key": "k"}]}),

@@ -164,19 +164,25 @@ def _access_modes_of(type_name: str) -> list[AccessAs]:
 
 
 def select_suggestions(
-    candidates: Iterable[ResourceSuggestion], query: str, *, limit: int
+    candidates: Iterable[ResourceSuggestion],
+    query: str,
+    *,
+    limit: int,
+    is_label_only: bool = False,
 ) -> tuple[list[ResourceSuggestion], bool]:
     """The candidates whose label or target holds ``query`` (any case), by label, at most ``limit``.
 
     The second value is true when more matched than were returned. The query is plain text, not a
-    pattern.
+    pattern. ``is_label_only`` matches the label alone: a secret key's target starts with the scope
+    the query already named, which would match every key.
     """
     needle = query.strip().casefold()
     matched = sorted(
         (
             candidate
             for candidate in candidates
-            if needle in candidate.label.casefold() or needle in candidate.target.casefold()
+            if needle in candidate.label.casefold()
+            or (not is_label_only and needle in candidate.target.casefold())
         ),
         key=lambda candidate: (candidate.label.casefold(), candidate.label, candidate.target),
     )
@@ -191,13 +197,15 @@ class _Page:
     """The objects one list call named, ready to filter.
 
     ``filter_text`` is what ``q`` is matched against (for a secret key it is the part after the
-    slash); ``is_partial`` is true when Databricks says more exist behind this page.
+    slash, matched against the key names only: ``is_label_only``); ``is_partial`` is true when
+    Databricks says more exist behind this page.
     """
 
     candidates: list[ResourceSuggestion]
     filter_text: str
     noun: str
     is_partial: bool
+    is_label_only: bool = False
 
 
 class _NoItems(Exception):
@@ -392,7 +400,7 @@ async def _list_secrets(reader: _Reader, query: str) -> _Page:
         )
         for entry in _objects_of(body, "secrets", noun)
     )
-    return _Page(candidates, key_query, noun, _is_partial(body))
+    return _Page(candidates, key_query, noun, _is_partial(body), is_label_only=True)
 
 
 async def _list_scopes(reader: _Reader, query: str) -> _Page:
@@ -519,7 +527,9 @@ class ResourceSuggestionRoutes:
             page = await lister(_Reader(self._workspace, token), query)
         except _NoItems as nothing:
             return _nothing(nothing.source, nothing.note)
-        items, is_cut = select_suggestions(page.candidates, page.filter_text, limit=limit)
+        items, is_cut = select_suggestions(
+            page.candidates, page.filter_text, limit=limit, is_label_only=page.is_label_only
+        )
         return ResourceSuggestionList(
             items=items,
             truncated=is_cut or page.is_partial,
