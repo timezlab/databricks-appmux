@@ -1438,6 +1438,33 @@ def test_a_window_of_more_than_1440_steps_names_the_smallest_step_that_fits(
     assert "1440" in message
 
 
+def test_a_window_that_starts_inside_a_step_counts_that_step() -> None:
+    # 1440 x 5 minutes from 00:02 touches 1441 steps: the cut one it starts in, and the next 1440
+    # (review T205 R6).
+    platform = platform_with_metrics([])
+
+    response = platform.call(
+        "GET", "/metrics?from=2001-04-01T00:02:00Z&to=2001-04-06T00:02:00Z&step=5m", DANA
+    )
+
+    assert response.status_code == 400
+    code, message = error_of(response)
+    assert code == "window_too_long"
+    assert "step=15m" in message
+
+
+def test_a_window_that_starts_inside_a_minute_counts_only_the_steps_of_its_whole_minutes() -> None:
+    # Minutes are stored whole and read from the first one at or after ``from``: 00:04:30 holds
+    # none of the step of 00:00, so the window holds 1440 steps, 00:05 to five days later.
+    platform = platform_with_metrics([])
+
+    response = platform.call(
+        "GET", "/metrics?from=2001-04-01T00:04:30Z&to=2001-04-06T00:04:30Z&step=5m", DANA
+    )
+
+    assert response.status_code == 200, response.text
+
+
 def test_a_window_of_more_than_7_days_is_too_long_at_every_step() -> None:
     platform = platform_with_metrics([])
 

@@ -139,6 +139,8 @@ LONGEST_ROWS: Final = tuple(
     row("golf", LONGEST_START + index * FIVE_MINUTES + timedelta(minutes=2), 1)
     for index in range(MAX_METRIC_STEPS)
 )
+# A row in the step just after the longest window, which no window of 1440 whole steps reaches.
+PAST_THE_LONGEST_ROW: Final = row("golf", LONGEST_END, 1)
 
 
 def _required(name: str) -> str:
@@ -192,7 +194,9 @@ async def registry() -> AsyncIterator[RegistryClient]:
         operation_timeout_s=OPERATION_TIMEOUT_S,
     )
     try:
-        await client.append_metrics([*STEP_ROWS, *BREAKDOWN_ROWS, *LONGEST_ROWS])
+        await client.append_metrics(
+            [*STEP_ROWS, *BREAKDOWN_ROWS, *LONGEST_ROWS, PAST_THE_LONGEST_ROW]
+        )
         yield client
     finally:
         await client.close()
@@ -239,6 +243,26 @@ async def test_the_longest_window_the_routes_admit_comes_back_whole(
         start=LONGEST_START, end=LONGEST_END, step=FIVE_MINUTES, top=8
     )
 
+    assert [s.minute for s in steps] == expected
+    assert [(point.app_slug, point.minute) for point in breakdown] == [
+        ("golf", minute) for minute in expected
+    ]
+
+
+async def test_a_window_as_long_that_starts_inside_a_step_holds_one_step_more(
+    registry: RegistryClient,
+) -> None:
+    # Why the routes count the steps a window touches (review T205 R6): 1440 x 5 minutes from two
+    # minutes into a step hold the step it starts in, cut, and the one after the longest window.
+    start, end = LONGEST_START + timedelta(minutes=2), LONGEST_END + timedelta(minutes=2)
+    expected = [LONGEST_START + index * FIVE_MINUTES for index in range(MAX_METRIC_STEPS + 1)]
+
+    steps = await registry.read_metric_steps(
+        app_slug="golf", start=start, end=end, step=FIVE_MINUTES, limit=MAX_METRIC_STEPS + 2
+    )
+    breakdown = await registry.read_metric_breakdown(start=start, end=end, step=FIVE_MINUTES, top=8)
+
+    assert end - start == MAX_METRIC_STEPS * FIVE_MINUTES
     assert [s.minute for s in steps] == expected
     assert [(point.app_slug, point.minute) for point in breakdown] == [
         ("golf", minute) for minute in expected
