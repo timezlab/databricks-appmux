@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
 import {
+  APP_SECTIONS,
   APP_SLUG_PARAMETER,
   appPagePath,
+  appSectionAt,
   readAppParam,
 } from "@/lib/app/params";
 
@@ -69,20 +71,28 @@ describe("appPagePath", () => {
   });
 
   it("builds the path of each page of the app, with the slug in the query", () => {
-    assert.equal(appPagePath("sales", "status"), "/app/?slug=sales");
-    assert.equal(appPagePath("sales", "releases"), "/app/releases/?slug=sales");
-    assert.equal(
-      appPagePath("sales", "resources"),
-      "/app/resources/?slug=sales",
+    assert.deepEqual(
+      APP_SECTIONS.map((section) => appPagePath("sales", section)),
+      [
+        "/app/?slug=sales",
+        "/app/authorization/?slug=sales",
+        "/app/deployments/?slug=sales",
+        "/app/logs/?slug=sales",
+        "/app/security/?slug=sales",
+        "/app/environment/?slug=sales",
+        "/app/resources/?slug=sales",
+        "/app/insights/?slug=sales",
+        "/app/requests/?slug=sales",
+        "/app/settings/?slug=sales",
+      ],
     );
-    assert.equal(appPagePath("sales", "sharing"), "/app/sharing/?slug=sales");
-    assert.equal(appPagePath("sales", "requests"), "/app/requests/?slug=sales");
+    assert.equal(appPagePath("sales", "overview"), appPagePath("sales"));
   });
 
   it("is null for a value that is not a slug, whatever the page", () => {
     assert.equal(appPagePath("../x"), null);
     assert.equal(appPagePath(""), null);
-    assert.equal(appPagePath("../x", "releases"), null);
+    assert.equal(appPagePath("../x", "deployments"), null);
   });
 
   it("reads back to the same slug", () => {
@@ -93,5 +103,38 @@ describe("appPagePath", () => {
       status: "valid",
       slug: "sales",
     });
+  });
+});
+
+describe("appSectionAt", () => {
+  it("names the section of each page's path, with or without its trailing slash", () => {
+    assert.equal(appSectionAt("/app/"), "overview");
+    assert.equal(appSectionAt("/app"), "overview");
+    assert.equal(appSectionAt("/app/deployments/"), "deployments");
+    assert.equal(appSectionAt("/app/deployments"), "deployments");
+    assert.equal(appSectionAt("/app/settings/"), "settings");
+  });
+
+  it("reads back every path appPagePath builds", () => {
+    for (const section of APP_SECTIONS) {
+      const path = appPagePath("sales", section);
+      assert.ok(path);
+      assert.equal(appSectionAt(path.slice(0, path.indexOf("?"))), section);
+    }
+  });
+
+  it("is null for a path that is no section of an app, including the old ones", () => {
+    for (const path of [
+      null,
+      "",
+      "/",
+      "/platform/",
+      "/app/releases/",
+      "/app/sharing/",
+      "/app/logs/extra/",
+      "/apps/",
+    ]) {
+      assert.equal(appSectionAt(path), null, String(path));
+    }
   });
 });

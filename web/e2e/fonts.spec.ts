@@ -27,8 +27,8 @@ test.afterAll(async () => {
   await server.close();
 });
 
-/** The launcher (sans, and the route strip in mono 500) and the app status page (mono 400 for the source folder). */
-const FONT_PAGES = ["launcher", "app-status"] as const;
+/** The launcher (sans, and the route strip in mono 500) and the app's overview (mono 400 for the source folder). */
+const FONT_PAGES = ["launcher", "app-overview"] as const;
 
 function pageEntry(name: string): PageEntry {
   const entry = PAGES.find((candidate) => candidate.name === name);
