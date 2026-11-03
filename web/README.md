@@ -183,7 +183,10 @@ are in `e2e/fixtures-f4.ts`.
   `tests/contract/motion.test.ts` fails on a rule that would stop one.
 - **Bars.** Every item of a navigation (top bar, tab bar, sidebar) carries `bar-item`: a
   2 px bar under it (beside it inside `bar-axis-vertical`), transparent at rest, `input` on
-  hover, `primary` on the item with `aria-current="page"`, and no text underline.
+  hover, `primary` on the item with `aria-current="page"`, and no text underline. `bar-item`
+  also holds the padding and text size (the padding on the bar's side is the gap between the
+  label and the bar), so an item sets no padding of its own; `tests/components/bar-geometry.test.tsx`
+  renders the top bar, the Environment tab bar and the sidebar and fails on one that does.
 - **Apps and states.** An app's route is a `RouteStrip`; a state is a `Lamp` (a dot and its
   word, through `StatusBadge`), never a coloured pill.
 - **Form controls.** `Input`, `Textarea`, `Select`, `Combobox`, `NativeCheckbox`,

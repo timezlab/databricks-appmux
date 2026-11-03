@@ -138,8 +138,10 @@ appmux's.
   aligned; forms stop at 560 px. Inside it sections are ruled, not boxed into further cards.
 - **One geometry for every bar** (point 8): the top navigation, the sidebar items and the Variables/Packages tabs share
   one rule, a 2 px bar that is transparent at rest, muted on hover and cord on the selected one, and none of them has a
-  text underline. It is the `bar-item` utility of globals.css; a vertical list (the sidebar) puts the bar on the
-  start edge with `bar-axis-vertical` on its container, so every item keeps the same class.
+  text underline. It is the `bar-item` utility of globals.css, padding and text size included: the padding on the
+  bar's side is the gap between the label and the bar, so no caller sets a padding of its own. A vertical list (the
+  sidebar) puts the bar on the start edge, and sets its rows' height, with `bar-axis-vertical` on its container, so
+  every item keeps the same class.
 - **The dashboard** keeps its own page; its six identical figure cards become one strip of figures divided by
   hairlines, each with a sparkline. The same view, scoped to one app, is the app's Insights.
 

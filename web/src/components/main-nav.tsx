@@ -18,7 +18,7 @@ export function MainNav() {
         {NAV_ITEMS.map((item) => (
           <li key={item.href}>
             <Link
-              className="bar-item px-3 py-3 text-sm"
+              className="bar-item"
               href={item.href}
               aria-current={
                 isCurrentNavEntry(pathname, item) ? "page" : undefined

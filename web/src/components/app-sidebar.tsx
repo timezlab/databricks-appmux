@@ -53,7 +53,7 @@ export function SidebarItem({
   return (
     <Link
       // At least 40 px tall on a phone, where it is a row of the section menu.
-      className="bar-item w-full px-3 py-2 text-sm max-md:min-h-10"
+      className="bar-item w-full max-md:min-h-10"
       href={href}
       aria-current={isCurrent ? "page" : undefined}
       title={isCollapsed ? collapsedTitle : undefined}

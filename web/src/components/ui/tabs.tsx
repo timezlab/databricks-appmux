@@ -145,7 +145,7 @@ const TABS_TRIGGER_CLASSES = [
 // The bar variant's trigger: `bar-item` draws the bar; `-mb-px` lays it over the
 // list's hairline, as `SubNav` does.
 const TABS_BAR_TRIGGER_CLASSES =
-  "bar-item -mb-px px-3 py-2.5 text-sm whitespace-nowrap disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+  "bar-item -mb-px whitespace-nowrap disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
 function TabsTrigger({
   className,
