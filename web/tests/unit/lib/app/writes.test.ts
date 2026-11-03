@@ -45,7 +45,7 @@ function harness() {
 
 const STALE = new api.ApiError(
   409,
-  "conflict",
+  "changed_by_others",
   "changed by someone else, reload and retry",
 );
 
@@ -244,6 +244,7 @@ describe("createWriteController: a failed write", () => {
     const errors: unknown[] = [
       new api.ApiError(400, "bad_request", "no"),
       new api.ApiError(403, "forbidden", "no"),
+      new api.ApiError(409, "slug_taken", "that slug is taken"),
       new api.ApiError(503, "unavailable", "later"),
       new api.ApiError(0, "network_error", "offline"),
       new Error("boom"),

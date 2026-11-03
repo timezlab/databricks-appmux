@@ -6,6 +6,7 @@ import { AppView } from "@/components/app/app-view";
 import { AppSettingsPage } from "@/components/app/pages/settings-page";
 import { API_BASE_URL } from "@/lib/api";
 import { carriedOutcome, carryOutcome } from "@/lib/app/settings";
+import { RELOAD_NOTICE_TEXT } from "@/lib/app/writes";
 import { readExample } from "../../support/contract-examples";
 import { jsonResponse, stubFetch } from "../../support/fake-fetch";
 import type { RecordedCall } from "../../support/fake-fetch";
@@ -357,6 +358,10 @@ describe("AppSettingsPage, for a platform admin", () => {
     ).toBeInTheDocument();
     expect(slug).toHaveValue("reports");
     expect(router.replace).not.toHaveBeenCalled();
+    expect(screen.queryByText(RELOAD_NOTICE_TEXT)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Changed by someone else"),
+    ).not.toBeInTheDocument();
   });
 
   it("warns that a Node.js app needs 768 MB and fills it on request", async () => {

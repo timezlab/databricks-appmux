@@ -482,13 +482,23 @@ describe("canViewSource", () => {
 });
 
 describe("shouldReloadAfterError", () => {
-  it("reloads after a stale version or a state that changed (409) and after a vanished release (404)", () => {
+  it("reloads after a stale version or a vanished app (409) and after a vanished release (404)", () => {
     assert.equal(
       shouldReloadAfterError(
         new api.ApiError(
           409,
-          "conflict",
+          "changed_by_others",
           "changed by someone else, reload and retry",
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      shouldReloadAfterError(
+        new api.ApiError(
+          409,
+          "app_missing",
+          "the app this request is about no longer exists; deny the request",
         ),
       ),
       true,
@@ -499,6 +509,22 @@ describe("shouldReloadAfterError", () => {
       ),
       true,
     );
+  });
+
+  it("does not reload after a 409 that refuses the write on its own terms (a taken slug, no release, a protected release)", () => {
+    for (const code of [
+      "slug_taken",
+      "no_release",
+      "release_protected",
+      "request_pending",
+      "conflict",
+    ]) {
+      assert.equal(
+        shouldReloadAfterError(new api.ApiError(409, code, "refused")),
+        false,
+        code,
+      );
+    }
   });
 
   it("does not reload after a refusal, a lost connection or a bug", () => {
