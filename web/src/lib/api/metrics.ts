@@ -5,8 +5,8 @@ import { callJson, parseQuery } from "./client";
 import type { RequestOptions } from "./client";
 
 /**
- * A window over 1440 minutes is a `400`. Past 10000 rows the server drops whole
- * oldest minutes and answers `truncated: true` with `from` moved forward.
+ * A window over 7 days or 1440 steps is a `400`. Past 10000 rows the server
+ * drops whole oldest steps and answers `truncated: true` with `from` moved.
  * `async` so that a bad query rejects the promise, like every other refusal of
  * the client.
  */

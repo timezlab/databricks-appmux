@@ -40,7 +40,7 @@ from appmux.sandbox.launcher import (
     SandboxStartError,
     start_sandbox,
 )
-from appmux.sandbox.pump import write_rules_file
+from appmux.sandbox.pump import PumpStats, write_rules_file
 from appmux.sandbox.rules import EgressRule
 from appmux.sandbox.run_dir import (
     RUN_DIR_LIMIT_BYTES,
@@ -59,6 +59,8 @@ HOST_RUN_DIR_NAME: Final = "run"
 RUN_DIR_STOP_GRACE_S: Final = 5.0
 # Enough for the last 40 lines of a chatty child; the registry keeps fewer (``clean_log_tail``).
 LOG_READ_BYTES: Final = 16 * 1024
+# How long the metrics sampler waits for a pump's counters; under its own 3 s probe timeout.
+PUMP_STATS_TIMEOUT_S: Final = 2.0
 
 
 class SandboxProcess(Protocol):
@@ -69,6 +71,11 @@ class SandboxProcess(Protocol):
     async def wait(self) -> SandboxExit: ...
 
     async def stop(self, *, grace_s: float) -> SandboxExit: ...
+
+    @property
+    def sandbox_pid(self) -> int | None: ...
+
+    async def read_stats(self, *, timeout_s: float) -> PumpStats | None: ...
 
 
 StartSandbox = Callable[[SandboxSpec], Awaitable[SandboxProcess]]
@@ -161,6 +168,22 @@ class SandboxRunningChild:
 
     def log_tail(self) -> str:
         return _read_tail(self._log_path)
+
+    # What the metrics sampler reads (T192): which sandbox this is, its pid, its pump's counters.
+
+    @property
+    def instance(self) -> str:
+        """The name of this start's scratch directory, unique while the process runs."""
+        return self._socket_path.parent.name
+
+    @property
+    def sandbox_pid(self) -> int | None:
+        """The host pid at the root of the sandbox's process tree; ``None`` until it started."""
+        return self._process.sandbox_pid
+
+    async def pump_stats(self) -> PumpStats | None:
+        """The egress pump's running totals, or ``None`` if the supervisor gave none in time."""
+        return await self._process.read_stats(timeout_s=PUMP_STATS_TIMEOUT_S)
 
 
 class SandboxChildLauncher:

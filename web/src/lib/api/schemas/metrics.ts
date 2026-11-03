@@ -1,4 +1,4 @@
-/** GET /metrics. */
+/** GET /metrics; the steps are shared with GET /metrics/breakdown. */
 import { z } from "./zod.ts";
 import { Slug, Time } from "./primitives.ts";
 
@@ -55,16 +55,26 @@ export const MetricsResponse = z.object({
 export type MetricsResponse = z.infer<typeof MetricsResponse>;
 
 /**
+ * admin-api.md addendum: the minutes are added up per step, each step starting
+ * on a whole multiple of its length in UTC (`1m` is the stored rows as they are).
+ */
+export const MetricStep = z.enum(["1m", "5m", "15m", "1h"]);
+
+export type MetricStep = z.infer<typeof MetricStep>;
+
+/**
  * The query string of `GET /metrics`. It is no body of the contract, so it has
  * no example file; `getMetrics` checks it before it builds the URL. The server
- * defaults a missing `to` to now and `from` to one hour before `to`, and
- * answers `400` for a window over 1440 minutes; without `app` a platform admin
+ * defaults a missing `to` to now, `from` to one hour before `to` and `step` to
+ * `1m`, and answers `400 window_too_long` for a window over 7 days or over 1440
+ * steps (the message names the step that fits); without `app` a platform admin
  * gets every app and the platform row.
  */
 export const MetricsQuery = z.strictObject({
   app: z.union([Slug, z.literal(PLATFORM_ROW)]).optional(),
   from: Time.optional(),
   to: Time.optional(),
+  step: MetricStep.optional(),
 });
 
 export type MetricsQuery = z.infer<typeof MetricsQuery>;

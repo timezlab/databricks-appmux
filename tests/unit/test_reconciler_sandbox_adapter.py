@@ -16,8 +16,13 @@ from pathlib import Path
 import pytest
 
 from appmux.reconciler.children import ChildStart, ChildStartError
-from appmux.reconciler.sandbox_adapter import MAX_SOCKET_PATH_BYTES, SandboxChildLauncher
+from appmux.reconciler.sandbox_adapter import (
+    MAX_SOCKET_PATH_BYTES,
+    PUMP_STATS_TIMEOUT_S,
+    SandboxChildLauncher,
+)
 from appmux.sandbox.launcher import SandboxExit, SandboxSpec, SandboxStartError
+from appmux.sandbox.pump import PumpStats
 from appmux.sandbox.rules import EgressRule
 
 pytestmark = pytest.mark.anyio
@@ -423,3 +428,72 @@ async def test_the_watchdog_that_is_stopping_the_child_is_waited_for_not_cancell
     await asyncio.wait_for(running.wait(), timeout=5.0)
 
     assert starter.handle.has_finished_stopping
+
+
+# --- what the metrics sampler reads of a running sandbox (T192) ---------------------------------
+
+
+class MeasuredHandle(FakeHandle):
+    """A handle that has reported its sandbox's host pid and answers the pump's counters."""
+
+    def __init__(self, sandbox_pid: int | None) -> None:
+        super().__init__()
+        self.sandbox_pid = sandbox_pid
+        self.stats_timeouts: list[float] = []
+
+    async def read_stats(self, *, timeout_s: float) -> PumpStats | None:
+        self.stats_timeouts.append(timeout_s)
+        return {
+            "dropped_total": 1,
+            "by_rule": {"app:1": 1},
+            "by_reason": {},
+            "recent": [],
+            "frames_to_slirp": 3,
+            "bytes_to_slirp": 900,
+            "frames_to_child": 2,
+            "bytes_to_child": 300,
+            "rules_generation": 1,
+        }
+
+
+async def test_each_running_sandbox_has_an_instance_name_of_its_own(tmp_path: Path) -> None:
+    starter = FakeStarter()
+    adapter = launcher(tmp_path, starter)
+
+    first = await adapter.start(child_start())
+    second = await adapter.start(child_start())
+
+    # Two copies of one release run at once during a restart; their pump totals must not mix.
+    assert first.instance != second.instance
+    assert first.instance == starter.specs[0].scratch_dir.name
+
+
+async def test_the_sandbox_pid_is_the_one_the_supervisor_reported(tmp_path: Path) -> None:
+    starter = FakeStarter()
+    starter.handle = MeasuredHandle(sandbox_pid=4242)
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    assert running.sandbox_pid == 4242
+
+
+async def test_a_sandbox_that_has_not_reported_its_pid_has_none(tmp_path: Path) -> None:
+    starter = FakeStarter()
+    starter.handle = MeasuredHandle(sandbox_pid=None)
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    assert running.sandbox_pid is None
+
+
+async def test_the_pump_counters_are_asked_of_the_supervisor_within_a_bound(
+    tmp_path: Path,
+) -> None:
+    starter = FakeStarter()
+    handle = MeasuredHandle(sandbox_pid=4242)
+    starter.handle = handle
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    stats = await running.pump_stats()
+
+    assert stats is not None
+    assert stats["bytes_to_slirp"] == 900
+    assert handle.stats_timeouts == [PUMP_STATS_TIMEOUT_S]

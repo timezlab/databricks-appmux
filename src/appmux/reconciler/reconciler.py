@@ -40,6 +40,10 @@ release and editing the config are rows the admin routes write (``activate.py``,
 ``stop_app`` is the last step before an app's rows are deleted: it takes the running copy down and
 closes the route, writes nothing, and leaves the rest to the pass that follows the delete.
 
+For the metrics (design 10.2) it counts every restart (after a crash, asked for, or a rename's new
+copy) and every admission refusal through ``ReconcilerMetrics``, and ``running_children`` answers
+the children that run now, so the sampler can read their memory and their pumps.
+
 Not here (other tasks): the retention cap (T114).
 """
 
@@ -50,7 +54,7 @@ import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from appmux.appyaml.appyaml import substitute_command_arguments
 from appmux.reconciler.admission import (
@@ -102,6 +106,22 @@ _NO_COMMAND: Final = (
     "the release has no start command and no known runtime; add a command to its app.yaml"
 )
 _INTERNAL_ERROR: Final = "internal error while releasing; the appmux log has the details"
+
+
+class ReconcilerMetrics(Protocol):
+    """What the reconciler counts for the per-minute metrics (``metrics.MetricsAggregator``)."""
+
+    def record_restart(self, app_slug: str) -> None: ...
+
+    def record_admission_rejection(self) -> None: ...
+
+
+class _NoMetrics:
+    def record_restart(self, app_slug: str) -> None:
+        pass
+
+    def record_admission_rejection(self) -> None:
+        pass
 
 
 class _Refused(Exception):
@@ -199,6 +219,7 @@ class Reconciler:
         stop_grace_s: float = CHILD_STOP_GRACE_S,
         drain_s: float = DRAIN_S,
         watch_interval_s: float | None = DEFAULT_WATCH_INTERVAL_S,
+        metrics: ReconcilerMetrics | None = None,
     ) -> None:
         self._registry = registry
         self._launcher = launcher
@@ -212,6 +233,7 @@ class Reconciler:
         self._start_timeout_s = start_timeout_s
         self._stop_grace_s = stop_grace_s
         self._watch_interval_s = watch_interval_s
+        self._metrics: ReconcilerMetrics = metrics if metrics is not None else _NoMetrics()
         self._swap = Swap(
             registry=registry,
             routes=routes,
@@ -317,6 +339,21 @@ class Reconciler:
         state.stop_waiters.append(stopped)
         self.wake(slug)
         await stopped.wait()
+
+    def running_children(self) -> list[tuple[str, RunningChild]]:
+        """Every child running now with its app's slug: live, draining and still coming up."""
+        children: list[tuple[str, RunningChild]] = []
+        for state in self._states.values():
+            if state.live is not None:
+                children.append((state.slug, state.live.live.child))
+            children.extend((state.slug, copy.live.child) for copy in state.draining)
+            if state.incoming is not None and state.incoming.child is not None:
+                children.append((state.slug, state.incoming.child))
+        return children
+
+    def running_app_count(self) -> int:
+        """How many apps have a copy with an open route now."""
+        return sum(1 for state in self._states.values() if state.live is not None)
 
     def memory_ledger(self) -> MemoryLedger:
         """What the slot's memory holds now: the same books admission control reads."""
@@ -589,6 +626,8 @@ class Reconciler:
     ) -> bool:
         """Bring ``release`` up and swap to it; True if it is now the live copy."""
         attempt = _Attempt(state, app, config, release, is_restore, is_restart=is_restart)
+        if is_restart:
+            self._metrics.record_restart(state.slug)
         replaced: _Copy | None = None
         is_up = False
         try:
@@ -663,6 +702,7 @@ class Reconciler:
             now_s=self._clock.monotonic(),
         )
         if not decision.admitted:
+            self._metrics.record_admission_rejection()
             raise _Refused(f"not enough memory: {decision.reason}")
         incoming = _Incoming(budget_mb, attempt.config.health_deadline_s)
         attempt.state.incoming = incoming
@@ -894,14 +934,7 @@ class Reconciler:
         return books
 
     def _tracked_children(self) -> list[RunningChild]:
-        children: list[RunningChild] = []
-        for state in self._states.values():
-            if state.live is not None:
-                children.append(state.live.live.child)
-            children.extend(copy.live.child for copy in state.draining)
-            if state.incoming is not None and state.incoming.child is not None:
-                children.append(state.incoming.child)
-        return children
+        return [child for _, child in self.running_children()]
 
 
 def _active_release(snapshot: RegistrySnapshot, slug: str) -> Release | None:

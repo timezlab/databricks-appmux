@@ -51,6 +51,11 @@ copied).
 A connection that may be in an unknown state (a lost connection, a cancelled or timed-out
 operation, anything that is not an answered error) is closed and dropped, and the next operation
 logs in again. An answered error (a conflict, a refused privilege) leaves it in use.
+
+``observe_calls`` hands every operation's duration (the wait for the connection included) and
+whether the registry could not serve it to the metrics: the ``registry_ms_max`` and
+``registry_errors`` columns of the ``_platform`` row. "Could not serve" is the line ``last_error``
+draws, so a conflict the database answered is not a failed call.
 """
 
 from __future__ import annotations
@@ -59,9 +64,11 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import timedelta
 from types import MappingProxyType
 from typing import Final, Literal, NoReturn, Protocol, TypeVar
 
@@ -81,7 +88,21 @@ from appmux.registry.errors import (
     RowAlreadyExists,
     RowMissing,
 )
-from appmux.registry.models import ROW_MODELS, AuditLogRow, MetricRow, RowModel
+from appmux.registry.metric_steps import (
+    BREAKDOWN_COLUMNS,
+    STEP_ORIGIN,
+    STEP_RULES,
+    MetricBreakdownRow,
+    StepRule,
+)
+from appmux.registry.models import (
+    LATENCY_BUCKET_COUNT,
+    PLATFORM_METRICS_SLUG,
+    ROW_MODELS,
+    AuditLogRow,
+    MetricRow,
+    RowModel,
+)
 from appmux.registry.protocol import (
     VERSIONED_UPDATES,
     Change,
@@ -180,6 +201,12 @@ class ConnectionParameters:
 
 ConnectionFactory = Callable[[ConnectionParameters], Awaitable[DatabaseConnection]]
 TokenProvider = Callable[[], Awaitable[SecretStr]]
+
+
+class CallObserver(Protocol):
+    """Told of every registry operation: how long it took and whether the registry failed it."""
+
+    def __call__(self, duration_ms: float, *, failed: bool) -> None: ...
 
 
 class _PsycopgConnection:
@@ -582,6 +609,64 @@ def _window_conditions(
     return sql.SQL(" AND ").join(conditions), params
 
 
+def _summed_buckets(column: sql.Identifier) -> sql.Composed:
+    return sql.SQL("ARRAY[{}]").format(
+        sql.SQL(", ").join(
+            sql.SQL("sum({}[{}])::bigint").format(column, sql.Literal(bucket))
+            for bucket in range(1, LATENCY_BUCKET_COUNT + 1)
+        )
+    )
+
+
+def _step_aggregate(column: str, rule: StepRule) -> sql.Composed:
+    """``column`` over the minutes of one step, by its rule (``registry/metric_steps.py``)."""
+    name = sql.Identifier(column)
+    if rule == "sum":
+        # sum() of a bigint column is numeric; the cast keeps every count an integer.
+        return sql.SQL("sum({})::bigint AS {}").format(name, name)
+    if rule == "max":
+        return sql.SQL("max({}) AS {}").format(name, name)
+    if rule == "last":
+        return sql.SQL("(array_agg({} ORDER BY {} DESC))[1] AS {}").format(
+            name, sql.Identifier("minute"), name
+        )
+    if rule == "histogram":
+        return sql.SQL("{} AS {}").format(_summed_buckets(name), name)
+    # by_rule: the step keeps every minute's object; the outer query adds them up key by key.
+    return sql.SQL("jsonb_agg({}) AS {}").format(name, name)
+
+
+# The drops by rule of one step, added up rule id by rule id. A malformed value (not an object, a
+# count that is not a whole number) adds nothing instead of failing the read: a holder of the
+# shared-SP token can write one (data model 6), and the minute view still quarantines that row.
+_DROPPED_BY_RULE_SUM: Final = (
+    "(SELECT coalesce(jsonb_object_agg({rule}, {dropped}), jsonb_build_object()) "
+    "FROM (SELECT {each}.{rule}, sum({each}.{dropped}::numeric) AS {dropped} "
+    "FROM jsonb_array_elements({steps}.{column}) AS {minute_value}({value}) "
+    "CROSS JOIN LATERAL jsonb_each_text(CASE WHEN jsonb_typeof({minute_value}.{value}) = 'object' "
+    "THEN {minute_value}.{value} ELSE jsonb_build_object() END) AS {each}({rule}, {dropped}) "
+    "WHERE {each}.{dropped} ~ '^[0-9]+$' GROUP BY {each}.{rule}) AS {by_rule}) AS {column}"
+)
+
+
+def _step_output(column: str, steps: sql.Identifier) -> sql.Composed:
+    """One column of a step row as the outer query hands it out."""
+    if column == "minute":
+        return sql.SQL("{} AS {}").format(sql.Identifier("step_start"), sql.Identifier("minute"))
+    if STEP_RULES.get(column) == "by_rule":
+        return sql.SQL(_DROPPED_BY_RULE_SUM).format(
+            rule=sql.Identifier("rule"),
+            dropped=sql.Identifier("dropped"),
+            each=sql.Identifier("each_rule"),
+            steps=steps,
+            column=sql.Identifier(column),
+            minute_value=sql.Identifier("minute_value"),
+            value=sql.Identifier("value"),
+            by_rule=sql.Identifier("by_rule"),
+        )
+    return sql.SQL("{}").format(sql.Identifier(column))
+
+
 def _metric_insert(rows: Sequence[MetricRow]) -> tuple[sql.Composed, list[object]]:
     columns = tuple(MetricRow.model_fields)
     one_row = sql.SQL("({})").format(_placeholders(len(columns)))
@@ -637,6 +722,7 @@ class RegistryClient:
         self._lock = asyncio.Lock()
         self._last_error: str | None = None
         self._unreadable_rows = 0
+        self._call_observer: CallObserver | None = None
 
     # --- Registry: the snapshot -----------------------------------------------------------------
 
@@ -656,6 +742,10 @@ class RegistryClient:
 
     async def refresh(self) -> None:
         await self._loader.refresh()
+
+    def observe_calls(self, observer: CallObserver) -> None:
+        """Tell ``observer`` of every operation from now on (the metrics' registry counters)."""
+        self._call_observer = observer
 
     async def poll(self) -> None:
         """Reload every interval until cancelled (``SnapshotLoader.poll``)."""
@@ -799,6 +889,102 @@ class RegistryClient:
         rows = await self._read(query, (*params, limit))
         return self._readable(MetricRow, "metrics", rows)
 
+    async def read_metric_steps(
+        self,
+        *,
+        app_slug: str | None,
+        start: AwareDatetime,
+        end: AwareDatetime,
+        step: timedelta,
+        limit: int,
+    ) -> tuple[MetricRow, ...]:
+        """The newest ``limit`` steps of the window, one row per app and step, oldest first.
+
+        Each row carries its step's start as ``minute``; ``registry/metric_steps.py`` has the rules.
+        """
+        if limit <= 0:
+            return ()
+        conditions, params = _window_conditions("minute", app_slug, start, end)
+        steps = sql.Identifier("steps")
+        slug, step_start = sql.Identifier("app_slug"), sql.Identifier("step_start")
+        query = sql.SQL(
+            "SELECT {outputs} FROM (SELECT {slug}, date_bin(%s, {minute}, %s) AS {step_start}, "
+            "{aggregates} FROM {table} WHERE {conditions} GROUP BY {slug}, {step_start} "
+            "ORDER BY {step_start} DESC, {slug} DESC LIMIT %s) AS {steps} ORDER BY {order}"
+        ).format(
+            outputs=sql.SQL(", ").join(
+                _step_output(column, steps) for column in MetricRow.model_fields
+            ),
+            slug=slug,
+            minute=sql.Identifier("minute"),
+            step_start=step_start,
+            aggregates=sql.SQL(", ").join(
+                _step_aggregate(column, rule) for column, rule in STEP_RULES.items()
+            ),
+            table=sql.Identifier("metrics"),
+            conditions=conditions,
+            steps=steps,
+            order=sql.SQL("{}, {}").format(sql.Identifier("minute"), slug),
+        )
+        rows = await self._read(query, (step, STEP_ORIGIN, *params, limit))
+        return self._readable(MetricRow, "metrics", rows)
+
+    async def read_metric_breakdown(
+        self, *, start: AwareDatetime, end: AwareDatetime, step: timedelta, top: int
+    ) -> tuple[MetricBreakdownRow, ...]:
+        """The window's steps for the ``top`` apps by requests, then the rest added together.
+
+        The apps (the platform row is not one) are ranked by their requests over the whole window,
+        most first, then by slug. Each of the ``top`` first is a series of its own; the others are
+        summed step by step into one series whose ``app_slug`` is ``None``, their peaks included
+        (the ``rss_mb_max`` of that series is the sum of the apps' peaks of the step). Rows come
+        series by series in rank order, each oldest step first.
+        """
+        conditions, params = _window_conditions("minute", None, start, end)
+        slug, step_start = sql.Identifier("app_slug"), sql.Identifier("step_start")
+        columns = [sql.Identifier(column) for column in BREAKDOWN_COLUMNS]
+        query = sql.SQL(
+            "WITH {binned} AS (SELECT {slug}, date_bin(%s, {minute}, %s) AS {step_start}, "
+            "{columns} FROM {table} WHERE {conditions} AND {slug} <> %s), "
+            "{ranked} AS (SELECT {slug}, row_number() OVER (ORDER BY sum({requests}) DESC, {slug}) "
+            "AS {app_rank} FROM {binned} GROUP BY {slug}), "
+            "{per_app} AS (SELECT {slug}, {step_start}, {per_app_aggregates} FROM {binned} "
+            "GROUP BY {slug}, {step_start}), "
+            "{series} AS (SELECT CASE WHEN {app_rank} <= %s THEN {slug} END AS {series_slug}, "
+            "least({app_rank}, %s + 1) AS {series_rank}, {step_start}, {columns} "
+            "FROM {per_app} JOIN {ranked} USING ({slug})) "
+            "SELECT {series_slug} AS {slug}, {step_start} AS {minute}, {series_aggregates} "
+            "FROM {series} GROUP BY {series_rank}, {series_slug}, {step_start} "
+            "ORDER BY {series_rank}, {step_start}"
+        ).format(
+            binned=sql.Identifier("binned"),
+            ranked=sql.Identifier("ranked"),
+            per_app=sql.Identifier("per_app"),
+            series=sql.Identifier("series"),
+            slug=slug,
+            minute=sql.Identifier("minute"),
+            step_start=step_start,
+            requests=sql.Identifier("requests"),
+            app_rank=sql.Identifier("app_rank"),
+            series_slug=sql.Identifier("series_slug"),
+            series_rank=sql.Identifier("series_rank"),
+            columns=sql.SQL(", ").join(columns),
+            table=sql.Identifier("metrics"),
+            conditions=conditions,
+            per_app_aggregates=sql.SQL(", ").join(
+                _step_aggregate(column, STEP_RULES[column]) for column in BREAKDOWN_COLUMNS
+            ),
+            # Across the apps of the rest every column adds up, the peaks of the step included.
+            series_aggregates=sql.SQL(", ").join(
+                _step_aggregate(column, "histogram" if column == "lat_hist" else "sum")
+                for column in BREAKDOWN_COLUMNS
+            ),
+        )
+        rows = await self._read(
+            query, (step, STEP_ORIGIN, *params, PLATFORM_METRICS_SLUG, top, top)
+        )
+        return self._readable(MetricBreakdownRow, "metrics", rows)
+
     async def read_audit(
         self, *, app_slug: str | None, start: AwareDatetime, end: AwareDatetime, limit: int
     ) -> tuple[AuditLogRow, ...]:
@@ -935,6 +1121,8 @@ class RegistryClient:
     async def _guarded(self, operation: Awaitable[_T], *, identity: Identity | None) -> _T:
         """Bound ``operation`` by the deadline, turn driver errors into registry errors, and keep
         ``last_error`` (``identity`` is ``None`` for a read)."""
+        started_s = time.perf_counter()
+        unhealthy = False
         try:
             try:
                 async with asyncio.timeout(self._operation_timeout_s):
@@ -949,5 +1137,18 @@ class RegistryClient:
             unhealthy = isinstance(failure, RegistryUnavailable) or type(failure) is RegistryError
             self._last_error = failure.message if unhealthy else None
             raise
+        finally:
+            self._report_call((time.perf_counter() - started_s) * 1000, failed=unhealthy)
         self._last_error = None
         return result
+
+    def _report_call(self, duration_ms: float, *, failed: bool) -> None:
+        observer = self._call_observer
+        if observer is None:
+            return
+        try:
+            observer(duration_ms, failed=failed)
+        except Exception as exc:
+            # Best effort (metrics, design 11): a counter that fails must not fail the operation
+            # it counts. Only the class is logged, as for every other metrics source.
+            logger.warning("registry call counter failed: %s", type(exc).__name__)

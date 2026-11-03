@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import threading
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
@@ -23,7 +24,6 @@ from appmux.metrics.service import (
     ChildProbe,
     MetricsService,
     PlatformSample,
-    rss_mb_from_statm,
 )
 from appmux.registry.models import PLATFORM_METRICS_SLUG, MetricRow
 from appmux.sandbox.pump import PumpStats
@@ -303,6 +303,28 @@ async def test_without_a_platform_sample_the_children_are_still_sampled(
     assert PLATFORM_METRICS_SLUG not in rows  # the table refuses a platform minute with no sample
 
 
+async def test_a_childs_memory_is_read_off_the_event_loop(
+    service: MetricsService, world: World
+) -> None:
+    # A child's reading walks /proc; done once per child on the loop, it would stall requests.
+    readers: list[int] = []
+
+    def rss_mb() -> int:
+        readers.append(threading.get_ident())
+        return 210
+
+    world.children = [ChildProbe("sales", "pid-1", pump_stats=no_stats, rss_mb=rss_mb)]
+
+    await service.sample_once()
+
+    assert readers
+    assert threading.get_ident() not in readers
+
+
+async def no_stats() -> PumpStats | None:
+    return None
+
+
 async def test_a_child_that_fails_is_logged_by_class_only_and_the_others_are_sampled(
     service: MetricsService,
     aggregator: MetricsAggregator,
@@ -453,6 +475,21 @@ async def test_stop_flushes_what_is_collected_including_the_minute_still_open(
 
     assert len(store.stored("sales")) == 1
     assert len(store.stored(PLATFORM_METRICS_SLUG)) == 1  # the first sample came before the stop
+    assert store.stored(PLATFORM_METRICS_SLUG)[0].mem_used_mb == SAMPLE.mem_used_mb
+
+
+async def test_no_platform_row_is_written_while_the_source_states_no_figure(
+    service: MetricsService, aggregator: MetricsAggregator, store: FakeStore, world: World
+) -> None:
+    world.platform = None
+    aggregator.record_request("sales", status=200, latency_ms=3)  # the platform bucket counts it
+    service.start()
+    await wait_until(lambda: service.samples_taken >= 1)
+
+    await service.stop()
+
+    assert len(store.stored("sales")) == 1
+    assert store.stored(PLATFORM_METRICS_SLUG) == []
 
 
 async def test_stop_does_not_wait_longer_than_its_budget_for_a_registry_that_hangs(
@@ -531,16 +568,3 @@ def test_the_aggregator_has_the_signature_the_edge_pipeline_calls(method: str) -
     actual = inspect.signature(getattr(MetricsAggregator, method))
 
     assert list(actual.parameters.values()) == list(wanted.parameters.values())
-
-
-# --- the edge's own memory ------------------------------------------------------------------------
-
-
-def test_the_resident_pages_of_statm_become_megabytes() -> None:
-    # statm: size resident shared text lib data dt, all in pages
-    assert rss_mb_from_statm("100000 51200 3000 100 0 40000 0", page_size_bytes=4096) == 200
-
-
-def test_a_statm_that_cannot_be_read_is_not_a_figure() -> None:
-    assert rss_mb_from_statm("", page_size_bytes=4096) is None
-    assert rss_mb_from_statm("1 two 3", page_size_bytes=4096) is None

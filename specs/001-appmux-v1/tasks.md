@@ -462,7 +462,7 @@ when its tests pass; the lane that writes a route writes its tests first.
 - [ ] T190 [B2] Start-failure diagnostics: the health wait ends when the process exits; `reason` names the exit code or signal; `build_log_tail` gets the child's last 50 lines; `failure_hint` for a budget below the runtime's need (Node: 768 MB). Reproduce first with a Node child at 64 MB on the container, then fix the cause of the empty log tail, not only the message.
 - [ ] T191 [B2] `GET /apps/{app}/environment`: runtime versions, variables (config, resources by key, platform), packages (release, wheels, platform), secrets never returned.
 - [ ] T192 [B3] Wire TD-016 (1): `Service` gives `MetricsService` a real platform sample (cgroup memory current and limit, the edge's RSS, apps running and registered) and real child probes (RSS, pump stats), calls the restart, admission-rejection and registry-call counters, and counts a request that matches no app. Observe on the dev App that the `_platform` row and the children's memory appear; update TD-016.
-- [ ] T193 [B3] `step` on `GET /metrics`, windows up to 7 days at at most 1440 steps, and `GET /metrics/breakdown`; examples and both schema sets.
+- [x] T193 [B3] `step` on `GET /metrics`, windows up to 7 days at at most 1440 steps, and `GET /metrics/breakdown`; examples and both schema sets.
 - [ ] T194 [B4] `GET /workspace/browse` with `markers`, `looks_like_app`, `runtime_hint` and `suggested_memory_mb`, tested against a `MockTransport` and once on the dev App.
 - [ ] T195 [B4] `GET /resources/types` and `GET /resources/suggestions` for the types that have a safe list call; a type without one answers `not_supported`; tested against a `MockTransport` and once on the dev App.
 

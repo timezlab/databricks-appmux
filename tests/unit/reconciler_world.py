@@ -74,6 +74,7 @@ class World:
         self.probe = probe or FakeProbe(self.clock, probe_answer)
         self.closer = FakeCloser(self.clock)
         self.status_writes: list[tuple[int, str]] = []
+        self.metrics = RecordingMetrics()
         self._log_status_writes()
         self.reconciler = Reconciler(
             registry=self.registry,
@@ -87,6 +88,7 @@ class World:
             memory_limit_mb=memory_limit_mb,
             memory_reserve_mb=lambda: reserve_mb,
             watch_interval_s=watch_interval_s,
+            metrics=self.metrics,
         )
 
     def _log_status_writes(self) -> None:
@@ -179,6 +181,20 @@ class World:
 
     async def stop(self) -> None:
         await self.reconciler.stop_all(within_s=5.0)
+
+
+class RecordingMetrics:
+    """What the reconciler counts for the metrics: restarts per app and admission refusals."""
+
+    def __init__(self) -> None:
+        self.restarts: list[str] = []
+        self.admission_rejections = 0
+
+    def record_restart(self, app_slug: str) -> None:
+        self.restarts.append(app_slug)
+
+    def record_admission_rejection(self) -> None:
+        self.admission_rejections += 1
 
 
 class _ProbeOfTheWorld:

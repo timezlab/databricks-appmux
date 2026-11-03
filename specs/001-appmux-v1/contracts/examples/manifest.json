@@ -459,5 +459,12 @@
     "routes": [
       "GET /principals"
     ]
+  },
+  "MetricsBreakdown": {
+    "file": "MetricsBreakdown.json",
+    "direction": "response",
+    "routes": [
+      "GET /metrics/breakdown"
+    ]
   }
 }

@@ -31,6 +31,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Final, Protocol, TypeVar
 
 from pydantic import AwareDatetime, BaseModel, SecretStr, ValidationError
@@ -58,6 +59,7 @@ from appmux.authz.actions import Action
 from appmux.identity.actor import Actor, MissingIdentity, actor_from_headers
 from appmux.registry.audit import AuditAction, AuditDetail, AuditEntry
 from appmux.registry.errors import ChangedByOthers
+from appmux.registry.metric_steps import MetricBreakdownRow
 from appmux.registry.models import AuditLogRow, MetricRow, RowModel
 from appmux.registry.protocol import Change, Registry
 from appmux.registry.snapshot import RegistrySnapshot
@@ -147,6 +149,26 @@ class RegistryView:
         return await self._registry.read_metrics(
             app_slug=app_slug, start=start, end=end, limit=limit
         )
+
+    async def read_metric_steps(
+        self,
+        *,
+        app_slug: str | None,
+        start: AwareDatetime,
+        end: AwareDatetime,
+        step: timedelta,
+        limit: int,
+    ) -> tuple[MetricRow, ...]:
+        """``Registry.read_metric_steps``."""
+        return await self._registry.read_metric_steps(
+            app_slug=app_slug, start=start, end=end, step=step, limit=limit
+        )
+
+    async def read_metric_breakdown(
+        self, *, start: AwareDatetime, end: AwareDatetime, step: timedelta, top: int
+    ) -> tuple[MetricBreakdownRow, ...]:
+        """``Registry.read_metric_breakdown``."""
+        return await self._registry.read_metric_breakdown(start=start, end=end, step=step, top=top)
 
 
 class AdminContext:

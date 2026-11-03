@@ -21,7 +21,8 @@ Who calls what (task ids of specs/001-appmux-v1/tasks.md):
   of audit rows alone records an action that changes no row (viewing a release's source, "view as
   user").
 * ``append_metrics``, ``prune_metrics``: the flusher and the hourly retention job (T168).
-  ``read_metrics``: ``GET /metrics`` (T169).
+  ``read_metrics``: ``GET /metrics`` (T169). ``read_metric_steps``: ``GET /metrics`` with a
+  ``step`` longer than a minute; ``read_metric_breakdown``: ``GET /metrics/breakdown`` (T193).
 * ``read_audit``: ``GET /audit`` (T169).
 
 What the registry fills in, so that no caller does: column defaults of the baseline migration
@@ -44,6 +45,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import timedelta
 from types import MappingProxyType
 from typing import Final, Protocol
 
@@ -51,6 +53,7 @@ from pydantic import AwareDatetime, SecretStr
 
 from appmux.registry.audit import AuditEntry
 from appmux.registry.errors import RegistryRoleMissing
+from appmux.registry.metric_steps import MetricBreakdownRow
 from appmux.registry.models import AuditLogRow, MetricRow, RowModel
 from appmux.registry.snapshot import PRIMARY_KEYS, SNAPSHOT_TABLES, RegistrySnapshot, deep_freeze
 from appmux.registry.writers import WRITE_RULES, Identity, WriteKind, require_identity
@@ -259,5 +262,38 @@ class Registry(Protocol):
         """Audit rows with ``start <= ts < end`` (all apps when ``app_slug`` is ``None``).
 
         Newest first, at most ``limit`` rows (none when ``limit`` is below 1).
+        """
+        ...
+
+    async def read_metric_steps(
+        self,
+        *,
+        app_slug: str | None,
+        start: AwareDatetime,
+        end: AwareDatetime,
+        step: timedelta,
+        limit: int,
+    ) -> tuple[MetricRow, ...]:
+        """The minute rows of the window added up per app and ``step`` (``metric_steps.py``).
+
+        A row's ``minute`` is the start of its step, a whole multiple of ``step`` from
+        ``STEP_ORIGIN``; a step the window cuts holds only the minutes inside it. Ordered and
+        limited as ``read_metrics``, with a step in place of a minute: the OLDEST steps are dropped.
+        """
+        ...
+
+    async def read_metric_breakdown(
+        self,
+        *,
+        start: AwareDatetime,
+        end: AwareDatetime,
+        step: timedelta,
+        top: int,
+    ) -> tuple[MetricBreakdownRow, ...]:
+        """Per ``step``, the ``top`` apps by requests over the window, then the rest summed.
+
+        The platform row is not an app. Apps rank by their requests in the window, most first,
+        then by slug; the rest is one series with ``app_slug`` ``None``, every column summed across
+        its apps step by step. Rows come series by series in rank order, oldest step first.
         """
         ...
