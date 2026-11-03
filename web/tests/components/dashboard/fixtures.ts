@@ -39,6 +39,8 @@ export function platformRow(
     r5xx: 0,
     mem_used_mb: 5000 + offsetMinutes * 10,
     mem_limit_mb: 7168,
+    children_running: 3,
+    children_registered: 4,
     egress_dropped: 0,
     ...overrides,
   });

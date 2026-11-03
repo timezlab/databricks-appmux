@@ -43,26 +43,42 @@ const HIGHLIGHT_LABEL_OFFSET = 6;
 /** In pixels. Three server errors among 100,000 requests are far less than one, and must still show. */
 const MIN_SEGMENT_HEIGHT = 1;
 
+/** In pixels: the card's surface between two segments of a stack, so the edge between them shows without relying on their colours. */
+const STACK_GAP = 2;
+
 /**
- * A rectangle for a bar segment that is never flatter than a pixel, growing
- * upward from its base. Recharts' own `minPointSize` is documented as unreliable
- * in a stack, and a segment that vanishes would hide exactly the errors this
- * chart is there to show.
+ * The rectangle of one bar segment, never flatter than a pixel (growing upward
+ * from its base when it is). Recharts' own `minPointSize` is documented as
+ * unreliable in a stack, and a segment that vanishes would hide exactly the
+ * errors this chart is there to show. `gap` is taken from the segment's bottom,
+ * so the top of the stack still stands at the column's total.
  */
-function segmentShape({ x, y, width, height, fill }: BarShapeProps) {
+function segmentRect(
+  { x, y, width, height, fill }: BarShapeProps,
+  gap: number,
+) {
   if (x === undefined || y === undefined || width === undefined) return null;
   // Height 0 is a segment with no value (`columnRows` makes zero and no data `null`).
   if (height === undefined || height <= 0) return null;
-  const shownHeight = Math.max(height, MIN_SEGMENT_HEIGHT);
+  const bottom = y + height - gap;
+  const shownHeight = Math.max(height - gap, MIN_SEGMENT_HEIGHT);
   return (
     <rect
       x={x}
-      y={y + height - shownHeight}
+      y={bottom - shownHeight}
       width={width}
       height={shownHeight}
       fill={fill}
     />
   );
+}
+
+function baseSegment(props: BarShapeProps) {
+  return segmentRect(props, 0);
+}
+
+function segmentAboveBase(props: BarShapeProps) {
+  return segmentRect(props, STACK_GAP);
 }
 
 /**
@@ -128,7 +144,13 @@ export function ColumnChart({ spec }: { spec: ColumnChartSpec }) {
           axisLine={false}
         />
         <ChartTooltip
-          content={<ChartTooltipContent tips={spec.tips} />}
+          // A stacked chart's tip is a line per segment (the model joins them with "\n").
+          content={
+            <ChartTooltipContent
+              tips={spec.tips}
+              className="whitespace-pre-line"
+            />
+          }
           cursor={CURSOR_BAND}
           isAnimationActive={false}
         />
@@ -138,7 +160,7 @@ export function ColumnChart({ spec }: { spec: ColumnChartSpec }) {
             dataKey={segmentKey(segment)}
             stackId="stack"
             fill={barFill(textureId(idPrefix, tone), tone)}
-            shape={segmentShape}
+            shape={segment === 0 ? baseSegment : segmentAboveBase}
             isAnimationActive={false}
           >
             {segment === topSegment && spec.highlights.length > 0 ? (
