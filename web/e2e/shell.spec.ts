@@ -130,8 +130,56 @@ async function spillsOf(container: Locator): Promise<string[]> {
   });
 }
 
+/**
+ * The horizontal centre of the first icon in each of `controls`, in order.
+ * Measured on the rendered boxes, to a tenth of a pixel, because the bug this
+ * guards against is a few pixels of padding that no markup test can see.
+ */
+async function iconCentresOf(controls: Locator): Promise<number[]> {
+  const centres = await controls.evaluateAll((controls) =>
+    controls.flatMap((control) => {
+      const icon = control.querySelector("svg");
+      if (icon === null) return [];
+      const box = icon.getBoundingClientRect();
+      return [box.left + box.width / 2];
+    }),
+  );
+  return centres.map((centre) => Math.round(centre * 10) / 10);
+}
+
 test.describe("the sidebar column", () => {
   test.use({ viewport: DESKTOP });
+
+  test("puts every icon on one vertical axis, expanded and collapsed to icons", async ({
+    page,
+  }) => {
+    await open(page, pageEntry("app-environment"));
+    const sections = page.getByRole("navigation", {
+      name: "Sales dashboard sections",
+    });
+
+    // The back link and the ten sections. The collapse button is at the other
+    // end of the back link's row while the column is wide, so it is measured
+    // only once the column is icons.
+    const expanded = await iconCentresOf(sections.getByRole("link"));
+    expect(expanded).toHaveLength(11);
+    expect(new Set(expanded).size).toBe(1);
+
+    await sections
+      .getByRole("button", { name: "Collapse the sidebar" })
+      .click();
+    await expect(
+      sections.getByRole("button", { name: "Expand the sidebar" }),
+    ).toBeVisible();
+    // The back link, the expand button and the ten sections.
+    const collapsed = await iconCentresOf(
+      sections.locator("a:visible, button:visible"),
+    );
+    expect(collapsed).toHaveLength(12);
+    expect(new Set(collapsed).size).toBe(1);
+    // Collapsing moves nothing sideways: the icons stay where they were.
+    expect(collapsed[0]).toBe(expanded[0]);
+  });
 
   test("keeps everything inside its box, expanded and collapsed to icons", async ({
     page,

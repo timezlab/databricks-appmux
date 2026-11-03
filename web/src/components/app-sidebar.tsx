@@ -163,7 +163,7 @@ function PhoneSectionMenu({
         className="flex w-(--radix-popover-trigger-width) flex-col gap-1 p-1"
       >
         <Link
-          className="inline-flex min-h-10 items-center gap-1 px-2 text-sm text-muted-foreground no-underline hover:text-foreground"
+          className="inline-flex min-h-10 items-center gap-2 px-3 text-sm text-muted-foreground no-underline hover:text-foreground"
           href={backHref}
           onClick={close}
         >
@@ -213,8 +213,11 @@ export function AppSidebar(props: AppSidebarProps) {
           isCollapsed && "md:flex-col md:items-start",
         )}
       >
+        {/* The padding and gap are those of `bar-item` (globals.css), so this
+            chevron and its label sit on the same vertical lines as the icons
+            and labels of the sections below it. */}
         <Link
-          className="inline-flex items-center gap-1 px-2 py-1 text-sm text-muted-foreground no-underline hover:text-foreground"
+          className="inline-flex items-center gap-2 px-3 py-1 text-sm text-muted-foreground no-underline hover:text-foreground"
           href={backHref}
           title={isCollapsed ? backLabel : undefined}
         >
@@ -225,7 +228,11 @@ export function AppSidebar(props: AppSidebarProps) {
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="hidden md:inline-flex"
+          // Collapsed, the button's icon is centred on the section icons: 12 px
+          // of `bar-item` padding plus half of the 16 px icon is 20 px, and an
+          // `icon-sm` button (32 px) centres its icon at 16 px, so it starts
+          // 4 px in.
+          className={cn("hidden md:inline-flex", isCollapsed && "md:ml-1")}
           aria-controls={listId}
           aria-expanded={!isCollapsed}
           aria-label={
