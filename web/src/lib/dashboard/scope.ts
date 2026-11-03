@@ -68,6 +68,14 @@ export function stepForRange(minutes: number): StepChoice {
   return step;
 }
 
+/** The length of a step of the contract, in minutes: "15m" is 15. */
+export function stepMinutes(id: MetricStep): number {
+  const step = STEPS.find((choice) => choice.id === id);
+  // Unreachable: STEPS lists every step of the contract.
+  if (step === undefined) throw new RangeError(`stepMinutes: no step ${id}`);
+  return step.minutes;
+}
+
 // ---------------------------------------------------------------- ranges
 
 export interface TimeRange {
@@ -199,7 +207,8 @@ export function previousWindow(window: MetricsWindow): MetricsWindow | null {
 // ----------------------------------------------------------------- scope
 
 /** The platform view (the `_platform` row and the per-app breakdown) or one app's Insights. */
-export type DashboardScope = { kind: "platform" } | { kind: "app"; slug: string };
+export type DashboardScope =
+  { kind: "platform" } | { kind: "app"; slug: string };
 
 /** The query of `getMetrics` for a scope, a window and a step. */
 export function metricsQueryFor(
@@ -226,7 +235,9 @@ export function breakdownQueryFor(
  */
 export function managedApps(apps: readonly AppSummary[]): AppSummary[] {
   return apps
-    .filter((item) => isValidSlug(item.slug) && item.permission === "CAN_MANAGE")
+    .filter(
+      (item) => isValidSlug(item.slug) && item.permission === "CAN_MANAGE",
+    )
     .toSorted((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 

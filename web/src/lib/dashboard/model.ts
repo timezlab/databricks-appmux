@@ -27,7 +27,12 @@ import {
   summarizeRows,
   windowDomain,
 } from "./series";
-import type { MetricBucket, RuleDrops, SeriesSummary } from "./series";
+import type {
+  BucketSlot,
+  MetricBucket,
+  RuleDrops,
+  SeriesSummary,
+} from "./series";
 import {
   formatAbsoluteTime,
   formatBytes,
@@ -191,7 +196,8 @@ export interface ModelOptions {
 
 // ----------------------------------------------------------------- tuning
 
-const REQUEST_LABELS_MAX_TICKS = 6;
+/** The most time labels under a chart of the window. */
+export const REQUEST_LABELS_MAX_TICKS = 6;
 /** The latency chart has 11 columns of about 50 px; every one gets its label. */
 const LATENCY_MAX_TICKS = 11;
 const MEDIAN_PERCENT = 50;
@@ -200,10 +206,11 @@ const P99_PERCENT = 99;
 
 // --------------------------------------------------------------- wording
 
-const NO_DATA_TEXT = "no data";
+export const NO_DATA_TEXT = "no data";
 const NO_REQUESTS_TEXT = "no requests";
 
-function perText(bucketMinutes: number): string {
+/** "minute" or "5 minutes", as in "Requests per 5 minutes". */
+export function perText(bucketMinutes: number): string {
   return bucketMinutes === 1 ? "minute" : `${bucketMinutes} minutes`;
 }
 
@@ -456,7 +463,7 @@ interface ChartContext {
   isPlatform: boolean;
 }
 
-function spansTwoDays(buckets: readonly MetricBucket[]): boolean {
+function spansTwoDays(buckets: readonly BucketSlot[]): boolean {
   const first = buckets[0];
   const last = buckets[buckets.length - 1];
   if (first === undefined || last === undefined) return false;
@@ -465,33 +472,41 @@ function spansTwoDays(buckets: readonly MetricBucket[]): boolean {
   );
 }
 
-function timeLabels(context: ChartContext): string[] {
-  const withDate = spansTwoDays(context.buckets);
-  return context.buckets.map((bucket) => clockLabel(bucket.startMs, withDate));
+/** What the time wording of a chart needs: where the window starts and how wide a bucket is. */
+export interface BucketFrame {
+  domainStartMs: number;
+  bucketMinutes: number;
+  buckets: readonly BucketSlot[];
 }
 
-/** The start of a bucket as written in a tooltip or a table; the first bucket may start before the window, and says so. */
-function bucketTime(bucket: MetricBucket, context: ChartContext): string {
+/** The label under each column: the clock time, with the date once the chart spans two days. */
+export function timeLabels(frame: BucketFrame): string[] {
+  const withDate = spansTwoDays(frame.buckets);
+  return frame.buckets.map((bucket) => clockLabel(bucket.startMs, withDate));
+}
+
+/** The start of a bucket as written in a tooltip; a bucket the window cuts says so. */
+export function bucketTime(bucket: BucketSlot, frame: BucketFrame): string {
   const start = formatAbsoluteTime(
-    Math.max(bucket.startMs, context.domainStartMs),
+    Math.max(bucket.startMs, frame.domainStartMs),
   );
   if (bucket.isPartial) return `${start} (partial)`;
-  return context.bucketMinutes === 1
+  return frame.bucketMinutes === 1
     ? start
-    : `${start}, ${context.bucketMinutes} minutes`;
+    : `${start}, ${frame.bucketMinutes} minutes`;
 }
 
 /** The first table cell does not repeat the length of the bucket: the title says it. */
-function rowTime(bucket: MetricBucket, context: ChartContext): string {
+export function rowTime(bucket: BucketSlot, frame: BucketFrame): string {
   const start = formatAbsoluteTime(
-    Math.max(bucket.startMs, context.domainStartMs),
+    Math.max(bucket.startMs, frame.domainStartMs),
   );
   return bucket.isPartial ? `${start} (partial)` : start;
 }
 
 /** "5-minute totals, time in UTC": what one column holds, and the time zone of the axis. */
-function totalsCaption(context: ChartContext): string {
-  return `${stepText(context.bucketMinutes)} totals, time in UTC`;
+export function totalsCaption(frame: BucketFrame): string {
+  return `${stepText(frame.bucketMinutes)} totals, time in UTC`;
 }
 
 function noDataCells(count: number): string[] {

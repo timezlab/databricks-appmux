@@ -18,6 +18,7 @@ import {
   metricsWindow,
   previousWindow,
   stepForRange,
+  stepMinutes,
   timeRangeById,
 } from "@/lib/dashboard/scope";
 import { MIN_POLL_INTERVAL_MS } from "@/lib/poll/schedule";
@@ -199,5 +200,14 @@ describe("metricsPollIntervalMs", () => {
     for (const range of TIME_RANGES) {
       assert.ok(metricsPollIntervalMs(range.minutes) >= MIN_POLL_INTERVAL_MS);
     }
+  });
+});
+
+describe("stepMinutes", () => {
+  it("reads a step of the contract as minutes, so an answer's step lines up with the buckets", () => {
+    assert.deepEqual(
+      (["1m", "5m", "15m", "1h"] as const).map(stepMinutes),
+      [1, 5, 15, 60],
+    );
   });
 });
