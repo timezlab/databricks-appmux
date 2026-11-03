@@ -4,7 +4,8 @@ Design 9.4 and data model 4.3. A request is a row in ``permission_requests`` tha
 (FR-045): ``authorize()`` and the reconciler read ``apps`` only, so the catalogue is the one place
 that knows what a request means. Three kinds, each an entry here:
 
-* ``register``: a new app, asked by any visitor, all four platform fields, always a gate;
+* ``register``: a new app, asked by any visitor, three platform fields (no budget: approving gives
+  the app the platform's ``default_memory_budget_mb``), always a gate;
 * ``delegation``: ``obo`` and/or ``shared_sp`` for an existing app, each a gate;
 * ``settings``: any non-empty subset of ``slug``, ``display_name``, ``source_path`` and
   ``memory_budget_mb`` for an existing app; ``source_path`` is the only gate.
@@ -47,6 +48,7 @@ from pydantic import BaseModel, JsonValue, ValidationError
 from appmux.admin.errors import BadRequest, Conflict, Forbidden, NotFound, validation_error
 from appmux.admin.schemas import DelegationPayload, RegisterPayload, SettingsPayload
 from appmux.registry.models import App, PermissionRequest
+from appmux.registry.platform import default_memory_budget_mb
 from appmux.registry.requests import ApprovalPlan, Outcome
 from appmux.registry.snapshot import RegistrySnapshot
 from appmux.settings import PlatformSettings
@@ -56,7 +58,9 @@ MAX_PENDING_REGISTER_PER_PERSON: Final = 3  # design 9.4: one account cannot fil
 
 _PLATFORM_FIELDS: Final = frozenset({"slug", "display_name", "source_path", "memory_budget_mb"})
 GATE_FIELDS: Final[Mapping[str, frozenset[str]]] = {
-    "register": _PLATFORM_FIELDS,
+    # Every field of a ``register`` payload: the request is always a gate. The budget is not one of
+    # them because the platform default sets it, not the asker.
+    "register": frozenset({"slug", "display_name", "source_path"}),
     "delegation": frozenset({"obo", "shared_sp"}),
     "settings": frozenset({"source_path"}),
 }
@@ -65,6 +69,9 @@ _PAYLOAD_MODELS: Final[Mapping[str, type[BaseModel]]] = {
     "delegation": DelegationPayload,
     "settings": SettingsPayload,
 }
+# What a ``register`` row stored before the visitor stopped typing a budget may still hold. The
+# platform default replaces it at approval; it is dropped, not refused, so such a row still answers.
+_LEGACY_REGISTER_KEYS: Final = frozenset({"memory_budget_mb"})
 # The ``apps`` column each delegation key sets.
 DELEGATION_COLUMNS: Final = {"obo": "obo_delegated", "shared_sp": "shared_sp_delegated"}
 _SHARED_SP_SWITCH_KEY: Final = "shared_sp_delegation_allowed"
@@ -287,6 +294,8 @@ def plan_approval(
     require_pending(row)
     payload = {key: value for key, value in row.payload.model_dump().items() if value is not None}
     require_known_kind(row)
+    if row.kind == "register":
+        payload = {key: value for key, value in payload.items() if key not in _LEGACY_REGISTER_KEYS}
     try:
         asked = _asked(_parsed(row.kind, payload))
     except BadRequest as exc:
@@ -336,7 +345,8 @@ def _plan_register(
     if snapshot.app(slug) is not None:
         return ApprovalPlan(Outcome.SLUG_TAKEN, row, None, taken_slug=slug)
     _require_reason(row.kind, asked, reason)
-    return ApprovalPlan(Outcome.APPLY, row, slug, new_app=dict(asked), after=dict(asked))
+    new_app = {**asked, "memory_budget_mb": default_memory_budget_mb(snapshot)}
+    return ApprovalPlan(Outcome.APPLY, row, slug, new_app=new_app, after=dict(new_app))
 
 
 def _plan_delegation(

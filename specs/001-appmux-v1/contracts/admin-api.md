@@ -48,7 +48,7 @@ The request and response bodies are in [Schemas](#schemas), with one valid examp
 
 | Route | Needs | Request | Response | Returns / does |
 |---|---|---|---|---|
-| `POST /apps` | `app.register` | `RegisterAppRequest` | `AppDetail` | body: `slug`, `display_name`, `source_path`, `memory_budget_mb`, `owner`; written under the admin's own token (`403` `user_token_missing` without it); a taken slug is `409` `slug_taken` and nothing is written; the app starts stopped with no release |
+| `POST /apps` | `app.register` | `RegisterAppRequest` | `AppDetail` | body: `slug`, `display_name`, `source_path`, `owner` and optionally `memory_budget_mb` (left out, the app gets the platform's `default_memory_budget_mb`); written under the admin's own token (`403` `user_token_missing` without it); a taken slug is `409` `slug_taken` and nothing is written; the app starts stopped with no release |
 | `GET /apps/{app}` | `CAN_MANAGE` on the app | — | `AppDetail` | status, detected runtime, releases, requirements, resources (secrets as references), config, delegation status, egress (read-only), owner |
 | `PATCH /apps/{app}` | `app.edit_platform_fields` | `UpdateAppRequest` | `AppDetail` | any of `slug` (also writes `app.rename`), `display_name`, `source_path`, `memory_budget_mb`; needs `version`; written under the admin's own token (`403` `user_token_missing` without it); a taken `slug` is `409` `slug_taken`; a field that already holds the value sent is not a change, and when none differs the answer is the current `AppDetail` with nothing written or recorded |
 | `PUT /apps/{app}/owner` | `app.set_owner` | `SetOwnerRequest` | `AppDetail` | body: `owner`; needs `version`; written under the admin's own token (`403` `user_token_missing` without it); naming the current owner changes and records nothing |
@@ -99,7 +99,7 @@ The request and response bodies are in [Schemas](#schemas), with one valid examp
 | Route | Needs | Request | Response | Returns / does |
 |---|---|---|---|---|
 | `GET /platform` | `CAN_MANAGE` on the platform | — | `PlatformView` | settings, admins, global egress, `self_check` result, memory against the slot limit, and every app's platform fields, delegations and egress (`apps`), so the page needs no call per app; nothing is invented for a part that is unknown, so it is `503` `self_check_pending` before the first self-check has finished, `503` `memory_unknown` while the slot's memory is not known, `503` `self_check_unavailable` when the process has no self-check, and `503` `settings_invalid` (naming the keys) when a stored setting no longer fits its key |
-| `PUT /platform/settings/{key}` | `settings.edit` | `PutSettingRequest` | `PlatformSetting` | `key` is one of `memory_reserve_mb`, `package_mode`, `default_wheel_sources`, `shared_sp_delegation_allowed`, `max_releases_per_app`, `max_locked_releases`, `request_timeout_s`, `max_request_body_mb`, `max_concurrent_requests`, `build_timeout_s`, `max_processes_per_child`, `child_cpu_pin`, `attach_check_warehouse_id` (the keys of [data model 4.1](../../../docs/product/v1-data-model.md#41-platform_settings) except `platform_admins` and `egress_global`); those two (`400` `setting_has_own_route`), an unknown key (`400` `unknown_setting`), a value of the wrong type or outside the key's range, `null` (no setting is stored as `null`) and a rule between keys broken are `400`; the message names the key and never repeats the value |
+| `PUT /platform/settings/{key}` | `settings.edit` | `PutSettingRequest` | `PlatformSetting` | `key` is one of `memory_reserve_mb`, `default_memory_budget_mb`, `package_mode`, `default_wheel_sources`, `shared_sp_delegation_allowed`, `max_releases_per_app`, `max_locked_releases`, `request_timeout_s`, `max_request_body_mb`, `max_concurrent_requests`, `build_timeout_s`, `max_processes_per_child`, `child_cpu_pin`, `attach_check_warehouse_id` (the keys of [data model 4.1](../../../docs/product/v1-data-model.md#41-platform_settings) except `platform_admins` and `egress_global`); those two (`400` `setting_has_own_route`), an unknown key (`400` `unknown_setting`), a value of the wrong type or outside the key's range, `null` (no setting is stored as `null`) and a rule between keys broken are `400`; the message names the key and never repeats the value |
 | `PUT /platform/admins` | `platform_admin.add`, `platform_admin.remove` | `PutAdminsRequest` | `AdminList` | refused `400` when no `user` entry would remain or an entry is listed twice; a list that adds and removes nothing answers `200` with the list in force and records nothing |
 | `PUT /platform/egress` | `egress.edit` | `PutEgressRequest` | `EgressRules` | an ordered rule list; the editor refuses an `allow` that overlaps `@container_ip`, `@appmux_port` or `169.254.0.0/16` (`400` `egress_rules_refused`, nothing written); `503` `egress_targets_unknown` while the container's address is not known, and `503` `egress_not_applied` when the list is saved but the running apps were not told: saving it again retries |
 | `PUT /apps/{app}/egress` | `egress.edit` | `PutAppEgressRequest` | `AppDetail` | an ordered rule list; the editor refuses an `allow` that overlaps `@container_ip`, `@appmux_port` or `169.254.0.0/16`; needs `version`; the refusals and the `503` codes are those of `PUT /platform/egress` |
@@ -181,7 +181,7 @@ Used by `POST /apps`. The values pass the same checks as a `register` request.
 | `slug` | string | required | Lower-case letters, digits and `-`, starting with a letter or digit, at most 31 characters; not taken |
 | `display_name` | string | required | Shown in the launcher; not blank |
 | `source_path` | string | required | A workspace folder, starting with `/Workspace/` |
-| `memory_budget_mb` | integer | required | 64 to 16384 |
+| `memory_budget_mb` | integer | optional | 64 to 16384; left out, the app gets the platform's `default_memory_budget_mb` |
 | `owner` | string | required | Email of the owner, lower case |
 
 #### UpdateAppRequest
@@ -268,7 +268,7 @@ Used by `POST /requests`. The `payload` holds the keys of the kind ([data model 
 
 | `kind` | `app` | `payload` |
 |---|---|---|
-| `register` | the proposed slug, equal to `payload.slug` | `slug`, `display_name`, `source_path`, `memory_budget_mb`, all four |
+| `register` | the proposed slug, equal to `payload.slug` | `slug`, `display_name`, `source_path`, all three; there is no budget: a key outside these three (`memory_budget_mb` included) is `400`, and approving creates the app with the platform's `default_memory_budget_mb`. A pending row stored before this rule may still hold `memory_budget_mb`; approving ignores it |
 | `delegation` | the app's slug | `{"obo": true}`, `{"shared_sp": true}` or both; only `true` |
 | `settings` | the app's slug | any non-empty subset of `slug`, `display_name`, `source_path`, `memory_budget_mb` |
 
@@ -633,6 +633,7 @@ Returned by `GET /platform`.
 |---|---|---|---|
 | `settings` | object | always | The effective value of each key of [data model 4.1](../../../docs/product/v1-data-model.md#41-platform_settings) except `platform_admins` and `egress_global`, which have their own fields; a key never set holds its default |
 | `settings.memory_reserve_mb` | integer | always | Memory kept for appmux itself |
+| `settings.default_memory_budget_mb` | integer | always | The memory budget of a new app: what approving a `register` request gives it, and what `POST /apps` uses when it names none; 64 to 16384 |
 | `settings.package_mode` | string | always | One of `index`, `wheelhouse`, `wheelhouse+index` |
 | `settings.default_wheel_sources` | array<string> | always | Folders every Update also reads wheels from |
 | `settings.shared_sp_delegation_allowed` | boolean | always | The master switch |

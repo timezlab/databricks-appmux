@@ -58,12 +58,10 @@ from appmux.sandbox.rules import (
     EgressRulesRefused,
     refuse_overlapping_allows,
 )
-from appmux.settings import normalise_email
+from appmux.settings import MEMORY_BUDGET_MAX_MB, MEMORY_BUDGET_MIN_MB, normalise_email
 
 # --- limits ---------------------------------------------------------------------------------
 
-MEMORY_BUDGET_MIN_MB: Final = 64
-MEMORY_BUDGET_MAX_MB: Final = 16384
 REASON_MAX_LENGTH: Final = 500
 RELEASE_NAME_MAX_LENGTH: Final = 80
 RELEASE_TAG_MAX_LENGTH: Final = 32
@@ -312,7 +310,8 @@ class RegisterAppRequest(_RequestBody):
     slug: Slug
     display_name: NotBlank
     source_path: WorkspacePath
-    memory_budget_mb: MemoryBudgetMb
+    # Left out, the app gets the platform's ``default_memory_budget_mb``.
+    memory_budget_mb: MemoryBudgetMb | None = None
     owner: LowerCaseEmail
 
 
@@ -446,12 +445,15 @@ def refuse_removing_owner(principal_type: str, name: str, *, owner: str) -> None
 
 
 class RegisterPayload(_RequestBody):
-    """The payload of a ``register`` request: all four platform fields."""
+    """The payload of a ``register`` request: three platform fields.
+
+    There is no budget: the platform sets one default for every new app, and an app admin asks
+    for more later with a ``settings`` request.
+    """
 
     slug: Slug
     display_name: NotBlank
     source_path: WorkspacePath
-    memory_budget_mb: MemoryBudgetMb
 
 
 class DelegationPayload(_RequestBody):
@@ -909,6 +911,7 @@ class PlatformSettingsView(_Body):
     """``PlatformView.settings``: the effective value of each settable key."""
 
     memory_reserve_mb: int
+    default_memory_budget_mb: int
     package_mode: PackageMode
     default_wheel_sources: list[str]
     shared_sp_delegation_allowed: bool

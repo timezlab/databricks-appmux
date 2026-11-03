@@ -133,7 +133,6 @@ def register_request_body(*, slug: str, name: str, folder: str) -> dict[str, Any
         "slug": slug,
         "display_name": name,
         "source_path": folder,
-        "memory_budget_mb": BUDGET_MB,
     }
     return request_body("register", slug, payload, "the walkthrough asks for a new app")
 
@@ -461,6 +460,9 @@ def step_requests_and_registration(walk: Walkthrough, slugs: Slugs) -> None:
     walk.created_apps.append(slugs.asked)
     detail = walk.app(GRACE, slugs.asked)
     assert (detail["owner"], detail["state"], detail["releases"]) == (GRACE, "stopped", [])
+    # A request names no budget: the app starts with the platform's default.
+    default_budget = walk.read(admin, "/platform")["settings"]["default_memory_budget_mb"]
+    assert detail["memory_budget_mb"] == default_budget
 
     # The master switch for the shared SP is a platform setting; it is put back at the end.
     walk.call(admin, "PUT", f"/platform/settings/{SHARED_SP_SETTING}", json=setting_body(True))
