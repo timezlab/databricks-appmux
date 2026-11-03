@@ -5,38 +5,34 @@ import { SettingKey } from "@/lib/api";
 import {
   PLATFORM_PAGES,
   SETTING_GROUPS,
-  platformNavItems,
+  platformSidebarItems,
 } from "@/lib/platform/sections";
 import { SETTING_DESCRIPTORS } from "@/lib/platform/settings";
 
-describe("platformNavItems", () => {
-  it("lists the five pages in order, Overview first", () => {
+describe("platformSidebarItems", () => {
+  it("lists the five pages in order, Overview first, each with its own icon", () => {
+    const items = platformSidebarItems(null);
     assert.deepEqual(
-      platformNavItems(null).map((item) => item.label),
+      items.map((item) => item.label),
       ["Overview", "Apps", "Access", "Egress", "Settings"],
     );
     assert.equal(PLATFORM_PAGES[0]?.href, "/platform/");
+    assert.equal(new Set(items.map((item) => item.icon)).size, items.length);
   });
 
-  it("shows how many requests wait on Overview, and nothing else", () => {
-    const items = platformNavItems(3);
-    assert.deepEqual(items[0]?.badge, {
-      text: "3",
-      description: "3 requests waiting",
-    });
+  it("counts the requests waiting on Overview, and nothing else", () => {
+    const items = platformSidebarItems(3);
+    assert.equal(items[0]?.count, 3);
     assert.deepEqual(
-      items.slice(1).map((item) => item.badge),
-      [null, null, null, null],
-    );
-    assert.deepEqual(
-      platformNavItems(1)[0]?.badge?.description,
-      "1 request waiting",
+      items.slice(1).map((item) => item.count),
+      [undefined, undefined, undefined, undefined],
     );
   });
 
-  it("shows no badge while the requests are unknown or none wait", () => {
-    assert.equal(platformNavItems(null)[0]?.badge, null);
-    assert.equal(platformNavItems(0)[0]?.badge, null);
+  it("shows no count while the requests are unknown or none wait", () => {
+    assert.equal(platformSidebarItems(null)[0]?.count, undefined);
+    assert.equal(platformSidebarItems(0)[0]?.count, undefined);
+    assert.equal("count" in (platformSidebarItems(0)[0] ?? {}), false);
   });
 });
 

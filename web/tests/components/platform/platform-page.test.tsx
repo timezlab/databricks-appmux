@@ -5,8 +5,15 @@ import type * as ApiModule from "@/lib/api";
 
 import { PlatformPage } from "@/components/platform/platform-page";
 import { ApiError, getMe, getPlatform, listRequests } from "@/lib/api";
+import { RequestList } from "@/lib/api";
 import type { MeResponse } from "@/lib/api";
+import { readExample } from "../../support/contract-examples";
 import { platformView } from "./shell-fixtures";
+
+const location = vi.hoisted(() => ({ pathname: "/platform/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => location.pathname,
+}));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
@@ -17,6 +24,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  location.pathname = "/platform/";
   // A poll that never answers: the page stays in its loading state.
   vi.mocked(getPlatform).mockReturnValue(new Promise(() => undefined));
   vi.mocked(listRequests).mockReturnValue(new Promise(() => undefined));
@@ -72,9 +80,10 @@ describe("PlatformPage access", () => {
         <p>A page of the platform</p>
       </PlatformPage>,
     );
-    expect(
-      await screen.findByText("Loading the platform…"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Loading the platform")).toHaveAttribute(
+      "role",
+      "status",
+    );
     expect(
       screen.getByRole("button", { name: "Refresh now" }),
     ).toBeInTheDocument();
@@ -85,7 +94,7 @@ describe("PlatformPage access", () => {
     }
   });
 
-  it("shows the tab bar and the page only once the platform has loaded, and never to a visitor who is not an admin", async () => {
+  it("shows the page in a panel beside the sidebar of the five areas, with a link back to all apps", async () => {
     vi.mocked(getMe).mockResolvedValue(me(true));
     vi.mocked(getPlatform).mockResolvedValue(platformView());
     vi.mocked(listRequests).mockResolvedValue({ items: [] });
@@ -97,12 +106,61 @@ describe("PlatformPage access", () => {
     expect(
       await screen.findByText("A page of the platform"),
     ).toBeInTheDocument();
-    const tabs = screen.getByRole("navigation", { name: "Platform sections" });
+    const sidebar = screen.getByRole("navigation", {
+      name: "Platform sections",
+    });
     expect(
-      within(tabs)
+      within(sidebar)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Overview", "Apps", "Access", "Egress", "Settings"]);
+    ).toEqual(["All apps", "Overview", "Apps", "Access", "Egress", "Settings"]);
+    expect(
+      within(sidebar).getByRole("link", { name: "All apps" }),
+    ).toHaveAttribute("href", "/");
+  });
+
+  it("marks the area on screen as the current page, with or without the trailing slash", async () => {
+    location.pathname = "/platform/egress";
+    vi.mocked(getMe).mockResolvedValue(me(true));
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+    const sidebar = await screen.findByRole("navigation", {
+      name: "Platform sections",
+    });
+    expect(
+      within(sidebar)
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("aria-current") === "page")
+        .map((link) => link.textContent),
+    ).toEqual(["Egress"]);
+  });
+
+  it("counts the requests waiting on Overview, and on no other area", async () => {
+    vi.mocked(getMe).mockResolvedValue(me(true));
+    vi.mocked(getPlatform).mockResolvedValue(platformView());
+    // Three of the example's four requests are pending.
+    vi.mocked(listRequests).mockResolvedValue(
+      RequestList.parse(readExample("RequestList")),
+    );
+    render(
+      <PlatformPage>
+        <p>A page of the platform</p>
+      </PlatformPage>,
+    );
+    const sidebar = await screen.findByRole("navigation", {
+      name: "Platform sections",
+    });
+    await waitFor(() => {
+      expect(
+        within(sidebar).getByRole("link", { name: /^Overview/ }),
+      ).toHaveTextContent("Overview3");
+    });
+    expect(
+      within(sidebar).getByRole("link", { name: "Apps" }),
+    ).toHaveTextContent(/^Apps$/);
   });
 
   it("keeps the page back from a visitor who is not an admin", async () => {

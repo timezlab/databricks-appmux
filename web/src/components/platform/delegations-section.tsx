@@ -12,7 +12,6 @@ import {
   parseDelegationReason,
 } from "@/lib/platform/delegations";
 import type { DelegationAction } from "@/lib/platform/delegations";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/button";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
@@ -105,7 +104,8 @@ export function DelegationsSection({ view }: { view: PlatformView }) {
                       </Button>
                     )}
                     {cell.blockedReason === null ? null : (
-                      <span className="text-muted-foreground">
+                      // The reason names a setting key, one long word, that must still wrap in a phone's stacked row.
+                      <span className="min-w-0 text-muted-foreground wrap-anywhere">
                         {cell.blockedReason}
                       </span>
                     )}
@@ -198,54 +198,55 @@ function ReasonForm({
   }
 
   return (
-    <Card asChild>
-      <form className={FORM_STACK_CLASSES} onSubmit={handleSubmit}>
-        <h3 className="wrap-break-word">{title}</h3>
-        <p>
-          <strong>The app receives:</strong> {info.receives}
-        </p>
-        <Notice
-          tone={verb === "grant" && kind === "shared_sp" ? "warning" : "info"}
-          title={verb === "grant" ? "If you grant this" : "If you revoke this"}
-        >
-          <p>{verb === "grant" ? info.grantEffect : info.revokeEffect}</p>
-        </Notice>
-        {problem === null ? null : <Notice tone="danger" title={problem} />}
-        <FormSummary errors={errors} />
-        <Field
-          label="Reason"
-          hint="Why, in a sentence. Recorded in the audit log."
-          isRequired
-          error={errors.reason}
-        >
-          {(control) => (
-            <Textarea
-              {...control}
-              value={reason}
-              onChange={(event) => {
-                setReason(event.target.value);
-              }}
-            />
-          )}
-        </Field>
-        <FormActions
-          primary={
-            <Button
-              type="submit"
-              variant={verb === "revoke" ? "danger-filled" : "primary"}
-              isBusy={action.isBusy}
-              busyLabel={verb === "grant" ? "Granting" : "Revoking"}
-              disabled={problem !== null}
-            >
-              {verb === "grant" ? "Grant" : "Revoke"}
-            </Button>
-          }
-        >
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
+    <form
+      className={`${FORM_STACK_CLASSES} max-w-140 border-t pt-4`}
+      onSubmit={handleSubmit}
+    >
+      <h3 className="wrap-break-word">{title}</h3>
+      <p>
+        <strong>The app receives:</strong> {info.receives}
+      </p>
+      <Notice
+        tone={verb === "grant" && kind === "shared_sp" ? "warning" : "info"}
+        title={verb === "grant" ? "If you grant this" : "If you revoke this"}
+      >
+        <p>{verb === "grant" ? info.grantEffect : info.revokeEffect}</p>
+      </Notice>
+      {problem === null ? null : <Notice tone="danger" title={problem} />}
+      <FormSummary errors={errors} />
+      <Field
+        label="Reason"
+        hint="Why, in a sentence. Recorded in the audit log."
+        isRequired
+        error={errors.reason}
+      >
+        {(control) => (
+          <Textarea
+            {...control}
+            value={reason}
+            onChange={(event) => {
+              setReason(event.target.value);
+            }}
+          />
+        )}
+      </Field>
+      <FormActions
+        primary={
+          <Button
+            type="submit"
+            variant={verb === "revoke" ? "danger-filled" : "primary"}
+            isBusy={action.isBusy}
+            busyLabel={verb === "grant" ? "Granting" : "Revoking"}
+            disabled={problem !== null}
+          >
+            {verb === "grant" ? "Grant" : "Revoke"}
           </Button>
-        </FormActions>
-      </form>
-    </Card>
+        }
+      >
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+      </FormActions>
+    </form>
   );
 }

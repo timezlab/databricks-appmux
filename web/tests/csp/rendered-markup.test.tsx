@@ -57,6 +57,7 @@ import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorNotice } from "@/components/error-notice";
 import { Field } from "@/components/field";
+import { SourceFolderInput } from "@/components/folder-browser";
 import {
   FORM_STACK_CLASSES,
   FieldGrid,
@@ -178,6 +179,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import RootLayout from "@/app/layout";
+import { readExample } from "../support/contract-examples";
+import { jsonResponse, stubFetch } from "../support/fake-fetch";
 
 // The app switcher navigates through the app router, which only Next mounts;
 // the rest of next/navigation answers as it does outside Next.
@@ -978,6 +981,18 @@ const KIT_SAMPLES: Record<string, () => ReactElement> = {
       />
     </>
   ),
+  "folder-browser.tsx": () => (
+    <Field label="Source folder">
+      {(control) => (
+        <SourceFolderInput
+          control={control}
+          value="/Workspace/Shared/sales"
+          onValueChange={() => undefined}
+          canBrowse
+        />
+      )}
+    </Field>
+  ),
 };
 
 function tsxFilesIn(directory: string): string[] {
@@ -1067,6 +1082,23 @@ describe("the shared kit (src/components)", () => {
     );
     await user.click(screen.getByRole("button", { name: "Delete app" }));
     assert.deepEqual(cspViolations(container.innerHTML), []);
+  });
+
+  it("the folder browser, once open on a listing, writes no style attribute or <style>", async () => {
+    stubFetch(() => jsonResponse(200, readExample("WorkspaceListing")));
+    const watch = watchCspWrites();
+    try {
+      const user = userEvent.setup();
+      render(KIT_SAMPLES["folder-browser.tsx"]?.() ?? <></>);
+      await user.click(screen.getByRole("button", { name: "Browse" }));
+      expect(
+        await screen.findByRole("option", { name: "server" }),
+      ).toBeVisible();
+      assert.deepEqual(watch.refusedWrites(), []);
+    } finally {
+      watch.restore();
+      vi.restoreAllMocks();
+    }
   });
 
   it("the document shell is clean, with the skip link, the header and the noscript notice", () => {

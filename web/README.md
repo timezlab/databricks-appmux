@@ -46,12 +46,12 @@ Tests never live in `src/`. `@/*` maps to `src/*`.
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `/`                                                                                              | Apps: the launcher                                                                                                                   |
 | `/app/?slug=`, `/app/authorization/`, `/app/deployments/`, `/app/resources/`, `/app/requests/`   | one app: Overview (the earlier Status), Authorization (the earlier Sharing), Deployments (the earlier Releases), Resources, Requests |
-| `/app/logs/`, `/app/security/`, `/app/environment/`, `/app/insights/`, `/app/settings/`          | one app: Logs, Security, Environment, Insights, Settings; each route exists and its page says it is being built                      |
+| `/app/logs/`, `/app/security/`, `/app/environment/`, `/app/insights/`, `/app/settings/`          | one app: Logs, Security, Environment, Insights, Settings; Security and Settings are built, the rest say they are being built         |
 | `/platform/`, `/platform/apps/`, `/platform/access/`, `/platform/egress/`, `/platform/settings/` | the platform: Overview (inbox, memory, self-check), Apps, Access, Egress, Settings                                                   |
 | `/dashboard/`                                                                                    | metrics                                                                                                                              |
 
 The ten sections of an app sit behind a sidebar (`AppSidebar`), the five pages of the platform
-behind a tab bar (`SubNav`). Each area has a server `layout.tsx` around a client shell
+behind the same kind of sidebar, beside one `SectionPanel`. Each area has a server `layout.tsx` around a client shell
 (`AppView`, `PlatformPage`) that fetches and polls once and hands the data to the sub-page
 through context, so moving between pages keeps the poll and any half-typed form. The sub-pages
 are thin (one file per section under `src/components/app/pages/`, and `platform-pages.tsx`); the

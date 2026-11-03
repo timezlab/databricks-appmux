@@ -8,6 +8,7 @@ import type { EgressEditorProps } from "@/components/platform/egress-editor";
 import { PlatformProvider } from "@/components/platform/platform-context";
 import { PutAppEgressRequest } from "@/lib/api";
 import type { EgressSource } from "@/lib/platform/egress";
+import { chooseOption } from "../../support/select";
 
 const METADATA_DENY = {
   action: "deny",
@@ -75,7 +76,7 @@ describe("EgressEditor", () => {
   it("refuses an allow that overlaps 169.254.0.0/16 and says so under the address field", async () => {
     const { user, save } = setup({ rules: [], version: 3 });
     await user.click(screen.getByRole("button", { name: "Add rule" }));
-    await user.selectOptions(rule(1).getByLabelText("Action"), "allow");
+    await chooseOption(user, rule(1).getByLabelText("Action"), "allow");
     await user.type(
       rule(1).getByLabelText("Address (CIDR)"),
       "169.254.169.0/24",
@@ -139,7 +140,7 @@ describe("EgressEditor", () => {
   it("saves the trimmed rules in the body the schema expects, then announces the result", async () => {
     const { user, save, announce, refresh } = setup();
     await user.click(screen.getByRole("button", { name: "Add rule" }));
-    await user.selectOptions(rule(3).getByLabelText("Action"), "allow");
+    await chooseOption(user, rule(3).getByLabelText("Action"), "allow");
     await user.type(rule(3).getByLabelText("Address (CIDR)"), " 10.30.0.0/16 ");
     const port = rule(3).getByLabelText("Port");
     await user.clear(port);

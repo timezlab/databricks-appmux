@@ -20,9 +20,12 @@ import {
 import { Section } from "@/components/section";
 import { Input } from "@/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ActionResult } from "./action-result";
 import { FormSummary } from "./form-summary";
@@ -137,40 +140,47 @@ export function AdminsSection({
           ]}
         />
 
-        <FormSummary errors={errors} />
-        <Field
-          label="Reason for the next change"
-          hint="Required for adding and for removing. Recorded in the audit log."
-          error={errors.reason}
-        >
-          {(control) => (
-            <Textarea
-              {...control}
-              value={reason}
-              onChange={(event) => {
-                setReason(event.target.value);
-              }}
-            />
-          )}
-        </Field>
+        <div className="flex max-w-140 flex-col gap-4">
+          <FormSummary errors={errors} />
+          <Field
+            label="Reason for the next change"
+            hint="Required for adding and for removing. Recorded in the audit log."
+            error={errors.reason}
+          >
+            {(control) => (
+              <Textarea
+                {...control}
+                value={reason}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                }}
+              />
+            )}
+          </Field>
+        </div>
 
-        <form className={FORM_STACK_CLASSES} onSubmit={handleAdd}>
+        <form
+          className={`${FORM_STACK_CLASSES} max-w-140 border-t pt-4`}
+          onSubmit={handleAdd}
+        >
           <h3>Add an admin</h3>
           <FieldGrid>
             <Field label="Type">
               {(control) => (
-                <NativeSelect
-                  {...control}
+                <Select
                   value={newType}
-                  onChange={(event) => {
-                    setNewType(
-                      event.target.value === "group" ? "group" : "user",
-                    );
+                  onValueChange={(value) => {
+                    setNewType(value === "group" ? "group" : "user");
                   }}
                 >
-                  <NativeSelectOption value="user">User</NativeSelectOption>
-                  <NativeSelectOption value="group">Group</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger {...control} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent label="Type">
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="group">Group</SelectItem>
+                  </SelectContent>
+                </Select>
               )}
             </Field>
             <Field

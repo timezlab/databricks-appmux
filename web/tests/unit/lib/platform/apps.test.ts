@@ -1,17 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
-import type { PlatformApp } from "@/lib/api/schemas";
+import type { AppSummary, PlatformApp, RequestRow } from "@/lib/api/schemas";
 import {
   EMPTY_REGISTER_FORM,
-  appFieldsFormValues,
-  appFieldsKey,
-  appOwnerKey,
   filterApps,
-  parseAppFieldsForm,
-  parseOwnerForm,
   parseRegisterForm,
-  renameOutcome,
+  platformAppRows,
 } from "@/lib/platform/apps";
 
 function app(overrides: Partial<PlatformApp> = {}): PlatformApp {
@@ -170,138 +165,81 @@ describe("parseRegisterForm", () => {
   });
 });
 
-describe("parseAppFieldsForm", () => {
-  const current = app();
-
-  it("starts from the app's current values", () => {
-    assert.deepEqual(appFieldsFormValues(current), {
-      slug: "sales",
-      display_name: "Sales dashboard",
-      source_path: "/Workspace/Shared/apps/sales",
-      memory_budget_mb: "512",
-    });
-  });
-
-  it("sends only what changed, with the version the page holds", () => {
-    const values = {
-      ...appFieldsFormValues(current),
-      memory_budget_mb: "1024",
+describe("platformAppRows", () => {
+  function summary(slug: string, state: AppSummary["state"]): AppSummary {
+    return {
+      slug,
+      display_name: slug,
+      state,
+      permission: "CAN_MANAGE",
+      open_modes: ["as_user"],
     };
-    assert.deepEqual(parseAppFieldsForm(current, values, ["reports"]), {
-      ok: true,
-      value: { version: 7, memory_budget_mb: 1024 },
-    });
-  });
+  }
 
-  it("can change several fields at once", () => {
-    const values = {
-      ...appFieldsFormValues(current),
-      display_name: " Sales ",
-      source_path: "/Workspace/Shared/apps/sales-v2",
+  function request(
+    slug: string,
+    kind: RequestRow["kind"],
+    status: RequestRow["status"],
+  ): RequestRow {
+    return {
+      request_id: 1,
+      app_slug: slug,
+      kind,
+      payload: {},
+      reason: "the dashboard moved",
+      requested_by: "alice@example.com",
+      requested_at: "2026-10-30T09:35:00Z",
+      status,
+      closed_by: null,
+      closed_at: null,
+      closed_note: null,
+      current: null,
+      requires_reason: false,
+      app_version: null,
     };
-    assert.deepEqual(parseAppFieldsForm(current, values, []), {
-      ok: true,
-      value: {
-        version: 7,
-        display_name: "Sales",
-        source_path: "/Workspace/Shared/apps/sales-v2",
-      },
-    });
-  });
+  }
 
-  it("refuses a form where nothing changed, since the server refuses a body with no field", () => {
+  it("keeps the platform's order and fields, with each app's state from the app list", () => {
+    const rows = platformAppRows(
+      APPS,
+      [summary("reports", "stopped"), summary("sales", "running")],
+      [],
+    );
     assert.deepEqual(
-      parseAppFieldsForm(current, appFieldsFormValues(current), []),
-      { ok: false, errors: { _form: "Change at least one field" } },
+      rows.map((row) => [row.slug, row.state, row.memoryBudgetMb]),
+      [
+        ["sales", "running", 512],
+        ["reports", "stopped", 512],
+        ["hr-tools", null, 512],
+      ],
+    );
+    assert.equal(rows[0]?.displayName, "Sales dashboard");
+  });
+
+  it("has no state while the app list has not loaded", () => {
+    assert.deepEqual(
+      platformAppRows(APPS, null, []).map((row) => row.state),
+      [null, null, null],
     );
   });
 
-  it("does not hold an unchanged field to the rules, only the changed ones", () => {
-    const odd = app({ source_path: "/legacy/path" });
-    const values = { ...appFieldsFormValues(odd), display_name: "New name" };
-    assert.deepEqual(parseAppFieldsForm(odd, values, []), {
-      ok: true,
-      value: { version: 7, display_name: "New name" },
-    });
-  });
-
-  it("checks a changed slug against the other apps, not against itself", () => {
-    const rename = { ...appFieldsFormValues(current), slug: "reports" };
-    assert.deepEqual(parseAppFieldsForm(current, rename, ["reports"]), {
-      ok: false,
-      errors: { slug: "slug 'reports' is already taken" },
-    });
-    assert.equal(parseAppFieldsForm(current, rename, []).ok, true);
-  });
-
-  it("refuses a blanked name and a budget that is not a number", () => {
-    const values = {
-      ...appFieldsFormValues(current),
-      display_name: "  ",
-      memory_budget_mb: "lots",
-    };
-    const result = parseAppFieldsForm(current, values, []);
-    assert.equal(result.ok, false);
-    if (!result.ok) {
-      assert.equal(result.errors.display_name, "must not be blank");
-      assert.equal(
-        result.errors.memory_budget_mb,
-        "must be a whole number of MB",
-      );
-    }
-  });
-});
-
-describe("parseOwnerForm", () => {
-  const current = app();
-
-  it("builds the body of PUT /apps/{app}/owner", () => {
-    assert.deepEqual(parseOwnerForm(current, " bob@example.com "), {
-      ok: true,
-      value: { version: 7, owner: "bob@example.com" },
-    });
-  });
-
-  it("refuses the owner it already has, an address that is not one, and a blank", () => {
-    assert.deepEqual(parseOwnerForm(current, "alice@example.com"), {
-      ok: false,
-      errors: { owner: "is already the owner" },
-    });
-    const bad = parseOwnerForm(current, "bob");
-    assert.equal(bad.ok, false);
-    const blank = parseOwnerForm(current, " ");
-    assert.equal(blank.ok, false);
-  });
-});
-
-describe("form keys", () => {
-  it("change when a field the form shows changes, and not when only the version moves", () => {
-    const before = app();
-    assert.equal(appFieldsKey(before), appFieldsKey(app({ version: 9 })));
-    assert.notEqual(
-      appFieldsKey(before),
-      appFieldsKey(app({ display_name: "x" })),
-    );
-    assert.notEqual(
-      appFieldsKey(before),
-      appFieldsKey(app({ memory_budget_mb: 256 })),
-    );
-    assert.equal(appOwnerKey(before), appOwnerKey(app({ version: 9 })));
-    assert.notEqual(
-      appOwnerKey(before),
-      appOwnerKey(app({ owner: "bob@example.com" })),
+  it("counts each app's pending settings and delegation requests, not its register request or closed ones", () => {
+    const rows = platformAppRows(APPS, null, [
+      request("sales", "settings", "pending"),
+      request("sales", "delegation", "pending"),
+      request("sales", "settings", "denied"),
+      request("reports", "register", "pending"),
+    ]);
+    assert.deepEqual(
+      rows.map((row) => row.pendingRequests),
+      [2, 0, 0],
     );
   });
-});
 
-describe("renameOutcome", () => {
-  it("says the row holds the new slug and that the swap decides when the old URL stops", () => {
-    const outcome = renameOutcome("sales", "revenue");
-    assert.equal(outcome.tone, "success");
-    assert.equal(outcome.title, "Renamed sales to revenue");
-    assert.match(outcome.detail ?? "", /\/revenue\//);
-    // The swap is health-gated (design 5.5): the answer of the PATCH is not the moment the route changes.
-    assert.match(outcome.detail ?? "", /passes its health check/);
-    assert.doesNotMatch(outcome.detail ?? "", /is now/);
+  it("counts nothing while the requests are unknown", () => {
+    assert.deepEqual(
+      platformAppRows(APPS, null, null).map((row) => row.pendingRequests),
+      [null, null, null],
+    );
   });
 });

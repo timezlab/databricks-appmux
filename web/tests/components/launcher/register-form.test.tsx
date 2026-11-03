@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UserEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RegisterForm } from "@/components/launcher/register-form";
 import { API_BASE_URL } from "@/lib/api";
+import type { WorkspaceListing } from "@/lib/api";
 import {
   readExample,
   readExampleObject,
@@ -18,7 +19,9 @@ afterEach(() => {
 
 const NOTHING_KNOWN = { knownSlugs: [], pendingRegisterSlugs: [] };
 
-function renderForm() {
+function renderForm({
+  canBrowseWorkspace,
+}: { canBrowseWorkspace?: boolean } = {}) {
   const onSent = vi.fn();
   const onReload = vi.fn();
   render(
@@ -27,6 +30,7 @@ function renderForm() {
       onSent={onSent}
       onCancel={vi.fn()}
       onReload={onReload}
+      canBrowseWorkspace={canBrowseWorkspace}
     />,
   );
   return { onSent, onReload, user: userEvent.setup() };
@@ -172,5 +176,54 @@ describe("RegisterForm", () => {
 
     await user.click(screen.getByRole("button", { name: "Reload" }));
     expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks a person who cannot list the workspace to type the folder, and offers no Browse", () => {
+    renderForm();
+    expect(
+      screen.getByRole("textbox", { name: /^Source folder/ }),
+    ).toHaveAccessibleDescription(/Type the workspace folder/);
+    expect(screen.queryByRole("button", { name: "Browse" })).toBeNull();
+  });
+
+  it("offers Browse to a person who may list the workspace, and a Node.js folder fills the memory budget too", async () => {
+    const appFolder = "/Workspace/Shared/apps/wiki";
+    const nodeApp: WorkspaceListing = {
+      path: appFolder,
+      parent: "/Workspace/Shared/apps",
+      roots: [],
+      entries: [],
+      truncated: false,
+      markers: ["package.json"],
+      looks_like_app: true,
+      runtime_hint: "node",
+      suggested_memory_mb: 768,
+    };
+    const calls: RecordedCall[] = [];
+    stubFetch((call) => {
+      calls.push(call);
+      return jsonResponse(200, nodeApp);
+    });
+    const { user } = renderForm({ canBrowseWorkspace: true });
+    const source = screen.getByRole("textbox", { name: /^Source folder/ });
+    expect(source).toHaveAccessibleDescription(/pick it with Browse/);
+    await user.type(source, appFolder);
+
+    await user.click(screen.getByRole("button", { name: "Browse" }));
+    const panel = await screen.findByRole("dialog", {
+      name: "Browse the workspace",
+    });
+    await user.click(
+      await within(panel).findByRole("button", { name: "Use 768 MB" }),
+    );
+    await user.click(
+      within(panel).getByRole("button", { name: "Use this folder" }),
+    );
+
+    expect(calls[0]?.url).toContain("/workspace/browse");
+    expect(source).toHaveValue(appFolder);
+    expect(screen.getByRole("textbox", { name: /^Memory budget/ })).toHaveValue(
+      "768",
+    );
   });
 });

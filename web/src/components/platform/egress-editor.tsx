@@ -25,9 +25,12 @@ import {
 import { Notice } from "@/components/notice";
 import { Input } from "@/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ActionResult } from "./action-result";
 import { useWriteAction } from "./use-write-action";
 
@@ -141,26 +144,26 @@ export function EgressEditor({
                 <FieldGrid>
                   <Field label="Action" error={errors.action}>
                     {(control) => (
-                      <NativeSelect
-                        {...control}
+                      <Select
                         value={rule.action}
-                        onChange={(event) => {
+                        onValueChange={(value) => {
                           dispatch({
                             type: "edit",
                             id: rule.id,
                             field: "action",
-                            value: event.target.value,
+                            value,
                             source,
                           });
                         }}
                       >
-                        <NativeSelectOption value="allow">
-                          allow
-                        </NativeSelectOption>
-                        <NativeSelectOption value="deny">
-                          deny
-                        </NativeSelectOption>
-                      </NativeSelect>
+                        <SelectTrigger {...control} className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent label={`Action of rule ${number}`}>
+                          <SelectItem value="allow">allow</SelectItem>
+                          <SelectItem value="deny">deny</SelectItem>
+                        </SelectContent>
+                      </Select>
                     )}
                   </Field>
                   <Field

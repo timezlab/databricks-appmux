@@ -36,9 +36,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatformContext } from "./platform-context";
 import { useUnsavedChangesGuard } from "./use-unsaved-changes-guard";
@@ -194,7 +197,7 @@ export function SettingsGroups({
       {SETTING_GROUPS.map((group) => (
         <Section key={group.id} id={group.id} title={group.title}>
           <p className="text-muted-foreground">{group.summary}</p>
-          <ul className="flex flex-col divide-y rounded-md border">
+          <ul className="flex flex-col divide-y border-y">
             {group.keys.map((key) => (
               <SettingRow
                 key={key}
@@ -267,9 +270,7 @@ function SettingRow({
     <li
       data-setting-row={descriptor.key}
       className={`grid gap-x-6 gap-y-4 border-l-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] ${
-        row.isChanged
-          ? "border-l-tone-info-border bg-card"
-          : "border-l-transparent"
+        row.isChanged ? "border-l-tone-info-border" : "border-l-transparent"
       }`}
     >
       <div className="flex min-w-0 flex-col gap-1">
@@ -372,34 +373,30 @@ function SettingControl({
       );
     case "boolean":
       return (
-        <NativeSelect
-          {...control}
-          containerClassName="max-w-40"
-          value={draft}
-          onChange={(event) => {
-            onChange(event.target.value);
-          }}
-        >
-          <NativeSelectOption value="true">On</NativeSelectOption>
-          <NativeSelectOption value="false">Off</NativeSelectOption>
-        </NativeSelect>
+        <Select value={draft} onValueChange={onChange}>
+          <SelectTrigger {...control} className="w-full max-w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent label={descriptor.label}>
+            <SelectItem value="true">On</SelectItem>
+            <SelectItem value="false">Off</SelectItem>
+          </SelectContent>
+        </Select>
       );
     case "choice":
       return (
-        <NativeSelect
-          {...control}
-          containerClassName="max-w-64"
-          value={draft}
-          onChange={(event) => {
-            onChange(event.target.value);
-          }}
-        >
-          {editor.options.map((option) => (
-            <NativeSelectOption key={option} value={option}>
-              {option}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        <Select value={draft} onValueChange={onChange}>
+          <SelectTrigger {...control} className="w-full max-w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent label={descriptor.label}>
+            {editor.options.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     case "list":
       return (
@@ -475,7 +472,7 @@ function SaveBar({
     <div
       role="region"
       aria-label="Unsaved changes"
-      className="sticky bottom-0 z-10 flex flex-col gap-4 border-t-2 border-t-tone-info-border bg-background py-4 sm:flex-row sm:items-center sm:justify-between"
+      className="sticky bottom-0 z-10 flex flex-col gap-4 border-t-2 border-t-tone-info-border bg-card py-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div
         className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-64"

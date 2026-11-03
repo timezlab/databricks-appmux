@@ -1,16 +1,64 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ApiModule from "@/lib/api";
 
 import { RegisterSection } from "@/components/platform/register-section";
-import { ApiError, registerApp } from "@/lib/api";
+import { ApiError, browseWorkspace, registerApp } from "@/lib/api";
+import type { WorkspaceListing } from "@/lib/api";
 import { appDetail, platformView, renderInPlatform } from "./shell-fixtures";
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiModule>()),
   registerApp: vi.fn(),
+  browseWorkspace: vi.fn(),
 }));
+
+const SHARED = "/Workspace/Shared";
+const NODE_APP = `${SHARED}/inventory`;
+
+function listing(changes: Partial<WorkspaceListing>): WorkspaceListing {
+  return {
+    path: null,
+    parent: null,
+    roots: [],
+    entries: [],
+    truncated: false,
+    markers: [],
+    looks_like_app: false,
+    runtime_hint: null,
+    suggested_memory_mb: null,
+    ...changes,
+  };
+}
+
+/** `GET /workspace/browse`: the roots, Shared, and a Node.js app folder in it. */
+function browse(query: { path?: string } = {}): Promise<WorkspaceListing> {
+  switch (query.path) {
+    case undefined:
+      return Promise.resolve(
+        listing({ roots: [{ label: "Shared", path: SHARED }] }),
+      );
+    case SHARED:
+      return Promise.resolve(
+        listing({
+          path: SHARED,
+          entries: [{ name: "inventory", path: NODE_APP, kind: "folder" }],
+        }),
+      );
+    default:
+      return Promise.resolve(
+        listing({
+          path: NODE_APP,
+          parent: SHARED,
+          markers: ["app.yaml", "package.json"],
+          looks_like_app: true,
+          runtime_hint: "node",
+          suggested_memory_mb: 768,
+        }),
+      );
+  }
+}
 
 const SLUG_RULE = "lower-case letters, digits and -, at most 31 characters";
 const EMAIL_RULE = "must be an email address (name@domain)";
@@ -203,5 +251,37 @@ describe("RegisterSection", () => {
       ).toBeEnabled();
     });
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("offers Browse beside the source folder, which fills the folder and a Node.js app's memory budget", async () => {
+    vi.mocked(browseWorkspace).mockImplementation(browse);
+    const { user } = setup();
+    const source = screen.getByRole("textbox", { name: /^Source folder/ });
+    expect(source).toHaveAccessibleDescription(/pick it with Browse/);
+
+    await user.click(screen.getByRole("button", { name: "Browse" }));
+    const panel = await screen.findByRole("dialog", {
+      name: "Browse the workspace",
+    });
+    await user.click(
+      await within(panel).findByRole("option", { name: /Shared/ }),
+    );
+    await user.click(
+      await within(panel).findByRole("option", { name: /inventory/ }),
+    );
+    await user.click(
+      await within(panel).findByRole("button", { name: "Use 768 MB" }),
+    );
+    await user.click(
+      within(panel).getByRole("button", { name: "Use this folder" }),
+    );
+
+    expect(source).toHaveValue(NODE_APP);
+    expect(screen.getByRole("textbox", { name: /^Memory budget/ })).toHaveValue(
+      "768",
+    );
+    // The field stays free to type in after a pick.
+    await user.type(source, "-v2");
+    expect(source).toHaveValue(`${NODE_APP}-v2`);
   });
 });
