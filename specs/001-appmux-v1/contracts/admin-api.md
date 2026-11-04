@@ -948,7 +948,10 @@ is left out of the list, and only the prefix targets above are the exception to 
 `400`, `403` or `404` whose body names a missing scope; a `401`, a request that got no answer and any other status are
 not retried. The retry starts again at the first page. If it fails too, or the platform has no token to give, the
 answer is the one the person's own token got, a `source: "unavailable"` with a note (one that names a scope an App
-cannot hold does not send anyone to ask for it). A visitor whose token did not arrive is listed with appmux's token as
+cannot hold does not send anyone to ask for it). The one exception is a name in `q` that appmux's own token reached and
+did not find (a `404` for the secret scope, catalog, schema, endpoint, project or branch the query names): that answers
+`source: "platform_token"`, no items and a `note` saying no such object is visible to appmux, which lists with its own
+access and not the person's. The person's refusal would have sent them to ask for a scope that would not help. A visitor whose token did not arrive is listed with appmux's token as
 well. The list is not narrowed to what the person may use, and attaching still runs the attach check with the person's
 token.
 

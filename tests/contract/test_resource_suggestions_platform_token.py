@@ -324,6 +324,42 @@ def test_when_the_platform_is_refused_too_the_answer_is_the_persons_own_refusal(
     assert_leaks_nothing(response)
 
 
+@pytest.mark.parametrize(
+    ("type_name", "query", "missing"),
+    [
+        pytest.param("secret", "no-such-scope/", "secret scope", id="a secret scope"),
+        pytest.param("uc_table", "no_such_catalog.", "catalog", id="a catalog"),
+        pytest.param("uc_table", "main.no_such_schema.", "schema", id="a schema"),
+        pytest.param("uc_volume", "/Volumes/no_such_catalog/", "catalog", id="a volume's catalog"),
+    ],
+)
+def test_a_name_that_is_not_there_is_said_so_when_appmux_looked_for_it(
+    type_name: str, query: str, missing: str
+) -> None:
+    # The person's token is refused for a scope; appmux's own token reaches the list and finds no
+    # such object. Telling the person to ask an admin for a scope would send them away over a typo.
+    provider = PlatformTokenProvider()
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.headers["Authorization"] == f"Bearer {PLATFORM_TOKEN}":
+            return refusal(404, DENIED_TEXT)()
+        return refusal(403, SCOPE_TEXT)()
+
+    workspace = Workspace()
+    workspace.answer_everything_with(answer)
+    suggester = Suggester(workspace, platform_token=provider)
+
+    response = suggester.suggest(type_name, query)
+
+    body = response.json()
+    assert (response.status_code, body["source"], body["items"]) == (200, "platform_token", [])
+    assert f"no {missing} with that name" in body["note"]
+    assert "visible to appmux" in body["note"]
+    assert "platform admin" not in body["note"]
+    assert workspace.bearers == [VISITOR_TOKEN, PLATFORM_TOKEN]
+    assert_leaks_nothing(response)
+
+
 def test_when_the_platform_does_not_answer_the_answer_is_the_persons_own_refusal() -> None:
     def answer(request: httpx.Request) -> httpx.Response:
         if request.headers["Authorization"] == f"Bearer {PLATFORM_TOKEN}":

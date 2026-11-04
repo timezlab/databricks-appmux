@@ -310,7 +310,7 @@ class _NoItems(Exception):
 
     def __init__(
         self,
-        source: Literal["caller_token", "unavailable"],
+        source: Literal["caller_token", "platform_token", "unavailable"],
         note: str,
         *,
         retry_with_platform_token: bool = False,
@@ -322,11 +322,22 @@ class _NoItems(Exception):
 
 
 class _Reader:
-    """Reads the list calls of one request with one token; failures become notes."""
+    """Reads the list calls of one request with one token; failures become notes.
 
-    def __init__(self, client: httpx.AsyncClient, token: str) -> None:
+    ``viewer`` says whose token it is, the person's or appmux's own, so that "no such object" is
+    said about the right reader: one the person cannot see may be visible to appmux, and back.
+    """
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        token: str,
+        *,
+        viewer: Literal["caller_token", "platform_token"],
+    ) -> None:
         self._client = client
         self._token = token
+        self._viewer = viewer
 
     async def read(
         self,
@@ -336,11 +347,11 @@ class _Reader:
         *,
         params: Mapping[str, str] | None = None,
         json: Mapping[str, object] | None = None,
-        missing_note: str | None = None,
+        missing_object: str | None = None,
     ) -> Mapping[str, Any]:
         """The JSON object Databricks answered, or ``_NoItems``.
 
-        ``missing_note`` is set where a ``404`` means "no such object" (the secret scope named in
+        ``missing_object`` is set where a ``404`` means "no such object" (the secret scope named in
         the query) and not that the call itself failed.
         """
         response = await send_with_token(
@@ -358,7 +369,7 @@ class _Reader:
                 f"Databricks did not answer the list of {noun}; try again, or type the target",
             )
         if response.status_code != httpx.codes.OK:
-            raise _refusal(response, noun, missing_note)
+            raise _refusal(response, noun, missing_object, self._viewer)
         try:
             body = response.json()
         except ValueError:
@@ -374,7 +385,7 @@ class _Reader:
         key: str,
         *,
         params: Mapping[str, str] | None = None,
-        missing_note: str | None = None,
+        missing_object: str | None = None,
     ) -> tuple[list[Mapping[str, Any]], bool]:
         """The objects under ``key`` of a ``GET`` list, following its pages, and whether it was cut.
 
@@ -389,7 +400,9 @@ class _Reader:
             page_params = dict(params or {})
             if page_token is not None:
                 page_params[_PAGE_CURSOR_PARAM] = page_token
-            body = await self.read("GET", path, noun, params=page_params, missing_note=missing_note)
+            body = await self.read(
+                "GET", path, noun, params=page_params, missing_object=missing_object
+            )
             objects.extend(_objects_of(body, key, noun))
             next_token = body.get("next_page_token")
             if not isinstance(next_token, str) or not next_token:
@@ -398,7 +411,12 @@ class _Reader:
         return objects, True
 
 
-def _refusal(response: httpx.Response, noun: str, missing_note: str | None) -> _NoItems:
+def _refusal(
+    response: httpx.Response,
+    noun: str,
+    missing_object: str | None,
+    viewer: Literal["caller_token", "platform_token"],
+) -> _NoItems:
     status = response.status_code
     if status == _HTTP_UNAUTHORIZED:
         return _NoItems(
@@ -410,8 +428,8 @@ def _refusal(response: httpx.Response, noun: str, missing_note: str | None) -> _
         return _NoItems(
             "unavailable", _missing_scope_note(response, noun), retry_with_platform_token=True
         )
-    if status == _HTTP_NOT_FOUND and missing_note is not None:
-        return _NoItems("caller_token", missing_note)
+    if status == _HTTP_NOT_FOUND and missing_object is not None:
+        return _NoItems(viewer, _missing_object_note(missing_object, viewer))
     if status == httpx.codes.FORBIDDEN:
         return _NoItems(
             "unavailable",
@@ -421,6 +439,18 @@ def _refusal(response: httpx.Response, noun: str, missing_note: str | None) -> _
     return _NoItems(
         "unavailable",
         f"Databricks answered {status} to the list of {noun}; try again, or type the target",
+    )
+
+
+def _missing_object_note(
+    missing_object: str, viewer: Literal["caller_token", "platform_token"]
+) -> str:
+    """Says an object is not there for the reader that looked; appmux's own look is not theirs."""
+    if viewer == "caller_token":
+        return f"{missing_object} is visible to you"
+    return (
+        f"{missing_object} is visible to appmux, which lists with its own access and not yours; "
+        "check the name, or type the target"
     )
 
 
@@ -579,7 +609,7 @@ async def _list_secrets(reader: _Reader, query: str) -> _Page:
         KEYS_PATH,
         noun,
         params={"scope": scope},
-        missing_note="no secret scope with that name is visible to you",
+        missing_object="no secret scope with that name",
     )
     candidates = _present(
         _suggestion(
@@ -717,19 +747,19 @@ def _unity_catalog_lister(form: _ThreeLevelName) -> Lister:
     async def list_names(reader: _Reader, query: str) -> _Page:
         parents, filter_text = _parse_three_level_name(query, form)
         params = {"max_results": str(_UNITY_CATALOG_PAGE_SIZE)}
-        missing_note: str | None = None
+        missing_object: str | None = None
         if not parents:
             noun, path = "catalogs", CATALOGS_PATH
         elif len(parents) == 1:
             noun, path = "schemas", SCHEMAS_PATH
             params["catalog_name"] = parents[0]
-            missing_note = "no catalog with that name is visible to you"
+            missing_object = "no catalog with that name"
         else:
             noun, path = form.objects, form.objects_path
             params |= {"catalog_name": parents[0], "schema_name": parents[1], **form.object_params}
-            missing_note = "no schema with that name is visible to you"
+            missing_object = "no schema with that name"
         objects, is_partial = await reader.read_list(
-            path, noun, noun, params=params, missing_note=missing_note
+            path, noun, noun, params=params, missing_object=missing_object
         )
         candidates = _present(_unity_catalog_candidate(form, parents, entry) for entry in objects)
         # By name alone: every target holds the catalog and schema the query already named.
@@ -866,7 +896,7 @@ async def _list_vector_search(reader: _Reader, query: str) -> _Page:
         noun,
         "vector_indexes",
         params={"endpoint_name": endpoint},
-        missing_note="no AI Search endpoint with that name is visible to you",
+        missing_object="no AI Search endpoint with that name",
     )
     candidates = _present(
         _suggestion(
@@ -1001,7 +1031,7 @@ async def _list_lakebase_branches(reader: _Reader, project: str, name_filter: st
         noun,
         "branches",
         params={"page_size": str(_PAGE_SIZE)},
-        missing_note="no Lakebase project with that name is visible to you",
+        missing_object="no Lakebase project with that name",
     )
     candidates: list[ResourceSuggestion] = []
     for entry in objects:
@@ -1023,7 +1053,7 @@ async def _list_lakebase_endpoints(
         noun,
         "endpoints",
         params={"page_size": str(_PAGE_SIZE)},
-        missing_note="no Lakebase branch with that name is visible to you",
+        missing_object="no Lakebase branch with that name",
     )
     candidates: list[ResourceSuggestion | None] = []
     for entry in objects:
@@ -1123,7 +1153,7 @@ class ResourceSuggestionRoutes:
         refusal = _NoItems("unavailable", _NOT_RECEIVED_NOTE)
         if token is not None:
             try:
-                page = await lister(_Reader(self._workspace, token), query)
+                page = await lister(_Reader(self._workspace, token, viewer="caller_token"), query)
             except _NoItems as nothing:
                 if not nothing.retry_with_platform_token:
                     return _nothing(nothing.source, nothing.note)
@@ -1133,8 +1163,15 @@ class ResourceSuggestionRoutes:
         platform = await self._platform_bearer()
         if platform is not None:
             try:
-                page = await lister(_Reader(self._workspace, platform), query)
-            except _NoItems:
+                page = await lister(
+                    _Reader(self._workspace, platform, viewer="platform_token"), query
+                )
+            except _NoItems as nothing:
+                if nothing.source == "platform_token":
+                    # Appmux's own access reached the list and found no such object: that is the
+                    # answer, and a better one than the person's refusal, which says to ask for a
+                    # scope that would not help.
+                    return _nothing(nothing.source, nothing.note)
                 # The platform's own refusal is not the person's business; what they were told is
                 # why their token could not list it.
                 logger.info("listing %s with the platform token failed", type_name)
@@ -1176,7 +1213,7 @@ def _answer(
 
 
 def _nothing(
-    source: Literal["unavailable", "not_supported", "caller_token"], note: str
+    source: Literal["unavailable", "not_supported", "caller_token", "platform_token"], note: str
 ) -> ResourceSuggestionList:
     return ResourceSuggestionList(items=[], truncated=False, source=source, note=note)
 
