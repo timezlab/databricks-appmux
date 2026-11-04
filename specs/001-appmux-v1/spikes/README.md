@@ -1619,3 +1619,168 @@ in milliseconds before and during the operation:
 - **Metrics survive the deletion of an app.** The run deletes its apps afterwards, and the
   per-minute rows of `zd-a-…` were still readable through `GET /metrics?from=…&to=…`; that was
   the way to attribute the `502`.
+
+## Remote integration run from the dev machine (2026-11-04)
+
+**None of this is evidence for SC-001 or SC-003, and no task was ticked because of it.** The branch
+head (`3f59069`) was deployed to the Free Edition dev App with `scripts/sync-deploy.sh`, and
+`scripts/run-remote-tests.sh` ran the
+integration suite from the dev machine as the owner of the CLI's token, a platform admin, through the
+platform's proxy. Tests that need the container's own port, or another person's identity, cannot
+run that way (the table at the end says which).
+
+| Run | What | Result |
+|---|---|---|
+| 1 | the whole `tests/integration` (61 tests), the tests' own default of 500 requests a second | 43 min 16 s: 23 passed, 8 failed, 2 skipped, 28 errors |
+| 2 | `test_zero_downtime.py` at `APPMUX_TEST_RATE_PER_S=20`, a token with about 50 minutes left | 8 passed, 5 min 33 s |
+| 3 | the two tests that run 1 failed for being out of date, after correcting them | 1 passed, 4 skipped |
+| 4 | `test_metric_queries_on_lakebase.py` on the dev App's Lakebase (T193) | 4 passed, 27 s |
+
+### What run 1 was
+
+- **It was run wrongly, and its zero-downtime numbers mean nothing.** The tests' default is 500
+  requests a second; through the proxy and this machine's network that only queued. Every slice
+  from the no-op control on shows a worst-slice p95 of about 52 000 ms, and the 5 000 requests of one
+  "before" stage took 125 s (40 a second served). The 2026-11-01 run's rule, 20 a second, is in the test's docstring;
+  `scripts/run-remote-tests.sh` now sets 20 unless the environment says otherwise.
+- **From the middle of "update A with a good release" every call answered `302`**, the proxy's
+  login redirect: 15 708 of 20 000 requests in that operation, all of the later operations' load, and
+  the admin's own `GET /apps/…` that sets up each later test. The first operations and the first
+  test of the file had passed, so the path worked before and stopped working for good. The token is
+  asked for once at the start and lasts at most an hour, and the CLI hands out a cached one until it
+  is near expiry, so it may have had much less left. The expiry time of that token was not recorded,
+  so "the token ran out" is the explanation that fits and is **not proven**; what is known is that
+  run 2, at 20 a second with a token of 50 minutes, had no `302`. The script now prints how many
+  minutes the token has left and its header says what a `302` after a long run means.
+
+### The two product tests that failed were out of date, not the product
+
+- `test_a_child_that_exits_at_start…` looked for `status 3` in the release's `status_reason`. Since
+  `ab54eb0` appmux writes `the app exited with code 3 after 0.1 s`. The test now looks for `exited with code 3`; it passed in run 3.
+- `test_requests_walkthrough` put `memory_budget_mb` into a `register` request. The design says a
+  `register` request that names a budget is refused (v1-design 9.4, "no budget"), and the admin API
+  does so; the platform sets the default and an app admin asks for more with `settings`. The test
+  no longer sends one. After the correction its four tests skip remotely (they act as Grace and
+  Carol).
+- `test_an_unknown_path_under_the_ui_prefix…` answered `302` instead of `404` because it plays the
+  proxy itself with `X-Forwarded-Email`, which only works on the container's own port. It is a
+  container-only test, not a fault.
+
+### Zero-downtime, run 2 (20 requests a second, 10 connections, 5-second slices, 60-second control)
+
+Failed requests while each operation ran (the control had none) and the worst single-slice p95 in
+milliseconds before and during the operation; the 750 to 830 ms before any operation is the path's
+(proxy and network), as on 2026-11-01:
+
+| Operation | Failed / requests during | p95 before → during |
+|---|---|---|
+| control (no-op) | 0 / 1200 | 782 → 1087 |
+| register B | 0 / 200 | 827 → 781 |
+| update B | 0 / 200 | 752 → 884 |
+| update A, good release | 0 / 1000 | 774 → 985 |
+| update A, release that fails health | 0 / 1300 | 784 → 1063 |
+| heavy build in parallel | 0 / 400 | 778 → 1261 |
+| egress rule edit on A | 0 / 200 | 787 → 1168 |
+
+No request failed in about 5 900, the failed-health release included; the `502` of 2026-11-01
+(TD-019) did not recur. The same limits hold as then: 4 % of the task's rate, every latency includes
+the proxy, the edge's CPU was not read, and the "heavy" build is not heavy.
+
+### What else passed in run 1
+
+`test_crash_and_rollback` (2), `test_host_a_child` (9 of 10; the tenth is the out-of-date one),
+`test_hostile_fixtures` (6: `env_snooper` saw no other process and no `runtime.cfg`; `pkg_env_writer`
+made 2 attempts and got `EROFS`; `fork_bomb` made 247 forks of 256 and was refused with `EAGAIN`
+after 0.6 s; `network_scanner`'s probe of the metadata address timed out; a deny rule took effect; a
+neighbour's p95 was 247 ms idle and 278 ms beside the hostile children, over 21 and 39 requests) and
+`test_self_check_container` (2; the container's `self_check` reported 13 of 13 checks `ok`, in 7.2 s).
+
+### What did not run, and why
+
+| Test file (tests) | Task | Why |
+|---|---|---|
+| `test_edge_capacity` (1) | T086 | needs the container: 500 requests a second without the proxy, and the edge's pid to read its CPU |
+| `test_offline_install` (4), `test_open_modes` (3), `test_resources_container` (4), `test_sc004_walkthrough` (1), `test_ui_on_container` (7) | T137, T155, T129, T167, T177 | written against the edge's own port: they play the proxy with `X-Forwarded-Email` and do not use `ops_session`, so through the real proxy they get `302` or fail on `APPMUX_TEST_BASE_URL` having no port; most also need apps or variables registered first (fixture app slugs, a warehouse, a secret, a group, a second person's token) |
+| `test_requests_walkthrough` (4) | T148 | skipped: acts as two other people |
+| `test_credential_modes` (5) | T147 | did not run at first: the throwaway service principal, OAuth secret and scratch secret scopes it needs were refused by the session's permission check and not retried. It ran later the same day, after the owner authorised creating them: see [Credential modes from the dev machine](#credential-modes-from-the-dev-machine-2026-11-04) |
+| no test file yet | T070, T162, T180 | `test_self_check_fail_closed.py`, `test_capacity.py` and `test_failure_table.py` do not exist; SC-002's weakening runs, SC-003 and the failure table have never been run |
+
+### Gates on the same head
+
+Python: `ruff format --check` (389 files), `ruff check`, `mypy src` (129 files) clean; `pytest
+tests/unit tests/contract tests/load`: 7 836 passed in 91 s, with one third-party deprecation warning
+(Starlette's test client, an `anyio` alias). The count includes the tests added for token renewal
+and for the snooper labels (below); the first run on this head passed 7 829.
+UI: `typecheck`, `lint`, `format:check` clean; `npm test` 158 files, 2 870 tests; `npm run test:export`
+3 files, 63 tests; `npm run build` ok. `npm run test:e2e`: the first full run passed 809 and failed
+1 (`csp.spec.ts` `app-deployments` at 1280 px light, "console errors" expected `[]`); the same spec
+group passed 42 of 42 when rerun alone, and a second full run passed all 810 (5.5 min each). One
+failure in two full runs, not reproduced: the cause is not established (the failing run's
+console text was lost when the isolated rerun cleared Playwright's output folder), so this is
+recorded as a flake, not as understood. If it comes back, keep the run's `error-context.md`.
+
+## Credential modes from the dev machine (2026-11-04)
+
+T147 (`tests/integration/test_credential_modes.py`, five tests) ran against the deployed dev App on
+the Free Edition workspace, through `scripts/run-remote-tests.sh` as the owner of the CLI token.
+The owner authorised creating the test resources on the Free Edition workspace that day ("create the
+resources needed to test, such as a service principal, secrets, anything within the Free Edition
+limits"). The paid workspace was not used.
+
+### Resources created
+
+| Resource | What it is for |
+|---|---|
+| one service principal (`appmux-test-own-sp`) and one OAuth secret for it that expires after a day | the identity of the own-SP child |
+| secret scope `appmux-t-own-sp`: the principal's client id and client secret, with `READ` granted to the appmux App's service principal | appmux resolves the child's two `secret` resources from it |
+| secret scope `appmux-t-foreign`: one random value, granted to nobody | the "other apps' secret" the snooper tries to read |
+
+`attach_check_warehouse_id` already named the Free Edition warehouse. Beyond that one `READ`,
+nothing was granted to anyone, and no `CAN USE` on `appmux` was given to the new principal. The principal, the secret and
+both scopes still exist after the run; removing them is deleting the two scopes and the principal.
+
+### What the snooper children reported
+
+| Test | Result |
+|---|---|
+| `test_an_own_sp_child_calls_the_api_as_its_own_service_principal` | passed: the child's token belongs to the throwaway principal |
+| `test_a_shared_sp_child_calls_the_api_as_the_appmux_service_principal` | passed: the child's token belongs to the appmux App's service principal |
+| `test_an_own_sp_child_reaches_neither_other_apps_secrets_nor_the_registry` | failed: every attempt without a token was refused, and reading a secret value with the token was refused (`403`), but `list_scopes` with the token succeeded |
+| `test_a_shared_sp_child_reaches_neither_other_apps_secrets_nor_the_registry_beyond_the_residual` | failed for the same reason; the registry login with the token succeeded, which is the accepted residual of [TD-002](../../../docs/tech-debt.md#td-002-an-obo-childs-token-reaches-the-registry). After the spelling fix below, a rerun (99 s) names `list_scopes` as the only success beyond the residual |
+| `test_a_shared_sp_child_keeps_calling_the_api_across_a_token_expiry` | passed in 4 281 s (1 h 11 min): the child asked the API as the appmux service principal at the start and every 300 s after, for longer than the 3 600 s a minted token lives, so the file appmux keeps current was renewed |
+
+The `list_scopes` success is the platform's behaviour, not a leak through appmux: the throwaway
+principal, asked directly with its own OAuth token, lists both scope names (the one it holds `READ`
+on and the one nobody granted it) and gets `403` reading a value from either. So a principal with
+no grant on a scope still sees its name (one principal measured). The finding is recorded as
+[TD-027](../../../docs/tech-debt.md#td-027-a-childs-token-lists-the-names-of-every-secret-scope-in-the-workspace)
+and the owner decides whether `list_scopes` joins the accepted residual of design 8.4; the two
+containment tests stay red until then, because the test must not be loosened to pass.
+
+### What was wrong with the test, not the product
+
+* The accepted residual was spelt `with_token: registry login` while the snooper reports
+  `with token: registry login`, so the accepted registry login would have counted as a failure.
+  `tests/unit/test_credential_modes_labels.py` runs the snooper's own report builder against the
+  test's constant and failed first; then the constant was fixed.
+* The failure message did not say which attempt had been refused or skipped. It now lists each
+  attempt without a token with its outcome and detail, and the names of the attempts that succeeded
+  with one. Names are printed without the case prefix because `mask-identifiers.sh` blanks the value
+  after `token:`.
+* A set-up gap, not a fault: without `APPMUX_TEST_REGISTRY_USER` (the appmux SP's application id)
+  the snooper's registry login without a token is *not attempted*, and a skipped attempt fails the
+  containment test by design. The remote wrapper now exports it.
+* A run longer than one hour outlived the CLI token. `ops_session.TokenRenewal` asks the CLI for a
+  fresh token (`databricks auth token --force-refresh`) ten minutes before the token expires, for
+  every admin-API call of a run started with `APPMUX_TEST_TOKEN_PROFILE`; the wrapper sets it. The
+  load generators of `test_zero_downtime` and the Lakebase test still hold only the first token.
+
+The expiry run started with a CLI token that had 18 minutes left and ended 53 minutes after that
+token would have expired, with no `302` and no refused call in the log, so the renewal worked in
+practice. The log does not record the renewals themselves; that is inferred from the polls through
+the proxy, which need a valid bearer token, still succeeding.
+
+Not covered by this run: `T147` asks the shared-SP child to keep calling "across a token expiry
+using the short advertised lifetime of spike 10". The advertised lifetime of the deployed appmux is
+the real hour, so the test waited it out instead. The two containment tests stay red on TD-027, so
+T147 is not ticked.
