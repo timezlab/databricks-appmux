@@ -262,7 +262,7 @@ def test_a_child_that_exits_at_start_fails_the_release_and_keeps_the_route_close
     detail = appmux.watch_release(slug, release_no)
 
     _assert_failed_and_never_routed(appmux, slug, detail)
-    assert "status 3" in detail["status_reason"]
+    assert "exited with code 3" in detail["status_reason"]
     assert "startup_crash: exiting at start with status 3" in (detail["build_log_tail"] or "")
 
 

@@ -21,7 +21,8 @@ the connection closes.
 It logs in as the owner of the token ``scripts/run-remote-tests.sh`` passes (their own Lakebase
 role, the token as the password: how a platform admin's writes log in), so it needs what a platform
 admin has, plus the right to create temporary tables, which PostgreSQL gives every role by default
-(not checked on Lakebase yet). Marked ``integration`` and skipped unless
+(the platform admin's role on the Free Edition dev App's Lakebase had it, 2026-11-04). Marked
+``integration`` and skipped unless
 ``APPMUX_TEST_CONTAINER=1``. Set-up, local and never committed (the test fails loudly when one is
 missing):
 
@@ -29,10 +30,12 @@ missing):
 * ``APPMUX_TEST_REGISTRY_HOST``: the Lakebase host of the App's database (the App's ``PGHOST``);
 * ``APPMUX_TEST_REGISTRY_DATABASE``: its database name (the App's ``APPMUX_LAKEBASE_DATABASE``).
 
-Not run on Lakebase yet. On 2026-11-03 the three passed against a local PostgreSQL 17 with SSL,
-with these variables pointed at it, beside a permanent ``metrics`` table that they left as it was.
-Two mutations of the SQL each failed one of them: steps counted from the window's start, and ties
-ranked by slug in descending order.
+On 2026-11-04 all four passed on the Free Edition dev App's Lakebase (27 s, from the dev machine
+with the host and database of the App in the environment), each on its own temporary table as the
+test is built to do. On 2026-11-03 the first three had passed against a local PostgreSQL 17 with
+SSL, with these variables pointed at it, beside a permanent ``metrics`` table that they left as it
+was. Two mutations of the SQL each failed one of them: steps counted from the window's start, and
+ties ranked by slug in descending order.
 """
 
 from __future__ import annotations

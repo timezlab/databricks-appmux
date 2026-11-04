@@ -62,7 +62,6 @@ pytestmark = pytest.mark.integration
 GRACE: Final = "grace.requests@example.com"
 CAROL: Final = "carol.requests@example.com"
 SLUG_SUFFIX_BYTES: Final = 3
-BUDGET_MB: Final = 256
 NEW_PREFIX_WAIT_S: Final = 180.0
 POLL_INTERVAL_S: Final = 1.0
 TAKEN_NOTE_FRAGMENT: Final = "is already taken (automatic)"
@@ -80,7 +79,6 @@ def register_request_body(*, slug: str, folder: str) -> dict[str, Any]:
         "slug": slug,
         "display_name": f"Requests {slug}",
         "source_path": folder,
-        "memory_budget_mb": BUDGET_MB,
     }
     return create_body("register", slug, payload, "the walkthrough asks for a new app")
 
