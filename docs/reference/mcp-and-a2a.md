@@ -163,8 +163,15 @@ What follows:
   wrong in general. `databricks_me` then acts as the service principal.
 - **The caller App is not identifiable.** The service principal is appmux's shared one, so the hub
   cannot tell `console` from any other delegated child.
-- **Unexplained**: `X-Forwarded-Preferred-Username` was `anonymous` for the owner and the e-mail for
-  the second account. The cause was not investigated.
+- **`X-Forwarded-Preferred-Username` is not always sent, and the cause was not found.** The hub shows
+  `anonymous` when the header is missing (its own placeholder), which is what the owner got. Measured
+  again on 2026-11-04 with the CLI's OAuth bearer token as the owner: the child receives
+  `X-Forwarded-Email` and `X-Forwarded-User` and no `X-Forwarded-Preferred-Username`, so the owner's
+  missing header is not specific to the browser. appmux forwards the header exactly as the proxy gave it
+  (`identity/actor.py`), so the proxy did not send it. The second account's call carried it. That
+  leaves a difference between the two accounts (a property of the account, not of the kind of call) as
+  the likely cause; it was not isolated, because the Free Edition workspace has only these two
+  accounts. A child must not depend on that header; `X-Forwarded-Email` is the identity.
 
 ### The console as its own App
 

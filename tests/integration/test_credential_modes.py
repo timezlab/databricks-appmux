@@ -26,20 +26,27 @@ What the tests assert, and what they leave to a person:
   only attempt allowed to succeed is the registry login, the accepted residual of design 8.4 (the
   appmux SP's low-privilege registry role, TD-002 in ``docs/tech-debt.md``); any other success, an
   inconclusive attempt or a skipped one fails the test, because a probe that cannot see must not
-  pass. Listing secret scopes is not in that residual. The first run (2026-11-04, against the dev
-  App on the Free Edition workspace) found that a child's token lists every scope name in both
-  modes while reading any value stays refused, so both containment tests fail on ``list_scopes``
-  until the owner decides: TD-027 in ``docs/tech-debt.md``. A success there is a finding to record,
-  not a number to loosen.
+  pass. Listing secret scope names is a second accepted success (``PLATFORM_VISIBILITY``, TD-027 in
+  ``docs/tech-debt.md``): the platform lets every principal list the names, and a value is protected
+  by the READ grant on its scope alone. That claim is pinned by the two grant tests below, not
+  assumed. Any other success is a finding to record, not a number to loosen;
+* the READ grant decides whether a child reads a foreign secret (one test per mode). The snooper's
+  read is refused; the test gives the child's service principal READ with the Databricks CLI, the
+  read succeeds; it takes the grant back and the read is refused again. A grant is seen at once,
+  a revoke is not: for minutes the same principal is allowed and refused in turn (measured
+  2026-11-04, 281 s; design 8.3), so a refusal counts only after it has lasted
+  ``REFUSAL_STABLE_FOR_S``. The containment tests wait the same way before they read the report, so
+  the lag of a previous run's revoke cannot look like a breach.
 
 It does not run in the default gate: it is marked ``integration`` and skipped unless
 ``APPMUX_TEST_CONTAINER=1``. Two ways to run it, both through ``ops_session.py``:
 ``scripts/run-remote-tests.sh`` runs it from the dev machine against the deployed App as the owner
 of the CLI token (the way the 2026-11-04 run went; results in ``specs/001-appmux-v1/spikes/``),
 and on a container the test can play the Databricks proxy itself with identity headers. A run
-longer than one token life renews the CLI token (``APPMUX_TEST_TOKEN_PROFILE``). No token, client
-id or secret value is read, printed or asserted by value; a report that repeated the admin's token
-fails.
+longer than one token life renews the CLI token (``APPMUX_TEST_TOKEN_PROFILE``), and the two grant
+tests need that profile to be a workspace admin's, because they run ``databricks secrets put-acl``
+and ``delete-acl`` with it. No token, client id or secret value is read, printed or asserted by
+value; a report that repeated the admin's token fails.
 
 Set-up the run needs (it fails loudly when one is missing, instead of passing on nothing). The
 platform setting ``attach_check_warehouse_id`` must name a SQL warehouse the admin can use, because
@@ -65,9 +72,11 @@ from __future__ import annotations
 
 import os
 import secrets
+import subprocess
 import time
 import warnings
 from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -75,6 +84,7 @@ import httpx
 import pytest
 from ops_session import (
     REQUEST_TIMEOUT_S,
+    TOKEN_PROFILE_VARIABLE,
     AdminSession,
     config_body,
     error_code,
@@ -99,6 +109,39 @@ DEFAULT_POLL_S: Final = 300.0
 SLUG_SUFFIX_BYTES: Final = 3
 # Design 8.4, exposure (1): the appmux SP's registry role. Nothing else may succeed with its token.
 ACCEPTED_SHARED_SP_RESIDUAL: Final = frozenset({"with token: registry login"})
+# The platform lets every principal list the NAMES of the workspace's secret scopes; a value is
+# protected by the READ grant on its scope and by nothing else (TD-027, design 8.4). Measured on
+# 2026-11-04: a principal with no grant lists a scope and gets 403 reading a value; a READ grant is
+# seen on the first read after it; a revoke is NOT: for 281 s the same principal's reads alternated
+# between 200 and 403 (22 changes, the longest run of 403 lasted 23 s), then stayed 403 (design 8.3
+# recorded 163 s and about six minutes earlier). A listing exposes no value, so it is no breach; the
+# two tests that follow the grants pin the control itself.
+PLATFORM_VISIBILITY: Final = frozenset({"with token: list_scopes"})
+CLI_TIMEOUT_S: Final = 60.0
+READ_FOLLOWS_GRANT_WAIT_S: Final = 60.0
+# After a revoke the first refusal proves nothing; the read must stay refused for a window longer
+# than the longest refusal seen in the alternating phase, within a limit above the longest phase.
+REFUSAL_STABLE_FOR_S: Final = 60.0
+REVOKE_SETTLES_WITHIN_S: Final = 600.0
+
+
+@dataclass(slots=True)
+class RefusalWatch:
+    """Settled once reads have been refused without a break for ``stable_for_s`` seconds.
+
+    Any other outcome, a success or a report that lacks the read, starts the count again.
+    """
+
+    stable_for_s: float
+    refused_since: float | None = None
+
+    def see(self, outcome: str, now: float) -> bool:
+        if outcome != "refused":
+            self.refused_since = None
+            return False
+        if self.refused_since is None:
+            self.refused_since = now
+        return now - self.refused_since >= self.stable_for_s
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +187,11 @@ def run_setup() -> Setup:
     )
 
 
+@pytest.fixture(scope="module")
+def cli_profile() -> str:
+    return _required(TOKEN_PROFILE_VARIABLE)
+
+
 def snooper_env(setup: Setup) -> list[dict[str, Any]]:
     """The env entries that aim the snooper (all non-secret; see its docstring)."""
     entries = {
@@ -173,6 +221,70 @@ def attempts_without_token(report: dict[str, Any]) -> str:
         f"{name}: {result.get('outcome')} ({result.get('detail')})"
         for name, result in attempts.items()
     )
+
+
+def read_outcome(report: dict[str, Any], reference: str) -> str:
+    """The outcome of the snooper's read of ``reference`` made with the token."""
+    attempts: dict[str, Any] = report["with_token"] or {}
+    return str(attempts.get(f"read {reference}", {}).get("outcome", "absent from the report"))
+
+
+def assert_nothing_beyond(report: dict[str, Any], accepted: frozenset[str]) -> None:
+    """With the token every attempt ran, every secret read was refused, only ``accepted`` won."""
+    assert report["inconclusive"] == [] and report["not_attempted"] == [], (
+        f"inconclusive {attempt_names(report['inconclusive'])}, "
+        f"not attempted {attempt_names(report['not_attempted'])}"
+    )
+    reads = {
+        name: result for name, result in report["with_token"].items() if name.startswith("read ")
+    }
+    assert reads, (
+        "the snooper tried no secret read; APPMUX_TEST_FOREIGN_SECRET_REFS was not applied"
+    )
+    assert {result["outcome"] for result in reads.values()} == {"refused"}
+    beyond = set(report["succeeded"]) - accepted
+    assert not beyond, (
+        f"succeeded beyond what is accepted: {attempt_names(beyond)}; "
+        f"accepted are {attempt_names(accepted)}"
+    )
+
+
+def secrets_cli(profile: str, *arguments: str) -> int:
+    """Run ``databricks secrets <arguments>`` for the CLI ``profile``; returns the exit code.
+
+    The output is dropped: it can carry the workspace address, and nothing in it is needed.
+    """
+    done = subprocess.run(
+        ["databricks", "secrets", *arguments, "--profile", profile],
+        capture_output=True,
+        check=False,
+        timeout=CLI_TIMEOUT_S,
+    )
+    return done.returncode
+
+
+@contextmanager
+def read_granted(profile: str, scope: str, application_id: str) -> Iterator[None]:
+    """Give a principal READ on a secret scope for the block, then take it back.
+
+    Done with the Databricks CLI as the owner of the CLI token (a workspace admin), the way a
+    manager would. The revoke runs in ``finally``, so a failed assertion leaves no grant behind.
+    """
+    granted = secrets_cli(profile, "put-acl", scope, application_id, "READ")
+    if granted != 0:
+        pytest.fail(
+            f"could not grant READ (exit code {granted}); {TOKEN_PROFILE_VARIABLE} must name the "
+            "CLI profile of a workspace admin"
+        )
+    try:
+        yield
+    finally:
+        revoked = secrets_cli(profile, "delete-acl", scope, application_id)
+        if revoked != 0:
+            warnings.warn(
+                f"could not revoke the READ grant (exit code {revoked}); revoke it by hand",
+                stacklevel=2,
+            )
 
 
 class Children:
@@ -267,6 +379,71 @@ class Children:
             time.sleep(POLL_PAUSE_S)
         pytest.fail(f"/{slug}/report: {last} after {REPORT_READY_WAIT_S:g} s")
 
+    def wait_for_the_read_to_succeed(self, slug: str, reference: str) -> None:
+        """Poll ``/report`` until the child's read of ``reference`` succeeds.
+
+        A grant is seen on the first read after it, so the limit is short.
+        """
+        deadline = time.monotonic() + READ_FOLLOWS_GRANT_WAIT_S
+        while True:
+            outcome = read_outcome(self.report(slug), reference)
+            if outcome == "succeeded":
+                return
+            if time.monotonic() >= deadline:
+                pytest.fail(
+                    f"/{slug}/report: the read was {outcome!r}, expected 'succeeded', "
+                    f"after {READ_FOLLOWS_GRANT_WAIT_S:g} s"
+                )
+            time.sleep(POLL_PAUSE_S)
+
+    def wait_for_a_settled_refusal(self, slug: str, reference: str) -> None:
+        """Poll ``/report`` until the read of ``reference`` stays refused for a whole window.
+
+        A revoke reaches the Secrets API node by node: for minutes the same principal is allowed
+        and refused in turn (see ``REFUSAL_STABLE_FOR_S``), so one refusal does not mean the
+        revoke has taken effect.
+        """
+        watch = RefusalWatch(stable_for_s=REFUSAL_STABLE_FOR_S)
+        deadline = time.monotonic() + REVOKE_SETTLES_WITHIN_S
+        while True:
+            outcome = read_outcome(self.report(slug), reference)
+            now = time.monotonic()
+            if watch.see(outcome, now):
+                return
+            if now >= deadline:
+                pytest.fail(
+                    f"/{slug}/report: the read was still {outcome!r} and had not stayed refused "
+                    f"for {REFUSAL_STABLE_FOR_S:g} s after {REVOKE_SETTLES_WITHIN_S:g} s"
+                )
+            time.sleep(POLL_PAUSE_S)
+
+    def foreign_reference(self) -> str:
+        """The first ``scope/key`` of the foreign secrets, the one the grant tests toggle."""
+        return self.setup.foreign_refs.split(",")[0].strip()
+
+    def settled_report(self, slug: str) -> dict[str, Any]:
+        """The child's report once any revoke made by an earlier run has taken effect.
+
+        A run that ends right after a revoke (this module's grant tests, or one that failed) leaves
+        the principal readable on and off for minutes; without this wait the next run's
+        containment test would read that as a breach.
+        """
+        self.wait_for_a_settled_refusal(slug, self.foreign_reference())
+        return self.report(slug)
+
+    def assert_a_read_follows_the_grant(self, slug: str, application_id: str, profile: str) -> None:
+        """A foreign secret is refused, then read while the principal holds READ, then refused.
+
+        The refusal is awaited before the grant too, so the lag of an earlier revoke cannot pass
+        for "no grant".
+        """
+        reference = self.foreign_reference()
+        scope = reference.partition("/")[0]
+        self.wait_for_a_settled_refusal(slug, reference)
+        with read_granted(profile, scope, application_id):
+            self.wait_for_the_read_to_succeed(slug, reference)
+        self.wait_for_a_settled_refusal(slug, reference)
+
     def restore(self) -> None:
         if self.shared_sp_before is True:
             return
@@ -333,13 +510,17 @@ def test_an_own_sp_child_calls_the_api_as_its_own_service_principal(
 def test_an_own_sp_child_reaches_neither_other_apps_secrets_nor_the_registry(
     children: Children, own_sp_child: str
 ) -> None:
-    report = children.report(own_sp_child)
+    report = children.settled_report(own_sp_child)
 
     assert report["without_token_contained"] is True, attempts_without_token(report)
-    assert report["with_token_contained"] is True, (
-        f"succeeded {attempt_names(report['succeeded'])}, "
-        f"inconclusive {attempt_names(report['inconclusive'])}, "
-        f"not attempted {attempt_names(report['not_attempted'])}"
+    assert_nothing_beyond(report, PLATFORM_VISIBILITY)
+
+
+def test_an_own_sp_child_reads_a_foreign_secret_exactly_while_its_service_principal_holds_read(
+    children: Children, own_sp_child: str, run_setup: Setup, cli_profile: str
+) -> None:
+    children.assert_a_read_follows_the_grant(
+        own_sp_child, run_setup.own_application_id, cli_profile
     )
 
 
@@ -355,21 +536,18 @@ def test_a_shared_sp_child_calls_the_api_as_the_appmux_service_principal(
 def test_a_shared_sp_child_reaches_neither_other_apps_secrets_nor_the_registry_beyond_the_residual(
     children: Children, shared_sp_child: str
 ) -> None:
-    report = children.report(shared_sp_child)
+    report = children.settled_report(shared_sp_child)
 
     assert report["without_token_contained"] is True, attempts_without_token(report)
-    assert report["inconclusive"] == [] and report["not_attempted"] == []
-    reads = {
-        name: result for name, result in report["with_token"].items() if name.startswith("read ")
-    }
-    assert reads, (
-        "the snooper tried no secret read; APPMUX_TEST_FOREIGN_SECRET_REFS was not applied"
-    )
-    assert {result["outcome"] for result in reads.values()} == {"refused"}
-    beyond_the_residual = set(report["succeeded"]) - ACCEPTED_SHARED_SP_RESIDUAL
-    assert not beyond_the_residual, (
-        f"succeeded beyond the residual: {attempt_names(beyond_the_residual)}; "
-        f"only {attempt_names(ACCEPTED_SHARED_SP_RESIDUAL)} is accepted"
+    assert_nothing_beyond(report, ACCEPTED_SHARED_SP_RESIDUAL | PLATFORM_VISIBILITY)
+
+
+def test_a_shared_sp_child_reads_a_foreign_secret_exactly_while_the_appmux_sp_holds_read(
+    children: Children, shared_sp_child: str, run_setup: Setup, cli_profile: str
+) -> None:
+    # Design 8.4, exposure (2): the shared-SP child reaches every scope the appmux SP can READ.
+    children.assert_a_read_follows_the_grant(
+        shared_sp_child, run_setup.appmux_application_id, cli_profile
     )
 
 

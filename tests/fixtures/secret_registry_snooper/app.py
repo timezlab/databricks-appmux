@@ -61,7 +61,10 @@ and nowhere else. Each attempt is ``{"outcome": ..., "detail": ...}`` where ``ou
     with_token_contained       the same with the token, or null when no token was delivered. With a
                                shared-SP token a ``"succeeded"`` is the accepted residual of design
                                8.4 (the appmux SP's reach) and TD-002, to be judged by the test, not
-                               hidden here.
+                               hidden here. The same holds for ``list_scopes``: the platform lets
+                               every principal list scope NAMES (TD-027), so it reads
+                               ``"succeeded"`` with any token and this flag false; the test accepts
+                               that one attempt by name and requires every ``read`` to be refused.
 """
 
 from __future__ import annotations

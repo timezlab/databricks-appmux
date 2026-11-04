@@ -1710,7 +1710,9 @@ neighbour's p95 was 247 ms idle and 278 ms beside the hostile children, over 21 
 Python: `ruff format --check` (389 files), `ruff check`, `mypy src` (129 files) clean; `pytest
 tests/unit tests/contract tests/load`: 7 836 passed in 91 s, with one third-party deprecation warning
 (Starlette's test client, an `anyio` alias). The count includes the tests added for token renewal
-and for the snooper labels (below); the first run on this head passed 7 829.
+and for the snooper labels (below); the first run on this head passed 7 829. The head that adds the
+grant tests (see the credential-modes section) passes 7 840 in 95 s, with the same format, lint and
+type checks clean.
 UI: `typecheck`, `lint`, `format:check` clean; `npm test` 158 files, 2 870 tests; `npm run test:export`
 3 files, 63 tests; `npm run build` ok. `npm run test:e2e`: the first full run passed 809 and failed
 1 (`csp.spec.ts` `app-deployments` at 1280 px light, "console errors" expected `[]`); the same spec
@@ -1721,7 +1723,7 @@ recorded as a flake, not as understood. If it comes back, keep the run's `error-
 
 ## Credential modes from the dev machine (2026-11-04)
 
-T147 (`tests/integration/test_credential_modes.py`, five tests) ran against the deployed dev App on
+T147 (`tests/integration/test_credential_modes.py`, seven tests) ran against the deployed dev App on
 the Free Edition workspace, through `scripts/run-remote-tests.sh` as the owner of the CLI token.
 The owner authorised creating the test resources on the Free Edition workspace that day ("create the
 resources needed to test, such as a service principal, secrets, anything within the Free Edition
@@ -1745,17 +1747,42 @@ both scopes still exist after the run; removing them is deleting the two scopes 
 |---|---|
 | `test_an_own_sp_child_calls_the_api_as_its_own_service_principal` | passed: the child's token belongs to the throwaway principal |
 | `test_a_shared_sp_child_calls_the_api_as_the_appmux_service_principal` | passed: the child's token belongs to the appmux App's service principal |
-| `test_an_own_sp_child_reaches_neither_other_apps_secrets_nor_the_registry` | failed: every attempt without a token was refused, and reading a secret value with the token was refused (`403`), but `list_scopes` with the token succeeded |
-| `test_a_shared_sp_child_reaches_neither_other_apps_secrets_nor_the_registry_beyond_the_residual` | failed for the same reason; the registry login with the token succeeded, which is the accepted residual of [TD-002](../../../docs/tech-debt.md#td-002-an-obo-childs-token-reaches-the-registry). After the spelling fix below, a rerun (99 s) names `list_scopes` as the only success beyond the residual |
+| `test_an_own_sp_child_reaches_neither_other_apps_secrets_nor_the_registry` | first run failed: every attempt without a token was refused, and reading a secret value with the token was refused (`403`), but `list_scopes` with the token succeeded. Passes once `list_scopes` is accepted by name (below) |
+| `test_a_shared_sp_child_reaches_neither_other_apps_secrets_nor_the_registry_beyond_the_residual` | first run failed for the same reason; the registry login with the token succeeded, which is the accepted residual of [TD-002](../../../docs/tech-debt.md#td-002-an-obo-childs-token-reaches-the-registry). After the spelling fix below, a rerun (99 s) named `list_scopes` as the only success beyond the residual. Passes with both accepted |
+| `test_an_own_sp_child_reads_a_foreign_secret_exactly_while_its_service_principal_holds_read` | new; passes: refused, `READ` given with the CLI and the read succeeds, `READ` taken back and the read stays refused for 60 s without a break |
+| `test_a_shared_sp_child_reads_a_foreign_secret_exactly_while_the_appmux_sp_holds_read` | new; passes the same way for the appmux service principal |
 | `test_a_shared_sp_child_keeps_calling_the_api_across_a_token_expiry` | passed in 4 281 s (1 h 11 min): the child asked the API as the appmux service principal at the start and every 300 s after, for longer than the 3 600 s a minted token lives, so the file appmux keeps current was renewed |
+
+The six tests other than the expiry run passed together in 17 min 34 s (the last run, on the head
+that carries the grant tests). The expiry test is the 71-minute run above, on the earlier head; its
+body has not changed since.
+
+### Listing is visibility, the READ grant is use (the owner's question)
 
 The `list_scopes` success is the platform's behaviour, not a leak through appmux: the throwaway
 principal, asked directly with its own OAuth token, lists both scope names (the one it holds `READ`
-on and the one nobody granted it) and gets `403` reading a value from either. So a principal with
-no grant on a scope still sees its name (one principal measured). The finding is recorded as
-[TD-027](../../../docs/tech-debt.md#td-027-a-childs-token-lists-the-names-of-every-secret-scope-in-the-workspace)
-and the owner decides whether `list_scopes` joins the accepted residual of design 8.4; the two
-containment tests stay red until then, because the test must not be loosened to pass.
+on and the one nobody granted it) and gets `403` reading a value from either. The owner's question
+was whether reading still needs the grant: refuse, give `READ`, see whether it reads. Measured with
+the throwaway principal as itself (`acl-control` and `acl-lag` scripts, not committed; they print
+statuses and seconds only) and then through the children:
+
+| Step | Result |
+|---|---|
+| list scopes, no grant | `200`, the scope nobody granted it is in the list |
+| read a value, no grant | `403` |
+| `READ` granted with `databricks secrets put-acl` | the read answers `200` from the first call after it |
+| `READ` taken back with `delete-acl` | the answers alternated between `200` and `403` 22 times in 281 s (first change after 1 s; the longest run of `403` before the end lasted 23 s), then stayed `403` for the remaining 319 s of a 600 s watch |
+
+So the grant alone decides use, and the listing shows names only: accepted as the platform's
+behaviour ([TD-027](../../../docs/tech-debt.md#td-027-a-childs-token-lists-the-names-of-every-secret-scope-in-the-workspace)).
+The revoke lag is the one design 8.3 recorded (163 s; about six minutes); this watch adds that the
+first denial is not the end of it. The run before the last one failed two own-SP tests, which fits that
+lag: its first containment test read the foreign secret in a run that started shortly after a
+measurement script had revoked `READ` (the minutes between them were not logged), no `READ` was
+left on the scope (checked afterwards), and its grant test waited only 60 s for a refusal after its
+own revoke. The tests now wait for 60 s of unbroken refusal,
+within 600 s, before the grant and after the revoke, and the containment tests wait the same way
+before they read the report; `RefusalWatch` carries the rule and has unit tests.
 
 ### What was wrong with the test, not the product
 
@@ -1780,7 +1807,14 @@ token would have expired, with no `302` and no refused call in the log, so the r
 practice. The log does not record the renewals themselves; that is inferred from the polls through
 the proxy, which need a valid bearer token, still succeeding.
 
-Not covered by this run: `T147` asks the shared-SP child to keep calling "across a token expiry
-using the short advertised lifetime of spike 10". The advertised lifetime of the deployed appmux is
-the real hour, so the test waited it out instead. The two containment tests stay red on TD-027, so
-T147 is not ticked.
+Not as written: `T147` asks the shared-SP child to keep calling "across a token expiry using the
+short advertised lifetime of spike 10". The advertised lifetime of the deployed appmux is the real
+hour, so the test waited it out instead.
+
+### Other items measured on the same day
+
+* `X-Forwarded-Preferred-Username`: with the CLI's bearer token as the owner, a child receives
+  `X-Forwarded-Email` and `X-Forwarded-User` and no `X-Forwarded-Preferred-Username`; the hub's
+  "anonymous" is its own placeholder for a missing header. appmux forwards the header as the
+  proxy gave it, so the proxy did not send it. Why the second account's call had it was not
+  isolated ([reference](../../../docs/reference/mcp-and-a2a.md#the-same-check-from-a-browser)).
