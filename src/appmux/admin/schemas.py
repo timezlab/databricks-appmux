@@ -802,7 +802,7 @@ class ResourceSuggestion(_Body):
 class ResourceSuggestionList(_Body):
     items: list[ResourceSuggestion]
     truncated: bool
-    source: Literal["caller_token", "unavailable", "not_supported"]
+    source: Literal["caller_token", "platform_token", "unavailable", "not_supported"]
     note: str | None
 
 

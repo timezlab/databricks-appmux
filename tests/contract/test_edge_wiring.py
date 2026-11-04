@@ -296,6 +296,55 @@ async def test_the_resource_pickers_are_served_when_a_workspace_client_is_given(
     assert [item["target"] for item in suggestions.json()["items"]] == ["w-1"]
 
 
+PLATFORM_TOKEN: Final = "platform-token-for-the-wiring-test"  # noqa: S105 - a fixed fake value
+
+
+def workspace_client_that_lists_secrets_only_for_the_platform() -> httpx.AsyncClient:
+    """A workspace whose secret scopes answer ``403`` to a person and ``200`` to appmux's token."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/api/2.0/secrets/scopes/list":
+            return httpx.Response(404, json={"error_code": "NOT_FOUND", "message": "no"})
+        if request.headers.get("authorization") != f"Bearer {PLATFORM_TOKEN}":
+            return httpx.Response(403, json={"error_code": "PERMISSION_DENIED", "message": "no"})
+        return httpx.Response(200, json={"scopes": [{"name": "kv"}]})
+
+    return httpx.AsyncClient(
+        base_url="https://workspace.example.invalid", transport=httpx.MockTransport(answer)
+    )
+
+
+async def test_the_pickers_fall_back_to_the_platform_token_when_the_edge_is_given_one() -> None:
+    async def platform_token() -> SecretStr:
+        return SecretStr(PLATFORM_TOKEN)
+
+    app = create_edge_app(
+        registry=seeded_registry(),
+        group_source=FakeGroups(),
+        workspace_client=workspace_client_that_lists_secrets_only_for_the_platform(),
+        platform_token=platform_token,
+    )
+
+    reply = await get_as_alice(app, "/resources/suggestions", type="secret")
+
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["source"] == "platform_token"
+    assert [item["target"] for item in reply.json()["items"]] == ["kv/"]
+
+
+async def test_without_a_platform_token_a_refused_picker_stays_unavailable() -> None:
+    app = create_edge_app(
+        registry=seeded_registry(),
+        group_source=FakeGroups(),
+        workspace_client=workspace_client_that_lists_secrets_only_for_the_platform(),
+    )
+
+    reply = await get_as_alice(app, "/resources/suggestions", type="secret")
+
+    assert reply.status_code == 200, reply.text
+    assert (reply.json()["source"], reply.json()["items"]) == ("unavailable", [])
+
+
 async def test_without_a_workspace_client_the_edge_has_neither_the_browser_nor_the_pickers() -> (
     None
 ):

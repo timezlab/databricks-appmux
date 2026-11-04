@@ -18,7 +18,7 @@ because that gate never reopens and answers ``503`` on ``/_appmux/`` too.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import TYPE_CHECKING, Final
 
 from starlette.applications import Starlette
@@ -73,6 +73,7 @@ from appmux.upstream.client import UpstreamClient
 
 if TYPE_CHECKING:
     import httpx
+    from pydantic import SecretStr
 
 ADMIN_API_MOUNT: Final = "/_appmux/api/v1"
 ADMIN_PATH_ROOT: Final = "/_appmux"
@@ -197,6 +198,7 @@ def create_edge_app(
     rename_cascade: RenameCascade | None = None,
     memory: MemorySource | None = None,
     workspace_client: httpx.AsyncClient | None = None,
+    platform_token: Callable[[], Awaitable[SecretStr]] | None = None,
     principal_directory: PrincipalDirectory | None = None,
     app_output: AppOutput | None = None,
     child_setup: ChildSetup | None = None,
@@ -236,6 +238,9 @@ def create_edge_app(
     * ``source_store`` (the content store) mounts the read-only source viewer;
     * ``workspace_client`` (the client every call to the workspace goes through) mounts the
       folder browser and the resource pickers, which read with the visitor's own token;
+      ``platform_token`` (appmux's own service-principal token) is what a picker falls back to
+      when that token is refused (secrets, experiments, jobs, functions, volumes), and without it
+      a refused picker stays ``unavailable``;
     * ``principal_directory`` (``identity.directory.DirectoryLookup``) mounts ``GET /principals``;
     * ``app_output`` (the reconciler's output rings and run states) mounts
       ``GET /apps/{app}/logs``, and ``child_setup`` (the releases folder and the platform values)
@@ -298,7 +303,7 @@ def create_edge_app(
         providers.append(SourceViewerRoutes(source_store))
     if workspace_client is not None:
         providers.append(WorkspaceBrowseRoutes(WorkspaceHttpApi(workspace_client)))
-        providers.append(ResourceSuggestionRoutes(workspace_client))
+        providers.append(ResourceSuggestionRoutes(workspace_client, platform_token=platform_token))
     if principal_directory is not None:
         providers.append(PrincipalRoutes(principal_directory))
     if app_output is not None:

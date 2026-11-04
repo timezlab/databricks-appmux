@@ -230,12 +230,13 @@ def _load_wiring(
     from appmux.upstream.client import UpstreamClient
 
     service_principal_token = _service_principal_token(settings)
+    service_principal_token_async = _as_async_token(service_principal_token)
     registry = RegistryClient(
         host=settings.pghost,
         port=LAKEBASE_PORT,
         database=settings.appmux_lakebase_database,
         user=settings.databricks_client_id,  # worked on Free Edition, see LAKEBASE_PORT
-        token_provider=_as_async_token(service_principal_token),
+        token_provider=service_principal_token_async,
     )
 
     self_check = SelfCheckState(_canary_runner(settings))
@@ -248,7 +249,7 @@ def _load_wiring(
         registry=registry,
         workspace=workspace,
         service_principal_token=service_principal_token,
-        service_principal_token_async=_as_async_token(service_principal_token),
+        service_principal_token_async=service_principal_token_async,
         routes=routes,
         upstream=upstream,
         closer=connections,
@@ -282,6 +283,7 @@ def _load_wiring(
             rename_cascade=service,
             memory=service.memory_ledger,
             workspace_client=workspace,
+            platform_token=service_principal_token_async,
             principal_directory=service.principal_directory,
             app_output=service,
             child_setup=service.child_setup,
