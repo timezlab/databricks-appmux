@@ -28,8 +28,22 @@
 #   APPMUX_FIXTURES_FOLDER     workspace folder for the fixtures. Default:
 #                              $APPMUX_WORKSPACE_FOLDER-fixtures.
 #   APPMUX_REPO_ROOT           the repository root. Default: the parent of scripts/.
+#   APPMUX_TEST_RATE_PER_S     requests a second of the load tests. Default here: 20. The tests'
+#                              own default is 500, which through the platform's proxy and this
+#                              machine's network only queues (2026-11-04: p95 about 52 s and 40
+#                              requests a second actually served), so a remote run measures nothing.
 # Any other APPMUX_TEST_* variable a test names (a warehouse id, a secret reference, ...) is
 # passed on as it is in your environment.
+#
+# The token is asked for at the start and lasts at most an hour (the CLI hands out its cached one
+# until it is close to expiry, so it may have far less left). The script prints how long it has. The
+# admin-API calls of the tests (tests/integration/ops_session.py) ask the CLI again when the token
+# has under ten minutes left, because pytest is given the profile's name in APPMUX_TEST_TOKEN_PROFILE
+# (an environment variable, never an argument), so a 70-minute test such as the shared-SP token cycle
+# can run. Two things still hold only the first token: the load generators of test_zero_downtime.py
+# and the Lakebase test, which connects with it as a password. A run of those that outlasts the
+# token gets a 302 (or a login failure) on every call after that, and the tests then fail with
+# "got 302", which looks like a product fault and is not. Start them with at least 50 minutes left.
 #
 # The address and the token never appear in the output or on a command line: the token reaches
 # pytest only through its environment, and everything pytest and the CLI print passes through
@@ -57,6 +71,7 @@ fixtures_folder=${APPMUX_FIXTURES_FOLDER:-$APPMUX_WORKSPACE_FOLDER-fixtures}
 [[ "$fixtures_folder" == /Workspace/* ]] \
   || die "APPMUX_FIXTURES_FOLDER (default: APPMUX_WORKSPACE_FOLDER plus -fixtures) must start with /Workspace/"
 
+default_rate_per_s=20
 app_name=${APPMUX_APP_NAME:-appmux}
 repo_root=${APPMUX_REPO_ROOT:-$(dirname -- "$script_dir")}
 pytest_arguments=("$@")
@@ -100,6 +115,22 @@ token_json=$(call_cli auth token -o json) \
 user_token=$(printf '%s' "$token_json" | read_field access_token)
 [[ -n "$user_token" ]] || die "the CLI gave no access token (log in again with the CLI for this profile)"
 
+# Only a diagnostic: when the expiry cannot be read the run still goes on, and says so.
+token_minutes_left=$(printf '%s' "$token_json" | python3 -I -c '
+import json
+import sys
+from datetime import datetime, timezone
+
+try:
+    expiry = datetime.fromisoformat(json.load(sys.stdin)["expiry"])
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    print(int((expiry - datetime.now(timezone.utc)).total_seconds() // 60))
+except (KeyError, ValueError):
+    print("unknown")
+')
+printf 'the token has %s minutes left\n' "$token_minutes_left"
+
 # The fixtures go up from a copy: the wheels of the offline-install ones and of pkg_env_writer
 # (it needs an overlay to probe) are built into it (they are never committed), bytecode is left out, and databricks sync does not read this
 # repository's .gitignore.
@@ -121,4 +152,6 @@ APPMUX_TEST_CONTAINER=1 \
   APPMUX_TEST_BASE_URL="$app_url" \
   APPMUX_TEST_FIXTURES_FOLDER="$fixtures_folder" \
   APPMUX_TEST_USER_TOKEN="$user_token" \
+  APPMUX_TEST_TOKEN_PROFILE="$APPMUX_DATABRICKS_PROFILE" \
+  APPMUX_TEST_RATE_PER_S="${APPMUX_TEST_RATE_PER_S:-$default_rate_per_s}" \
   uv run pytest "${pytest_arguments[@]}" 2>&1 | mask_identifiers

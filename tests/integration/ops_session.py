@@ -23,10 +23,14 @@ two test files import it. The set-up (environment variables) is described by tho
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Final
 from urllib.parse import urlsplit
 
@@ -42,6 +46,9 @@ from appmux.admin.schemas import (
 
 API: Final = "/_appmux/api/v1"
 REMOTE_VARIABLE: Final = "APPMUX_TEST_REMOTE"
+TOKEN_PROFILE_VARIABLE: Final = "APPMUX_TEST_TOKEN_PROFILE"  # noqa: S105 - a variable name, not a credential
+TOKEN_RENEW_MARGIN_S: Final = 600.0
+TOKEN_ASK_TIMEOUT_S: Final = 60.0
 HTTPS_PORT: Final = 443
 REQUEST_TIMEOUT_S: Final = 30.0
 POLL_INTERVAL_S: Final = 1.0
@@ -57,6 +64,73 @@ EGRESS_RULE: Final = {
 _ERROR_TEXT_CHARS: Final = 300
 
 
+class TokenRenewal:
+    """The bearer of a remote run, asked for again from the Databricks CLI when it is near expiry.
+
+    A CLI token lives at most an hour, and a run that polls past it (the shared-SP token cycle of
+    ``test_credential_modes.py`` waits 70 minutes) would get a ``302`` on every call after that.
+    The first call asks the CLI for its cached token, to learn the expiry; from then on, a token
+    within ``TOKEN_RENEW_MARGIN_S`` of expiry is replaced by asking with ``--force-refresh``. That
+    costs one process and uses the login the CLI already holds.
+    Only the profile's name is passed to the CLI, as an argument list (no shell); a failure names
+    neither the profile nor the token.
+    """
+
+    def __init__(
+        self,
+        profile: str,
+        first_token: str,
+        *,
+        run: Callable[..., Any] = subprocess.run,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._profile = profile
+        self._token = first_token
+        self._expires_at_s: float | None = None
+        self._run = run
+        self._clock = clock
+
+    def current(self) -> str:
+        if self._expires_at_s is None:
+            self._ask(force_refresh=False)  # the cached token, to learn when it expires
+        if (
+            self._expires_at_s is not None
+            and self._clock() >= self._expires_at_s - TOKEN_RENEW_MARGIN_S
+        ):
+            self._ask(force_refresh=True)
+        return self._token
+
+    def _ask(self, *, force_refresh: bool) -> None:
+        command = ["databricks", "auth", "token", "--profile", self._profile, "-o", "json"]
+        if force_refresh:
+            # Without it the CLI hands back its cached token until it is closer to expiry than the
+            # margin kept here, and a poll that lands in between would carry a dying token.
+            command.append("--force-refresh")
+        done = self._run(
+            command, capture_output=True, text=True, check=False, timeout=TOKEN_ASK_TIMEOUT_S
+        )
+        if done.returncode != 0:
+            pytest.fail(
+                f"databricks auth token exited {done.returncode} while the run needed a new "
+                "token; log in again with the CLI for this profile",
+                pytrace=False,
+            )
+        try:
+            answer = json.loads(done.stdout)
+            token = str(answer["access_token"])
+            expiry = datetime.fromisoformat(str(answer["expiry"]))
+        except (ValueError, KeyError, TypeError):
+            pytest.fail(
+                "databricks auth token gave no readable token and expiry; log in again with the "
+                "CLI for this profile",
+                pytrace=False,
+            )
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        self._token = token
+        self._expires_at_s = expiry.timestamp()
+
+
 @dataclass(frozen=True, slots=True)
 class Target:
     base_url: str
@@ -66,6 +140,11 @@ class Target:
     fixtures_folder: str
     user_token: str = field(repr=False)  # a credential: never in a message or a repr
     is_remote: bool = False
+    renewal: TokenRenewal | None = field(default=None, repr=False)
+
+    def bearer(self) -> str:
+        """The token to send now: the one the run started with, or a renewed one on a long run."""
+        return self.user_token if self.renewal is None else self.renewal.current()
 
 
 def _required(name: str) -> str:
@@ -101,6 +180,7 @@ def load_target(*, transport: httpx.BaseTransport | None = None) -> Target:
         if remote
         else _required("APPMUX_TEST_ADMIN_EMAIL").lower()
     )
+    profile = os.environ.get(TOKEN_PROFILE_VARIABLE, "").strip()
     return Target(
         base_url=base_url,
         host=parts.hostname,
@@ -109,6 +189,7 @@ def load_target(*, transport: httpx.BaseTransport | None = None) -> Target:
         fixtures_folder=folder,
         user_token=token,
         is_remote=remote,
+        renewal=TokenRenewal(profile, token) if remote and profile else None,
     )
 
 
@@ -162,7 +243,7 @@ def identity_headers(
                 "a remote run acts only as the owner of the bearer token, so it cannot act as "
                 "another person; run this test inside the container"
             )
-        headers["Authorization"] = f"Bearer {target.user_token}"
+        headers["Authorization"] = f"Bearer {target.bearer()}"
         return headers
     headers["X-Forwarded-Email"] = person or target.admin_email
     if with_token:
@@ -227,7 +308,7 @@ class AdminSession:
     ) -> httpx.Response:
         headers = identity_headers(self.target, with_token=with_token, mutating=method != "GET")
         response = self._client.request(method, f"{API}{path}", json=json, headers=headers)
-        assert self.target.user_token not in response.text, (
+        assert self.target.bearer() not in response.text, (
             f"{method} {path}: the answer repeated the access token"
         )
         assert response.status_code in expect, (

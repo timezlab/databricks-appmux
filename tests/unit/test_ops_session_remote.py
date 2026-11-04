@@ -239,3 +239,128 @@ def test_a_session_fails_when_an_answer_repeats_the_token(session: ModuleType) -
 
     with pytest.raises(AssertionError, match="repeated the access token"):
         admin.call("GET", "/apps")
+
+
+# --- a token that outlives one hour ---------------------------------------------------------------
+
+PROFILE = "some-profile"  # a CLI profile name; it must never reach a message
+RENEWED_TOKEN = "renewed-token-placeholder"  # noqa: S105 - an obviously fake placeholder
+NOW_S = 1_000_000.0
+RENEW_MARGIN_S = 600.0
+
+
+class FakeCli:
+    """Stands in for ``databricks auth token``: answers a token that expires ``lifetime_s`` on."""
+
+    def __init__(
+        self, tokens: list[str], *, lifetime_s: float = 3600.0, exit_code: int = 0
+    ) -> None:
+        self.tokens = tokens
+        self.lifetime_s = lifetime_s
+        self.exit_code = exit_code
+        self.asked: list[list[str]] = []
+        self.now_s = NOW_S
+
+    def run(self, command: list[str], **_: object) -> object:
+        import json
+        import subprocess
+        from datetime import UTC, datetime
+
+        self.asked.append(command)
+        if self.exit_code:
+            return subprocess.CompletedProcess(command, self.exit_code, "", f"{PROFILE} failed")
+        expiry = datetime.fromtimestamp(self.now_s + self.lifetime_s, tz=UTC).isoformat()
+        body = json.dumps({"access_token": self.tokens.pop(0), "expiry": expiry})
+        return subprocess.CompletedProcess(command, 0, body, "")
+
+
+def renewal_with(session: ModuleType, cli: FakeCli) -> object:
+    return session.TokenRenewal(PROFILE, TOKEN, run=cli.run, clock=lambda: cli.now_s)
+
+
+def test_a_token_far_from_its_expiry_is_asked_for_once_and_then_kept(session: ModuleType) -> None:
+    cli = FakeCli([TOKEN])
+    renewal = renewal_with(session, cli)
+
+    first = renewal.current()
+    cli.now_s += 600.0
+    second = renewal.current()
+
+    assert (first, second) == (TOKEN, TOKEN)
+    assert len(cli.asked) == 1
+    assert cli.asked[0][:3] == ["databricks", "auth", "token"]
+    assert PROFILE in cli.asked[0]
+
+
+def test_a_token_close_to_its_expiry_is_asked_for_again_and_the_new_one_is_used(
+    session: ModuleType,
+) -> None:
+    cli = FakeCli([TOKEN, RENEWED_TOKEN])
+    renewal = renewal_with(session, cli)
+    renewal.current()
+
+    cli.now_s += 3600.0 - RENEW_MARGIN_S + 1.0
+    token = renewal.current()
+
+    assert token == RENEWED_TOKEN
+    assert len(cli.asked) == 2
+    # The CLI hands back its cached token until it is closer to expiry than the margin, so the
+    # renewal has to say that the cached one is not wanted.
+    assert "--force-refresh" not in cli.asked[0]
+    assert "--force-refresh" in cli.asked[1]
+
+
+def test_a_first_token_that_is_already_near_its_expiry_is_renewed_at_once(
+    session: ModuleType,
+) -> None:
+    cli = FakeCli([TOKEN, RENEWED_TOKEN], lifetime_s=RENEW_MARGIN_S - 1.0)
+    renewal = renewal_with(session, cli)
+
+    token = renewal.current()
+
+    assert token == RENEWED_TOKEN
+    assert [("--force-refresh" in command) for command in cli.asked] == [False, True]
+
+
+def test_a_cli_that_fails_stops_the_run_without_the_token_or_the_profile(
+    session: ModuleType,
+) -> None:
+    renewal = renewal_with(session, FakeCli([], exit_code=1))
+
+    with pytest.raises(pytest.fail.Exception, match="log in again") as failure:
+        renewal.current()
+
+    assert TOKEN not in str(failure.value)
+    assert PROFILE not in str(failure.value)
+
+
+def test_a_remote_target_sends_the_renewed_token(session: ModuleType) -> None:
+    cli = FakeCli([TOKEN, RENEWED_TOKEN])
+    target = session.Target(
+        base_url=BASE_URL,
+        host="appmux.example.invalid",
+        port=443,
+        admin_email=ADMIN,
+        fixtures_folder=FOLDER,
+        user_token=TOKEN,
+        is_remote=True,
+        renewal=renewal_with(session, cli),
+    )
+    session.identity_headers(target)
+
+    cli.now_s += 3600.0
+    headers = session.identity_headers(target)
+
+    assert headers == {"Authorization": f"Bearer {RENEWED_TOKEN}"}
+
+
+def test_a_remote_target_renews_only_when_a_profile_is_named(
+    session: ModuleType, remote_environment: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    without = session.load_target(transport=me_answering()[0])
+    monkeypatch.setenv("APPMUX_TEST_TOKEN_PROFILE", PROFILE)
+    with_profile = session.load_target(transport=me_answering()[0])
+
+    assert without.renewal is None
+    assert with_profile.renewal is not None
+    assert PROFILE not in repr(with_profile)
