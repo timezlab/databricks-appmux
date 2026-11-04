@@ -12,7 +12,7 @@ function Input({ className, type, ...props }: ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "h-10 w-full max-w-xl min-w-0 rounded-control border border-input bg-card px-3 py-2 text-base text-foreground transition-colors selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-2 aria-invalid:border-destructive",
+        "h-10 w-full max-w-xl min-w-0 rounded-control border border-input bg-card px-3 py-2 text-base text-foreground transition-colors selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-2 aria-invalid:border-destructive",
         className,
       )}
       {...props}

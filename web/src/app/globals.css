@@ -28,9 +28,8 @@
  *    prefers-color-scheme alone, live. Dark is written for two selectors, the
  *    Dark choice and System on a dark OS, with the same values in both: the
  *    contrast test fails when they differ.
- *  - Every animation has a behaviour for both values of prefers-reduced-motion,
- *    and the reduced one still moves: it changes the animation, it never
- *    removes it (a spinner that stops says nothing is happening).
+ *  - The UI does not read prefers-reduced-motion (docs/decisions/0021): every
+ *    animation plays the same for every value, so a spinner always turns.
  *  - Colour is never the only signal: tones come with a word, a mark or a shape.
  */
 
@@ -499,22 +498,12 @@
 }
 
 /* ---------------------------------------------------------------- motion
-   Each animation is one utility with a `no-preference` behaviour and a
-   `reduce` one, as the design's motion table says. The reduced one changes
-   the animation and never removes it. */
+   Each animation is one utility with one behaviour, as the design's motion
+   table says. None of them reads prefers-reduced-motion (docs/decisions/0021),
+   so a spinner turns for every visitor. */
 @keyframes spinner-turn {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes spinner-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
   }
 }
 
@@ -552,59 +541,26 @@
   }
 }
 
-@keyframes menu-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes menu-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-
-/* An action in progress: it turns; reduced, it stays and pulses. */
+/* An action in progress: it turns. */
 @utility animate-spinner {
   animation: spinner-turn 0.9s linear infinite;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: spinner-pulse 1.6s ease-in-out infinite;
-  }
 }
 
 /* The lamp of an app that is starting. */
 @utility animate-lamp-breathe {
   animation: lamp-breathe 1.6s ease-in-out infinite;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: lamp-breathe 2.4s ease-in-out infinite;
-  }
 }
 
 /* A skeleton waiting for its data: opacity only, never a travelling gradient. */
 @utility animate-skeleton {
   animation: skeleton-pulse 1.4s ease-in-out infinite;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: skeleton-pulse 2.2s ease-in-out infinite;
-  }
 }
 
-/* A menu or popover opening and closing: fade and a 4 px slide; reduced, the
-   fade alone. */
+/* A menu or popover opening and closing: a fade and a 4 px slide. */
 @utility animate-menu-in {
   animation: menu-in 140ms ease-out both;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: menu-fade-in 120ms ease-out both;
-  }
 }
 
 @utility animate-menu-out {
   animation: menu-out 120ms ease-in both;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: menu-fade-out 120ms ease-in both;
-  }
 }

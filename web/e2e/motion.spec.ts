@@ -1,10 +1,10 @@
 /**
- * Motion for both values of `prefers-reduced-motion`
- * (docs/product/admin-ui-design.md, Motion): while a page waits for its data,
- * the spinner and the skeleton each run their animation, and asking for less
- * motion swaps it for a slower, calmer one; it never stops it. The launcher's
- * call for the app list is held open so the loading state stays on screen
- * while the browser is asked what it is animating.
+ * Motion under both values of `prefers-reduced-motion`
+ * (docs/product/admin-ui-design.md, Motion; docs/decisions/0021): the UI does
+ * not read the preference, so while a page waits for its data the spinner turns
+ * and the skeleton pulses the same whether the browser asks for less motion or
+ * not. The launcher's call for the app list is held open so the loading state
+ * stays on screen while the browser is asked what it is animating.
  *
  * `npm run build` first; `npm run test:e2e` runs this.
  */
@@ -38,16 +38,10 @@ interface RunningAnimation {
   playState: string;
 }
 
-/** What each part animates, per value of `reducedMotion` (globals.css, the `animate-*` utilities). */
+/** What each part animates, for every value of `reducedMotion` (globals.css, the `animate-*` utilities). */
 const EXPECTED = {
-  "no-preference": {
-    spinner: { name: "spinner-turn", durationMs: 900 },
-    skeleton: { name: "skeleton-pulse", durationMs: 1400 },
-  },
-  reduce: {
-    spinner: { name: "spinner-pulse", durationMs: 1600 },
-    skeleton: { name: "skeleton-pulse", durationMs: 2200 },
-  },
+  spinner: { name: "spinner-turn", durationMs: 900 },
+  skeleton: { name: "skeleton-pulse", durationMs: 1400 },
 } as const;
 
 const PARTS = {
@@ -55,11 +49,8 @@ const PARTS = {
   skeleton: ".animate-skeleton",
 } as const;
 
-/** What a menu or popover plays when it opens (globals.css, `animate-menu-in`): a fade and a 4 px slide, or the fade alone. */
-const OPENING = {
-  "no-preference": { name: "menu-in", durationMs: 140 },
-  reduce: { name: "menu-fade-in", durationMs: 120 },
-} as const;
+/** What a menu or popover plays when it opens (globals.css, `animate-menu-in`): a fade and a 4 px slide. */
+const OPENING = { name: "menu-in", durationMs: 140 } as const;
 
 /**
  * The primitives whose floating content opens with `animate-menu-in`: the trigger to press, how
@@ -122,13 +113,13 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test.describe(`prefers-reduced-motion: ${reducedMotion}`, () => {
     test.use({ reducedMotion });
 
-    test("the spinner and the skeleton keep moving, at the speed the table sets", async ({
+    test("the spinner turns and the skeleton pulses, at the speed the table sets", async ({
       page,
     }) => {
       await openLauncherStillLoading(page);
 
       for (const [part, selector] of Object.entries(PARTS)) {
-        const expected = EXPECTED[reducedMotion][part as keyof typeof PARTS];
+        const expected = EXPECTED[part as keyof typeof PARTS];
         const animations = await animationsOf(page, selector);
         expect(
           animations.length,
@@ -190,9 +181,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
             { slot: floating.slot, opensOn: floating.opensOn },
           );
 
-        expect(animations, `${floating.part} animations`).toEqual([
-          OPENING[reducedMotion],
-        ]);
+        expect(animations, `${floating.part} animations`).toEqual([OPENING]);
       });
     }
   });

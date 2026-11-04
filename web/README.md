@@ -182,8 +182,9 @@ are in `e2e/fixtures-f4.ts`.
   menus). Text sizes are 13, 14, 16, 20, 24 and 28 px (`text-xs` to `text-3xl`; there is no
   `text-lg`); weights 400, 500 and 600. Motion is only the `animate-*` utilities of
   `globals.css` (`spinner`, `skeleton`, `lamp-breathe`, `menu-in`, `menu-out`), each with one
-  animation for `prefers-reduced-motion: no-preference` and a calmer one for `reduce`;
-  `tests/contract/motion.test.ts` fails on a rule that would stop one.
+  animation that plays for every value of `prefers-reduced-motion` (ADR 0021: the UI does not
+  read it); `tests/contract/motion.test.ts` fails when a query, a `motion-reduce:` utility or a
+  script that reads it comes back.
 - **Bars.** Every item of a navigation (top bar, tab bar, sidebar) carries `bar-item`: a
   2 px bar under it (beside it inside `bar-axis-vertical`), transparent at rest, `input` on
   hover, `primary` on the item with `aria-current="page"`, and no text underline. `bar-item`
@@ -317,8 +318,8 @@ ToggleGroup prerendered) prove the harness can fail.
 Four more specs use the same server. `fonts.spec.ts` checks that both Plex families load from
 the export's media folder as woff2 with no CSP violation. `motion.spec.ts` holds the launcher's
 app list call open and asks Chromium what the spinner and the skeleton animate, once with
-`reducedMotion: "no-preference"` and once with `"reduce"`; the names and durations must match
-the Motion table of the design. `theme.spec.ts` picks each theme on each OS scheme (light, dark,
+`reducedMotion: "no-preference"` and once with `"reduce"`; the names and durations must be the
+same in both and match the Motion table of the design. `theme.spec.ts` picks each theme on each OS scheme (light, dark,
 no preference) and checks the attribute, the page colour and the reload; it also changes the OS
 scheme under an open page and blocks `theme.js`. `shell.spec.ts` opens, filters, chooses from
 and closes (Escape) the app switcher at 1280 and 390 px, and does the same with the phone menu at

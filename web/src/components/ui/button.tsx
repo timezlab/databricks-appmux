@@ -8,7 +8,7 @@ import type { ComponentProps } from "react";
 // contrast test sees them; an opacity modifier it could not) and the focus ring
 // left to the global `:focus-visible` outline in globals.css.
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-control border border-transparent text-sm font-medium whitespace-nowrap no-underline transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-control border border-transparent text-sm font-medium whitespace-nowrap no-underline transition-colors disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

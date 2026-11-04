@@ -230,27 +230,28 @@ Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a si
 
 ## Motion (point 3)
 
-Every animation has a defined behaviour for both values of `prefers-reduced-motion`, and none of them vanishes:
+The UI does not read `prefers-reduced-motion` ([ADR 0021](../decisions/0021-ignore-prefers-reduced-motion-in-the-admin-ui.md)):
+every animation plays the same for every value, so a spinner always turns.
 
-| Motion | Utility | `no-preference` | `reduce` |
-|---|---|---|---|
-| Spinner | `animate-spinner` | rotates (`spinner-turn`), 0.9 s linear | stays visible and pulses its opacity (`spinner-pulse`, 1.6 s), no rotation |
-| Starting lamp | `animate-lamp-breathe` | opacity breathe (`lamp-breathe`), 1.6 s | the same, 2.4 s |
-| Skeleton | `animate-skeleton` | opacity pulse (`skeleton-pulse`), 1.4 s | the same, 2.2 s; never a travelling gradient |
-| Menu, popover | `animate-menu-in`, `animate-menu-out` | 140 ms fade and 4 px slide in, 120 ms out | 120 ms fade only |
-| Bar (top bar, tabs, sidebar) | `bar-item` | the bar changes colour in 120 ms; it does not slide between items | the same |
-| Page change | none | none | none |
+| Motion | Utility | Animation |
+|---|---|---|
+| Spinner | `animate-spinner` | rotates (`spinner-turn`), 0.9 s linear |
+| Starting lamp | `animate-lamp-breathe` | opacity breathe (`lamp-breathe`), 1.6 s |
+| Skeleton | `animate-skeleton` | opacity pulse (`skeleton-pulse`), 1.4 s; never a travelling gradient |
+| Menu, popover | `animate-menu-in`, `animate-menu-out` | 140 ms fade and 4 px slide in, 120 ms out |
+| Bar (top bar, tabs, sidebar) | `bar-item` | the bar changes colour in 120 ms; it does not slide between items |
+| Page change | none | none |
 
 The bar does not slide: moving one bar between items needs its position measured and written as a style at run time,
 or CSS anchor positioning. The first breaks the CSP; the second would need its own check of browser support, which
 was not worth one moving bar. Each item draws its own bar and only the colour changes.
 
-The blanket rule that set every animation to 0.01 ms is removed, because it is what stopped the spinner. Each utility
-is defined once in globals.css with both behaviours, and `tests/contract/motion.test.ts` fails if a reduced-motion
-rule sets one of them to `none`, to a single run or to under 50 ms. `e2e/motion.spec.ts` holds the launcher's
-loading state open in Chromium with each value of `reducedMotion` and asserts that the spinner and the skeleton have
-a running, endless animation whose name and duration match the table. No motion plays on its own except the spinner,
-the starting lamp and the skeleton, each of which says "something is happening".
+Each utility is defined once in globals.css with one animation. `tests/contract/motion.test.ts` fails if a
+`prefers-reduced-motion` query, a `motion-reduce:` or `motion-safe:` utility or a script that reads the preference
+comes back. `e2e/motion.spec.ts` holds the launcher's loading state open in Chromium under each value of
+`reducedMotion` and asserts that the spinner and the skeleton have a running, endless animation whose name and
+duration match the table. No motion plays on its own except the spinner, the starting lamp and the skeleton, each of
+which says "something is happening".
 
 ## Copy
 

@@ -50,7 +50,7 @@ export function ReleaseFailure({ slug, release }: ReleaseFailureProps) {
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="group/output inline-flex items-center gap-1 rounded-sm text-sm font-medium text-link underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
           <ChevronRightIcon
-            className="size-4 transition-transform group-data-[state=open]/output:rotate-90 motion-reduce:transition-none"
+            className="size-4 transition-transform group-data-[state=open]/output:rotate-90"
             aria-hidden="true"
           />
           {isOpen ? "Hide the output" : "Show the output"}

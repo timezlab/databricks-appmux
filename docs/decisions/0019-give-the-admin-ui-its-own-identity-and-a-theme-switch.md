@@ -1,6 +1,7 @@
 # Give the admin UI its own identity and a theme switch
 
-**Status:** proposed — accept after the owner has seen it on the dev App (T205).
+**Status:** proposed — accept after the owner has seen it on the dev App (T205). Its motion rule (a behaviour
+for both values of `prefers-reduced-motion`) is superseded by [ADR 0021](0021-ignore-prefers-reduced-motion-in-the-admin-ui.md).
 Supersedes three parts of [ADR 0017](0017-split-the-admin-ui-into-sub-pages-and-use-databricks-red.md)
 (the Databricks red, the dark chrome band and the Databricks logo) and nothing
 else of it; extends [ADR 0018](0018-settle-the-admin-ui-layout-rules-and-give-settings-one-save-bar.md)
