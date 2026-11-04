@@ -758,7 +758,7 @@ function cellNode(cell) {
   const td = el("td");
   td.append(verdict(cell));
   if (cell.whoami.ok) {
-    const token = cell.whoami.token_forwarded ? ", user token present" : ", no user token";
+    const token = cell.whoami.token_forwarded ? ", token present" : ", no token";
     td.append(el("p", "whoami: " + cell.whoami.seen_email + token));
   }
   const me = cell.databricks_me;

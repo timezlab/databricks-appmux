@@ -82,6 +82,12 @@ class Workspace(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/2.0/preview/scim/v2/Me":
             self.me_requests.append(request)
+            # Databricks answers with whoever owns the bearer: the person, or an App's service
+            # principal.
+            if request.headers["authorization"] == APP_BEARER:
+                return httpx.Response(
+                    200, json={"userName": APP_IDENTITY, "displayName": "agent-console"}
+                )
             return httpx.Response(
                 200, json={"userName": DANA_EMAIL, "displayName": "Dana", "id": "42"}
             )
@@ -131,6 +137,12 @@ class Platform(httpx.AsyncBaseTransport):
                 (b"x-forwarded-email", identity),
                 (b"x-forwarded-user", identity + b"@" + identity),
             ]
+            # Measured in a browser on 2026-11-04: with OBO delegated to the callee, an App's own
+            # token is forwarded too, the same way a person's is.
+            if self.obo_delegated:
+                headers.append(
+                    (b"x-forwarded-access-token", APP_BEARER.removeprefix("Bearer ").encode())
+                )
         else:
             return httpx.Response(302, headers={"location": "https://login.example/"})
         if self.hub_status is not None:
@@ -280,21 +292,32 @@ def test_as_me_the_hub_sees_you_and_the_token_that_arrived_with_you(protocol: st
 
 
 @pytest.mark.parametrize("protocol", ["mcp", "a2a"])
-def test_as_the_app_the_hub_sees_the_apps_own_identity_and_no_user_token(protocol: str) -> None:
+def test_as_the_app_the_hub_sees_the_apps_own_identity_and_its_own_token(protocol: str) -> None:
     client, platform, _ = _build()
 
     outcome = _call(client, "app", protocol, "whoami")
 
     assert outcome["sent_as"] == "this App's own service principal"
     assert outcome["provider_saw"]["x_forwarded_email"] == APP_IDENTITY
-    assert outcome["provider_saw"]["access_token_header_present"] is False
+    assert outcome["provider_saw"]["access_token_header_present"] is True
     assert set(platform.hub_bearers()) == {APP_BEARER}
 
 
+def test_as_the_app_without_obo_on_the_hub_no_token_arrives_and_databricks_me_says_so() -> None:
+    client, _, workspace = _build(obo_delegated=False)
+
+    whoami = _call(client, "app", "mcp", "whoami")
+    databricks_me = _call(client, "app", "mcp", "databricks_me")
+
+    assert whoami["provider_saw"]["x_forwarded_email"] == APP_IDENTITY
+    assert whoami["provider_saw"]["access_token_header_present"] is False
+    assert databricks_me["ok"] is False
+    assert "no user token" in databricks_me["error"]
+    assert workspace.me_requests == []
+
+
 @pytest.mark.parametrize("protocol", ["mcp", "a2a"])
-def test_databricks_me_acts_as_you_when_your_token_travels_and_cannot_as_the_app(
-    protocol: str,
-) -> None:
+def test_databricks_me_acts_as_whoever_the_forwarded_token_belongs_to(protocol: str) -> None:
     client, _, workspace = _build()
 
     as_me = _call(client, "me", protocol, "databricks_me")
@@ -302,9 +325,12 @@ def test_databricks_me_acts_as_you_when_your_token_travels_and_cannot_as_the_app
 
     assert as_me["ok"] is True
     assert json.loads(as_me["result"])["user_name"] == DANA_EMAIL
-    assert [r.headers["authorization"] for r in workspace.me_requests] == [USER_BEARER]
-    assert as_app["ok"] is False
-    assert "no user token" in as_app["error"]
+    assert as_app["ok"] is True
+    assert json.loads(as_app["result"])["user_name"] == APP_IDENTITY
+    assert [r.headers["authorization"] for r in workspace.me_requests] == [
+        USER_BEARER,
+        APP_BEARER,
+    ]
 
 
 def test_the_wire_log_lists_each_request_of_the_protocol_without_a_token() -> None:
@@ -497,8 +523,8 @@ def test_the_identity_check_shows_what_the_hub_sees_for_each_protocol_and_each_i
         assert me["databricks_me"] == {"ok": True, "user_name": DANA_EMAIL, "error": None}
         assert app["same_as_you"] is False
         assert app["whoami"]["seen_email"] == APP_IDENTITY
-        assert app["databricks_me"]["ok"] is False
-        assert "no user token" in app["databricks_me"]["error"]
+        assert app["whoami"]["token_forwarded"] is True
+        assert app["databricks_me"] == {"ok": True, "user_name": APP_IDENTITY, "error": None}
     _never_shows_a_token(response.text)
 
 

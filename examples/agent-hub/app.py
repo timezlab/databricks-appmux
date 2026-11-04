@@ -24,9 +24,11 @@ One set of tools, two doors
 Two identities in one request
     The model is called with the App's **own** identity (the Databricks SDK finds it; under appmux
     that needs the shared service principal delegated to this child, design 8.1). ``databricks_me``
-    uses the **caller's** token, which exists only when the caller is a person and a platform admin
-    delegated OBO to this child, and only with the scopes the appmux App declares. A call by a
-    service principal carries no user token: ``databricks_me`` then says so.
+    uses the **caller's** token, which arrives only when a platform admin delegated OBO to this
+    child, and only with the scopes the appmux App declares. The token belongs to whoever called:
+    a person, or the service principal of an App that called (measured in a browser, 2026-11-04).
+    Under appmux that service principal is the shared one, so this App cannot tell which child
+    called. Without OBO no token arrives for anyone: ``databricks_me`` then says so.
 
 HTTP paths
     GET    /                              200 HTML: the card, the tools, who is calling.
@@ -329,8 +331,9 @@ class Toolbox:
                 Tool(
                     name="databricks_me",
                     description=(
-                        "Ask Databricks who the caller is, using the caller's own token. It acts "
-                        "as that person, so it fails when the call carries no user token."
+                        "Ask Databricks who the caller is, using the token that came with the "
+                        "call. It acts as that caller (a person, or the service principal of an "
+                        "App), so it fails when the call carries no user token."
                     ),
                     input_schema={"type": "object", "properties": {}},
                     run=self._databricks_me,
@@ -381,8 +384,8 @@ class Toolbox:
         if caller.access_token is None:
             raise ToolError(
                 "no user token came with this call, so there is no user to act as. A token "
-                "arrives only when the caller is a person and a platform admin delegated OBO to "
-                "this App; a service principal's call never carries one"
+                "arrives only when a platform admin delegated OBO to this App; without it the "
+                "proxy forwards none, whoever the caller is"
             )
         try:
             host = await self._credentials.host()

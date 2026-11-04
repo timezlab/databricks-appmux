@@ -16,7 +16,9 @@ app. Which calls between Apps work, and what each failure looks like, is in
     the hub receives the visitor as its caller and can act as them.
   - **this App**: the console's own identity, found by the Databricks SDK the way it finds it for
     any App. Under appmux that needs the shared service principal delegated. The hub then sees a
-    service principal, and `databricks_me` has no user token to use.
+    service principal. With OBO delegated to the hub, that service principal's own token is
+    forwarded too, and `databricks_me` acts as it. It is the one shared by every delegated child,
+    so the hub cannot tell which child called.
 - **The identity check**: `POST /api/identity-check` calls the hub eight times (MCP and A2A, each
   as me and as this App, each with `whoami` and `databricks_me`) and the page draws a 2×2 table:
   who the hub saw, whether a user token arrived, whether Databricks agrees, and whether it is you.
@@ -98,8 +100,21 @@ over A2A as **me** made the model call both tools and name the person; **this Ap
 protocols answered `404` because the hub had no grant for it. The table is in
 [the reference](../../docs/reference/mcp-and-a2a.md#who-the-target-sees-when-the-caller-is-an-app).
 
-**Not measured**: the page as a person's browser sees it (the browser's token, not the CLI's), and
-**this App** with a grant on the hub (a `service_principal` grant or `everyone`).
+Later the same day the owner pressed **Run the identity check** in a browser, as the owner of both
+apps and as a second account:
+
+- **me** matched the person in every cell, for both accounts, over both protocols.
+- With only the console shared with the second account, every cell was `404`: appmux checks the
+  hub's grants against the person behind the forwarded token. Sharing the hub too turned all of them
+  into successes, so being let into the console gives no access to the hub.
+- **this App** was `404` until the hub had a grant for it. With an `everyone` grant the hub saw
+  appmux's shared service principal, a token was present, and `databricks_me` returned that service
+  principal.
+
+The full table, and one value no one has explained yet (`X-Forwarded-Preferred-Username` was
+`anonymous` for the owner), are in the reference.
+
+**Not measured**: **this App** with a `service_principal` grant (ADR 0020) in place of `everyone`.
 
 ## What was verified
 

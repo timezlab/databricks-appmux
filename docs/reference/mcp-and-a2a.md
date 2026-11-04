@@ -45,10 +45,11 @@ Spike 8 recorded only the `302`, because its probe sent no `Accept` header
 | a person with a user token, to a standalone App | their email | present |
 | the same, to a child under appmux | their email | **absent**, unless OBO is delegated to the child |
 | an SP, to a standalone App | the SP's application ID, **a UUID, not an email** | present |
-| an SP, to a child under appmux | the same UUID | **absent** |
+| an SP, to a child under appmux | the same UUID | **absent**, unless OBO is delegated to the child: then the SP's own token (measured 2026-11-04, below) |
 
 For an SP, `X-Forwarded-User` has the form `<id>@<id>` and `X-Forwarded-Preferred-Username` is the App's
-display name.
+display name. The SP that calls from a child is appmux's shared one, so the callee sees the same
+UUID whichever child called.
 
 ## Calls between Apps, measured
 
@@ -111,8 +112,8 @@ calls the hub over both protocols, once with the visitor's token (OBO: the conso
 OBO to receive it) and once with its own identity (the shared service principal), and shows what the
 hub saw. Together they answer: **can the caller's identity be passed through MCP and A2A?** The
 protocols carry no identity of their own; it travels in the HTTP bearer, so the answer is the one
-in [Who the target sees](#who-the-target-sees), and what is left to measure is whether a
-scope-limited user token is accepted as the bearer of a call to another App.
+in [Who the target sees](#who-the-target-sees). Whether a scope-limited browser token is accepted as
+the bearer of a call to another App is answered below: it is.
 
 Measured on 2026-11-04 on the Free Edition dev App, with `hub` and `console` registered as children
 of appmux, **OBO and the shared service principal delegated to both**, and the Databricks CLI's
@@ -134,28 +135,49 @@ can act as them. It needs OBO delegated to **both** apps (the caller to receive 
 callee to receive it back) and a grant for the person on the callee. MCP and A2A behave the same,
 because the protocols carry no identity of their own.
 
+### The same check from a browser
+
+Later on 2026-11-04 the owner opened the console in a browser and pressed **Run the identity check**
+three times, with two Free Edition accounts: the first owns both apps, the second is another
+account. OBO and the shared service principal were delegated to both apps. The browser's token is
+the real OBO path: it reaches the console only with the scopes the appmux App declares.
+
+| Who pressed it, and who could open what | Result |
+|---|---|
+| the owner of both apps; no grant on the hub yet | **me**, MCP and A2A: the hub saw the owner, held their token, and `databricks_me` returned them. **this App**: `404`, as in the CLI run |
+| the second account; the console shared with it, **the hub not** | every cell `404`. appmux checks the hub's grants against the person behind the forwarded token, so being allowed into the console gives no access to the hub |
+| the second account; **both apps shared**, and an `everyone` grant on the hub | **me**: the hub saw the second account, held its token, and `databricks_me` returned it |
+| the same press, the **this App** column | the hub saw appmux's shared service principal (a UUID in the e-mail field), **a token was present**, and `databricks_me` returned that service principal |
+
+What follows:
+
+- **A browser token works as the bearer** of a call to another App, over both protocols, for the owner
+  and for a second account.
+- **Authorization follows the person.** The second and third rows differ only in whether the hub is
+  shared, and the answer flips from `404` to success. The console is not a confused deputy: a person
+  who may open it still reaches the hub only with their own grant.
+- **A service principal's call carries a token too** when OBO is delegated to the callee. The earlier
+  claim here that an SP's call never carries one was measured without OBO on the callee and was
+  wrong in general. `databricks_me` then acts as the service principal.
+- **The caller App is not identifiable.** The service principal is appmux's shared one, so the hub
+  cannot tell `console` from any other delegated child.
+- **Unexplained**: `X-Forwarded-Preferred-Username` was `anonymous` for the owner and the e-mail for
+  the second account. The cause was not investigated.
+
 Not measured yet:
 
-- **The token of a browser session.** Every call above used the CLI's token as the caller. A
-  browser's token reaches the console as the appmux App's `user_api_scopes` allow; whether it is
-  accepted as the bearer of a call to another App, and whether `databricks_me` works with it, is for
-  the person to see by opening the console and pressing **Run the identity check**.
-- **This App as the caller, with a grant.** The `404` above is the answer without a grant. A
-  `service_principal` grant ([ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md))
-  or an `everyone` grant on the hub has not been added on the dev App, so what the hub sees of the
-  shared service principal (a UUID in the e-mail field and no user token, as the table above says
-  for any SP) was not seen through the console.
-- Several people at once: Free Edition has one identity.
+- **A `service_principal` grant** ([ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md))
+  in place of `everyone` on the hub. The run above used `everyone`, which admits every identity the
+  proxy accepts.
+- Several people at once: only two accounts exist on Free Edition.
 
 ## Not measured
 
 - The 300 s cut of the Apps proxy for a call that lasts that long (measured in spike 8 for a plain
   stream, not for MCP or A2A), and whether a stream that sends nothing for a while survives.
-- A user bearer passed on to a child by OBO, from a **browser** session (measured with the CLI's
-  token: see the section above).
 - A `group` grant admitting an SP, and the identity of an SP in appmux's audit and metrics.
 - A `service_principal` grant (ADR 0020) admitting an SP's call through the Apps proxy (the call was
-  measured only without a grant, `404`).
+  measured without a grant, `404`, and with an `everyone` grant, success).
 - Load: the cost of the extra hop through appmux, and what the free model's limit does to several
   agents sharing the workspace.
 - Streamable HTTP with a session id or a server-sent stream from the MCP server (the example is
