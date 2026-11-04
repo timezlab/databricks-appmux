@@ -914,9 +914,11 @@ default; the list calls give no finer fact about the person's rights on one obje
 below, made with the person's token (or appmux's, see `source`) and filtered by `q` here. The scope column is what the
 call needs, taken from the REST reference and the names an App's `user_api_scopes` accepts or refuses; it is
 documented, not measured. What was measured is the shape of each answer (field names, counts), read with the CLI's
-token on the Free Edition workspace on 2026-11-04, for every row except `gateway_model_service`, whose path is a guess
-that is not confirmed; no call has been made with a person's App token on the dev App, and the `platform_token` retry
-has not run there either.
+token on the Free Edition workspace on 2026-11-04. The same day the dev App was called with that token: four types
+(`sql_warehouse`, `serving_endpoint`, `uc_connection`, `genie_space`) were listed with it and the other ten fell back
+to appmux's own token (`platform_token`), which listed Unity Catalog, Lakebase projects and branches, apps and model
+services and found nothing for secrets, MLflow experiments, jobs or vector search endpoints. A browser session's
+token has not been tried there.
 
 | `type` | Databricks call | Scope | `target` | `label` |
 |---|---|---|---|---|
