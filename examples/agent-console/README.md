@@ -87,6 +87,24 @@ databricks workspace import-dir examples/agent-console \
    to be admitted by appmux as a caller of the hub; the shared service principal needs `everyone`
    or a `service_principal` grant.
 
+## Run it as its own App, outside appmux
+
+The same folder runs as a standalone Databricks App, which shows what a caller that is not a child
+looks like to the hub. Put the hub's appmux address in `PROVIDER_URL` in `app.yaml` (a copy; the
+file in the repo stays empty), upload the folder, then:
+
+```sh
+databricks apps create --profile <your-profile> \
+  --json '{"name": "console-solo", "user_api_scopes": ["apps"]}'
+databricks apps deploy console-solo --profile <your-profile> \
+  --source-code-path /Workspace/Users/<your-email>/appmux-examples/console-solo
+```
+
+`user_api_scopes` is what makes the proxy forward the visitor's token to a standalone App; without
+it **me** answers "no user token". **this App** is the new App's own service principal, which needs
+`CAN USE` on the appmux App before the proxy lets its call through (and the hub needs an
+`everyone` or `service_principal` grant for it, as for any caller).
+
 ## As an end user check that
 
 - `/<slug>/` loads and **You are** shows your email.
@@ -117,7 +135,14 @@ apps and as a second account:
 The full table, and one value no one has explained yet (`X-Forwarded-Preferred-Username` was
 `anonymous` for the owner), are in the reference.
 
-**Not measured**: **this App** with a `service_principal` grant (ADR 0020) in place of `everyone`.
+Then the hub's `whoami` was changed to ask Databricks who owns the token instead of reading the
+header, and the console was also deployed as its own App (`console-solo`, scope `apps`). The CLI's
+token as the caller: **me** over MCP and A2A matched, with "who the hub saw" taken from the token;
+**this App** answered `401` from the proxy, because that App's service principal has no `CAN USE`
+on appmux (no grant was made).
+
+**Not measured**: **this App** with a `service_principal` grant (ADR 0020) in place of `everyone`,
+and the standalone App's service principal with `CAN USE` on appmux.
 
 ## What was verified
 

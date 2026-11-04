@@ -166,6 +166,19 @@ What follows:
 - **Unexplained**: `X-Forwarded-Preferred-Username` was `anonymous` for the owner and the e-mail for
   the second account. The cause was not investigated.
 
+### The console as its own App
+
+On 2026-11-04 the console was also deployed as a standalone App (`console-solo`, outside appmux,
+`user_api_scopes` = `apps`, `PROVIDER_URL` set to the hub), and the hub's `whoami` was changed to
+present the received token to the SCIM `Me` API and report the owner (`token_owner`) beside the
+headers. The CLI's token as the caller of the standalone console:
+
+| Call | Result |
+|---|---|
+| the console receives the visitor's token | yes (`user_api_scopes` is what makes the proxy forward it to a standalone App) |
+| **me**, MCP and A2A | the hub's `whoami` named the token's owner as the caller (`via: token`), and `databricks_me` agreed. A token with the scope `apps` plus the two `iam` scopes is accepted as the bearer of a call to a child of appmux |
+| **this App**, MCP and A2A | `401` from the Apps proxy: the standalone App's service principal has no `CAN USE` on the appmux App. No grant was made |
+
 Not measured yet:
 
 - **A `service_principal` grant** ([ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md))
