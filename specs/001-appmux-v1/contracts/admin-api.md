@@ -917,8 +917,9 @@ documented, not measured. What was measured is the shape of each answer (field n
 token on the Free Edition workspace on 2026-11-04. The same day the dev App was called with that token: four types
 (`sql_warehouse`, `serving_endpoint`, `uc_connection`, `genie_space`) were listed with it and the other ten fell back
 to appmux's own token (`platform_token`), which listed Unity Catalog, Lakebase projects and branches, apps and model
-services and found nothing for secrets, MLflow experiments, jobs or vector search endpoints. A browser session's
-token has not been tried there.
+services and found nothing for secrets, MLflow experiments, jobs or vector search endpoints. After the dev App
+declared five more scopes, nine types listed with that token and five still fell back (secret, MLflow experiment,
+job, vector search index, model service). A browser session's token has not been tried there.
 
 | `type` | Databricks call | Scope | `target` | `label` |
 |---|---|---|---|---|
