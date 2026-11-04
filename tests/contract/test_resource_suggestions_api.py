@@ -24,27 +24,33 @@ All emails and names are placeholders; the token is a fake value.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
 from typing import Final
 
 import httpx
 import pytest
-from edge_harness import ALICE, BOB, CAROL, DANA, VISITOR_TOKEN, AdminApi, seeded_registry
-from stub_registry import StubRegistry
+from edge_harness import ALICE, BOB, CAROL, DANA, VISITOR_TOKEN
+from suggestion_harness import (
+    DENIED_TEXT,
+    ROOT_CALLS,
+    SECOND_ROOT_CALLS,
+    Suggester,
+    Workspace,
+    listed,
+    targets_of,
+)
 
+from appmux.admin import resource_suggestions
 from appmux.admin.resource_suggestions import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
     MAX_QUERY_LENGTH,
     SUGGESTABLE_TYPES,
-    ResourceSuggestionRoutes,
 )
 from appmux.admin.schemas import ResourceSuggestionList, ResourceTypeList
 from appmux.registry.resources import RESOURCE_TYPES
 
 NOBODY = "erin@example.com"  # a visitor with no grant on any app
 PLATFORM_TEXT = "Provided OAuth token does not have required scopes: workspace.workspace:read"
-DENIED_TEXT = "User does not have permission to list the thing named internal-secret-name"
 NO_TOKEN: Final = {"X-Forwarded-Access-Token": ""}
 
 WAREHOUSES_PATH = "/api/2.0/sql/warehouses"
@@ -53,15 +59,6 @@ SCOPES_PATH = "/api/2.0/secrets/scopes/list"
 KEYS_PATH = "/api/2.0/secrets/list"
 EXPERIMENTS_PATH = "/api/2.0/mlflow/experiments/search"
 JOBS_PATH = "/api/2.2/jobs/list"
-
-# (type, method, path): the one list call of each listed type
-LIST_CALLS: Final = {
-    "sql_warehouse": ("GET", WAREHOUSES_PATH),
-    "serving_endpoint": ("GET", ENDPOINTS_PATH),
-    "secret": ("GET", SCOPES_PATH),
-    "mlflow_experiment": ("POST", EXPERIMENTS_PATH),
-    "job": ("GET", JOBS_PATH),
-}
 
 WAREHOUSES: Final = {
     "warehouses": [
@@ -76,77 +73,9 @@ WAREHOUSES: Final = {
 }
 
 
-class Workspace:
-    """A recording workspace: ``answers`` maps (method, path) to a status and a JSON body."""
-
-    def __init__(self, answers: Mapping[tuple[str, str], tuple[int, object]] | None = None) -> None:
-        self.requests: list[httpx.Request] = []
-        self._answers = dict(answers or {})
-        self._everything: Callable[[httpx.Request], httpx.Response] | None = None
-
-    def answer_everything_with(self, answer: Callable[[httpx.Request], httpx.Response]) -> None:
-        self._everything = answer
-
-    def handle(self, request: httpx.Request) -> httpx.Response:
-        self.requests.append(request)
-        if self._everything is not None:
-            return self._everything(request)
-        found = self._answers.get((request.method, request.url.path))
-        if found is None:
-            return httpx.Response(404, json={"error_code": "NOT_FOUND", "message": DENIED_TEXT})
-        status, body = found
-        return httpx.Response(status, json=body)
-
-    @property
-    def calls(self) -> list[tuple[str, str]]:
-        return [(request.method, request.url.path) for request in self.requests]
-
-
-class Suggester:
-    """The admin API with the resource routes mounted over a recording workspace."""
-
-    def __init__(self, workspace: Workspace | None = None) -> None:
-        self.workspace = workspace if workspace is not None else Workspace()
-        self.registry: StubRegistry = seeded_registry()
-        client = httpx.AsyncClient(
-            base_url="https://workspace.example.invalid",
-            transport=httpx.MockTransport(self.workspace.handle),
-        )
-        self.api = AdminApi(self.registry, lambda authorizer: [ResourceSuggestionRoutes(client)])
-
-    def types(
-        self, email: str | None = ALICE, headers: Mapping[str, str] | None = None
-    ) -> httpx.Response:
-        return self.api.call("GET", "/resources/types", email, headers=headers)
-
-    def suggest(
-        self,
-        type_name: str | None = None,
-        q: str | None = None,
-        limit: str | None = None,
-        email: str | None = ALICE,
-        *,
-        query: str | None = None,
-        headers: Mapping[str, str] | None = None,
-    ) -> httpx.Response:
-        if query is None:
-            pairs = {"type": type_name, "q": q, "limit": limit}
-            query = "?" + str(httpx.QueryParams({k: v for k, v in pairs.items() if v is not None}))
-        return self.api.call("GET", f"/resources/suggestions{query}", email, headers=headers)
-
-
-def listed(workspace_body: object, type_name: str = "sql_warehouse") -> Suggester:
-    method, path = LIST_CALLS[type_name]
-    return Suggester(Workspace({(method, path): (200, workspace_body)}))
-
-
 def error_of(response: httpx.Response) -> tuple[str, str]:
     error = response.json()["error"]
     return error["code"], error["message"]
-
-
-def targets_of(response: httpx.Response) -> list[str]:
-    return [item["target"] for item in response.json()["items"]]
 
 
 def assert_leaks_nothing(response: httpx.Response) -> None:
@@ -212,6 +141,7 @@ def test_the_catalogue_route_answers_the_whole_catalogue_without_a_token() -> No
     body = ResourceTypeList.model_validate_json(response.text)
     assert [entry.type for entry in body.items] == list(RESOURCE_TYPES)
     assert {entry.type for entry in body.items if entry.can_suggest} == SUGGESTABLE_TYPES
+    assert set(RESOURCE_TYPES) == SUGGESTABLE_TYPES  # every type of the catalogue lists
     assert suggester.workspace.requests == []
     assert response.headers["Cache-Control"] == "no-store"
 
@@ -613,11 +543,19 @@ def test_the_query_filters_what_the_platform_returned() -> None:
 # --- a type with no list call ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("type_name", sorted(set(RESOURCE_TYPES) - SUGGESTABLE_TYPES))
-def test_a_type_with_no_safe_list_call_is_not_supported_and_calls_nothing(type_name: str) -> None:
+def test_a_type_without_a_list_call_is_not_supported_and_calls_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Every type of the catalogue has one today (test_the_catalogue_route_...); the answer for a
+    # type that gets added without one is still a note and no call.
+    monkeypatch.setattr(
+        resource_suggestions,
+        "_LISTERS",
+        {name: lister for name, lister in resource_suggestions._LISTERS.items() if name != "job"},
+    )
     suggester = Suggester()
 
-    response = suggester.suggest(type_name, "anything", headers=NO_TOKEN)
+    response = suggester.suggest("job", "anything", headers=NO_TOKEN)
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -728,7 +666,8 @@ def test_any_other_failure_is_unavailable_with_a_note_that_repeats_nothing(
     assert (body["items"], body["source"]) == ([], "unavailable")
     assert words in body["note"]
     assert_leaks_nothing(response)
-    assert len(suggester.workspace.requests) == 1  # a redirect is not followed
+    # A redirect is not followed: one request per list the type reads (Lakebase reads two).
+    assert len(suggester.workspace.requests) == 1 + len(SECOND_ROOT_CALLS.get(type_name, []))
 
 
 @pytest.mark.parametrize("type_name", sorted(SUGGESTABLE_TYPES))
@@ -753,14 +692,8 @@ def test_a_workspace_that_does_not_answer_is_unavailable(type_name: str) -> None
 def test_an_answer_in_an_unexpected_shape_is_unavailable_and_never_an_error_page(
     type_name: str, body: object
 ) -> None:
-    key = {
-        "sql_warehouse": "warehouses",
-        "serving_endpoint": "endpoints",
-        "secret": "scopes",
-        "mlflow_experiment": "experiments",
-        "job": "jobs",
-    }[type_name]
-    shaped = body if not isinstance(body, dict) else {key: "not a list"}
+    keys = [ROOT_CALLS[type_name][2], *(key for *_, key in SECOND_ROOT_CALLS.get(type_name, []))]
+    shaped = body if not isinstance(body, dict) else dict.fromkeys(keys, "not a list")
     suggester = listed(shaped, type_name)
 
     response = suggester.suggest(type_name)
@@ -795,7 +728,6 @@ def test_a_suggestion_writes_nothing_and_the_answer_is_not_cached() -> None:
 
 @pytest.mark.parametrize("type_name", sorted(SUGGESTABLE_TYPES))
 def test_every_answer_is_the_contracts_schema(type_name: str) -> None:
-    method, path = LIST_CALLS[type_name]
-    suggester = Suggester(Workspace({(method, path): (200, {})}))
+    suggester = listed({}, type_name)
 
     ResourceSuggestionList.model_validate_json(suggester.suggest(type_name).text)

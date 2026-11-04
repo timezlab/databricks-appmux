@@ -82,18 +82,13 @@ def test_the_target_example_of_a_checked_type_is_a_target_the_attach_form_accept
     assert is_valid_target(name, TYPE_PRESENTATION[name].target_hint)
 
 
-def test_can_suggest_is_true_exactly_for_the_types_that_have_a_list_call() -> None:
+def test_every_catalogue_type_has_a_list_to_pick_from() -> None:
+    # The Databricks Apps console suggests for every resource type; so does the attach form (T211).
     entries = resource_type_list().items
 
     suggestable = {entry.type for entry in entries if entry.can_suggest}
     assert suggestable == SUGGESTABLE_TYPES
-    assert suggestable == {
-        "sql_warehouse",
-        "serving_endpoint",
-        "secret",
-        "mlflow_experiment",
-        "job",
-    }
+    assert suggestable == set(RESOURCE_TYPES)
 
 
 # --- the filter, the order and the cut ------------------------------------------------------

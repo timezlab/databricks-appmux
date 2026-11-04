@@ -801,7 +801,7 @@ rest of the contract. A lane that finds a detail below wrong changes this sectio
 | `GET /apps/{app}/logs?after=&limit=` | `app.view_logs`: `CAN_MANAGE` on the app (a platform admin included) | `AppLogs` | the last lines of the app's output, from a ring of 2000 lines or 256 KiB per app that survives a restart and a failed start; `after` is a `seq` the client already has (0 for all), `limit` 1 to 1000 (default 500); the newest `limit` lines after `after` are returned, and an `after` beyond the newest `seq` (a cursor from before appmux restarted) reads from the start. A value that is not a whole number in range is `400`. Lines pass the same credential masking as `build_log_tail`, when they are written, and keep no control character but tab and a carriage return inside a line (a note of appmux's own may hold line feeds). Polling writes no audit row, except that the first read of an app by an actor in 10 minutes writes one `app.view_logs` row (no content); that memory is per process, and a read whose row cannot be written answers `503` |
 | `GET /apps/{app}/environment` | `app.view_environment`: `CAN_MANAGE` on the app | `AppEnvironment` | what the app is started with: runtime versions, variables and packages (see schema). A value that belongs to a `secret` resource is never returned (`is_secret` is `true`, `value` is `null`) |
 | `GET /resources/types` | `resource.suggest`: a platform admin, or anyone with `CAN_MANAGE` on at least one app | `ResourceTypeList` | the resource catalogue of [data model 4.7](../../../docs/product/v1-data-model.md#47-app_resources) with a label, a description, the permission levels (the first is the default), the access modes and a target example for each type, so the UI holds no copy of it. Calls nothing upstream |
-| `GET /resources/suggestions?type=&q=&limit=` | the same | `ResourceSuggestionList` | objects of one type the person can see, read with their token: SQL warehouses, serving endpoints, secret scopes (and, for `q` of the form `scope/` or `scope/prefix`, the key names of that scope; never a value), MLflow experiments, jobs. `q` is matched as a case-insensitive substring of the label and the target. A type with no safe list call answers `items: []` and `source: "not_supported"`. A call Databricks refuses or does not answer (no token, a refused scope, a failure) is not an error page: it answers `200`, `items: []`, `source: "unavailable"` and a `note` in words, so the form keeps free typing. `limit` 1 to 50 (default 20); `400` `unknown_type` for a `type` that is missing or not in the catalogue; `400` `invalid_query` for a `q` of more than 256 characters or with a control character; `400` `invalid_limit`. Writes nothing and records nothing |
+| `GET /resources/suggestions?type=&q=&limit=` | the same | `ResourceSuggestionList` | objects of one type, as the Databricks Apps console lists them: every type of the catalogue has a list call (table under `ResourceSuggestionList`). The person's own token is tried first; when it is refused for a scope an App cannot hold (secrets, MLflow experiments, jobs, functions, volumes) the list is read again with appmux's own service-principal token and answers `source: "platform_token"`, which shows what appmux can read and not what the person can. A type with levels (a secret's scope, a catalog and schema, a vector search endpoint, a Lakebase project and branch) answers the level the `q` stands at; the levels above the object are *prefix* targets that end in the separator, which `AttachResourceRequest` refuses, so the field goes on from them. `q` is matched as a case-insensitive substring of the label and the target (of the name alone at a level whose targets all start with the same names). A type with no list call answers `items: []` and `source: "not_supported"`; none of the catalogue is in that state now. A call Databricks refuses or does not answer (no token, a refused scope, a failure) is not an error page: it answers `200`, `items: []`, `source: "unavailable"` and a `note` in words, so the form keeps free typing. `limit` 1 to 50 (default 20); `400` `unknown_type` for a `type` that is missing or not in the catalogue; `400` `invalid_query` for a `q` of more than 256 characters or with a control character; `400` `invalid_limit`. Writes nothing and records nothing |
 | `GET /metrics?app=&from=&to=&step=` | as before | `MetricsResponse` | **changed**: `step` is `1m` (default: the stored minute rows, as before), `5m`, `15m` or `1h`; a value sent twice or outside the list is `400`. Over a step the counts, the histograms (bucket by bucket) and `egress_dropped_by_rule` (rule by rule) are summed; the peaks `in_flight_max`, `rss_mb_max`, `registry_ms_max`, `mem_used_mb` and `edge_rss_mb` are maximised; the gauges `ws_open`, `mem_limit_mb`, `children_running` and `children_registered` are the value of the step's latest minute; a column null in every minute stays null. `minute` is the start of the step, a whole multiple of the step from 2000-01-01T00:00Z, so steps fall on the same UTC instants whatever the window. A step the window cuts holds only the minutes inside it and keeps its own start; a step with no minute is left out. The window may be up to 7 days provided it holds at most 1440 steps, counted as the steps that hold a whole minute of it, a step it cuts at either end included (so 24 h at `1m`, 5 days at `5m` from the start of a step, 7 days at `15m` or `1h`; 5 days at `5m` from any other whole minute is 1441); otherwise `400` `window_too_long`, whose message names the smallest `step` that fits (none does past 7 days). The 10000-row cap and `truncated` are unchanged, with whole steps dropped in place of whole minutes |
 | `GET /metrics/breakdown?from=&to=&step=&limit=` | `CAN_MANAGE` on the platform | `MetricsBreakdown` | the apps (not the `_platform` row) ranked by their requests in the window, most first, then by slug; the top `limit` (1 to 20, default 8; anything else is `400`) each as a series of points, the rest summed step by step as `other`; the same `step`, window rules and default window (the hour before `to`) as `GET /metrics`. There is no row cap: at most 21 series of 1440 steps |
 
@@ -905,25 +905,52 @@ empty for a `secret`, which has none), `target_hint` (an example of a target, fo
 |---|---|---|---|
 | `items` | array<ResourceSuggestion> | always | At most `limit`, ordered by label |
 | `truncated` | boolean | always | `true` when more than `limit` matched, or when the list call returned a partial page so that more may exist |
-| `source` | string | always | `caller_token` (read with the person's token), `unavailable` (Databricks refused or did not answer), `not_supported` (the type has no safe list call) |
+| `source` | string | always | `caller_token` (read with the person's token), `platform_token` (the person's token was refused for a scope an App cannot hold, so appmux's own service-principal token read it: it shows what appmux can read, which the form says), `unavailable` (Databricks refused or did not answer), `not_supported` (the type has no list call) |
 | `note` | string or null | always | In words, why `items` is empty or short: for example that the session cannot list SQL warehouses and the id has to be typed. `null` when there is nothing to say |
 
 `ResourceSuggestion`: `target` (what `AttachResourceRequest.target` takes), `label` (the name the person knows it by),
 `detail` (string or null, for example the state of a warehouse), `permissions` (the levels the type allows, first is the
-default; the list calls give no finer fact about the person's rights on one object). Each type is read with one call
-made with the person's token and filtered by `q` here:
+default; the list calls give no finer fact about the person's rights on one object). Each type is read with the calls
+below, made with the person's token (or appmux's, see `source`) and filtered by `q` here. The scope column is what the
+call needs, taken from the REST reference and the names an App's `user_api_scopes` accepts or refuses; it is
+documented, not measured. What was measured is the shape of each answer (field names, counts), read with the CLI's
+token on the Free Edition workspace on 2026-11-04, for every row except `gateway_model_service`, whose path is a guess
+that is not confirmed; no call has been made with a person's App token on the dev App, and the `platform_token` retry
+has not run there either.
 
-| `type` | Databricks call | `target` | `label` |
-|---|---|---|---|
-| `sql_warehouse` | `GET /api/2.0/sql/warehouses` | `id` | `name` |
-| `serving_endpoint` | `GET /api/2.0/serving-endpoints` | `name` | `name` |
-| `secret`, `q` without `/` | `GET /api/2.0/secrets/scopes/list` | `<scope>/`, a prefix for the next keystrokes and not a complete target | `<scope>` |
-| `secret`, `q` of the form `scope/prefix` | `GET /api/2.0/secrets/list?scope=<scope>` (key names only; the value endpoint is never called) | `<scope>/<key>` | `<key>` |
-| `mlflow_experiment` | `POST /api/2.0/mlflow/experiments/search` (`max_results` 1000, `view_type` `ACTIVE_ONLY`) | `experiment_id` | `name` |
-| `job` | `GET /api/2.2/jobs/list?limit=100` (its `name` parameter is an exact match, so the filter is made here) | `job_id` | `settings.name` |
+| `type` | Databricks call | Scope | `target` | `label` |
+|---|---|---|---|---|
+| `sql_warehouse` | `GET /api/2.0/sql/warehouses` | `sql` | `id` | `name` |
+| `serving_endpoint` | `GET /api/2.0/serving-endpoints` | `serving.serving-endpoints:read` | `name` | `name` |
+| `secret`, `q` without `/` | `GET /api/2.0/secrets/scopes/list` | `secrets` (refused to an App) | `<scope>/`, a prefix | `<scope>` |
+| `secret`, `q` of the form `scope/prefix` | `GET /api/2.0/secrets/list?scope=<scope>` (key names only; the value endpoint is never called) | `secrets` (refused) | `<scope>/<key>` | `<key>` |
+| `mlflow_experiment` | `POST /api/2.0/mlflow/experiments/search` (`max_results` 1000, `view_type` `ACTIVE_ONLY`) | `mlflow` (refused) | `experiment_id` | `name` |
+| `job` | `GET /api/2.2/jobs/list?limit=100` (its `name` parameter is an exact match, so the filter is made here) | `jobs` (refused) | `job_id` | `settings.name` |
+| `uc_table` | `GET /api/2.1/unity-catalog/catalogs`, then `schemas?catalog_name=`, then `tables?catalog_name=&schema_name=` | `catalog.catalogs:read`, `catalog.schemas:read`, `catalog.tables:read` | `main.` (catalog), `main.sales.` (schema), then `main.sales.orders` | the last part |
+| `uc_function` | the same catalogs and schemas, then `functions?catalog_name=&schema_name=` | `unity-catalog` (refused) | `main.`, `main.sales.`, then `main.sales.score` | the last part |
+| `uc_volume` | the same catalogs and schemas, then `volumes?catalog_name=&schema_name=` | `catalog.volumes` (refused) | `/Volumes/main/`, `/Volumes/main/sales/`, then `/Volumes/main/sales/files` | the last part |
+| `uc_connection` | `GET /api/2.1/unity-catalog/connections` | `catalog.connections:read` | `name` | `name` |
+| `genie_space` | `GET /api/2.0/genie/spaces` | `dashboards.genie:read` | `space_id` | `title` |
+| `vector_search_index` | `GET /api/2.0/vector-search/endpoints`, then `indexes?endpoint_name=` | `vectorsearch.vector-search-indexes:read` | `<endpoint>/`, then the index's full name | the endpoint's name, then the last part |
+| `databricks_app` | `GET /api/2.0/apps` | `apps` | `name` | `name` |
+| `gateway_model_service` | `GET /api/2.1/unity-catalog/model-services` | none documented | `name` | the last part |
+| `lakebase_database` | `GET /api/2.0/postgres/projects`, then `…/projects/<p>/branches`, then `…/branches/<b>/endpoints`; and `GET /api/2.0/database/instances` for Provisioned instances | `postgres`; none documented for instances | `projects/<p>/`, `projects/<p>/branches/<b>/`, then the endpoint path; a Provisioned instance's `read_write_dns` | the display name, the branch, the endpoint; the instance's name |
 
-Every other type answers `not_supported`. A scope named in `q` that does not exist or is not visible to the person
-answers `source: "caller_token"`, no items and a `note`, since Databricks answers `404` for both. A `q` whose scope part cannot be a scope name (empty, a character outside letters, digits and `. _ @ -`, or a second slash) answers the same without calling anything. An object whose target the attach form would refuse is left out of the list.
+A list that pages is followed for up to 5 pages, because Databricks may answer a short or empty page and still hold a
+next-page token; a list longer than that is cut, `truncated` is `true` and the `note` says only part of the list could be
+read. A name in `q` that does not exist or is not visible to the person (a secret scope, a catalog, a schema, an
+endpoint, a project, a branch) answers `source: "caller_token"`, no items and a `note`, since Databricks answers `404`
+for both. A `q` whose parts cannot be names of that type answers the same without calling anything; for a secret scope a
+character outside letters, digits and `. _ @ -`, or a second slash. An object whose target the attach form would refuse
+is left out of the list, and only the prefix targets above are the exception to that.
+
+**When the person's own token is refused.** The retry with appmux's own token is made for a `403`, and for a
+`400`, `403` or `404` whose body names a missing scope; a `401`, a request that got no answer and any other status are
+not retried. The retry starts again at the first page. If it fails too, or the platform has no token to give, the
+answer is the one the person's own token got, a `source: "unavailable"` with a note (one that names a scope an App
+cannot hold does not send anyone to ask for it). A visitor whose token did not arrive is listed with appmux's token as
+well. The list is not narrowed to what the person may use, and attaching still runs the attach check with the person's
+token.
 
 #### MetricsBreakdown
 

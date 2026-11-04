@@ -29,7 +29,10 @@ export const ResourceTypeList = z.object({
 export type ResourceTypeList = z.infer<typeof ResourceTypeList>;
 
 export const ResourceSuggestion = z.object({
-  /** For a secret scope: `<scope>/`, a prefix to continue typing and not a complete target. */
+  /**
+   * For a level above the object (a secret scope `<scope>/`, a catalog
+   * `main.`): a prefix to continue typing from, not a complete target.
+   */
   target: z.string(),
   label: z.string(),
   detail: z.string().nullable(),
@@ -41,7 +44,16 @@ export type ResourceSuggestion = z.infer<typeof ResourceSuggestion>;
 export const ResourceSuggestionList = z.object({
   items: z.array(ResourceSuggestion),
   truncated: z.boolean(),
-  source: z.enum(["caller_token", "unavailable", "not_supported"]),
+  /**
+   * `caller_token`: read with the person's token. `platform_token`: that token
+   * was refused and appmux's own was used, so it shows what appmux can read.
+   */
+  source: z.enum([
+    "caller_token",
+    "platform_token",
+    "unavailable",
+    "not_supported",
+  ]),
   /** In words, why the list is empty or short; null when there is nothing to say. */
   note: z.string().nullable(),
 });

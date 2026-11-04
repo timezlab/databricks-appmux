@@ -17,7 +17,11 @@ import type {
 } from "@/lib/api";
 import { SUGGESTION_DELAY_MS, createDebouncedSearch } from "@/lib/app/forms";
 import type { DebouncedSearch, SearchOutcome } from "@/lib/app/forms";
-import { isScopePrefix } from "@/lib/app/resources";
+import {
+  isPrefixTarget,
+  objectSearchPlaceholder,
+  prefixActionLabel,
+} from "@/lib/app/resources";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -35,6 +39,15 @@ import { ResourceTypeIcon } from "./resource-type-icon";
 
 const UNAVAILABLE_NOTE =
   "The list could not be read just now. Type it in full; the attach check still runs.";
+
+/** Said under a list that was read with appmux's own access: it is not the person's view. */
+const PLATFORM_ACCESS_NOTE =
+  "Listed with appmux's own access, so it shows what appmux can read, not what you can.";
+
+/** An answer with objects to choose from, read with the person's token or, when that was refused, appmux's. */
+function isListing(list: ResourceSuggestionList): boolean {
+  return list.source === "caller_token" || list.source === "platform_token";
+}
 
 /**
  * How the field works for this type: `listing` searches the person's objects,
@@ -76,10 +89,13 @@ export interface ResourceObjectFieldProps {
 /**
  * The object of the Add panel, as in the Databricks console: a list of what
  * the person can see, read with their token as they type (debounced, the call
- * before aborted). For a secret the list first offers scopes; choosing one
- * goes on to its keys. When the type has no list, or Databricks gives none,
- * it is a text field with the server's note and the type's example.
- * Typing a target in full always works.
+ * before aborted). Where the person's token cannot read a type (secrets,
+ * experiments, jobs, functions, volumes) the server lists with appmux's own
+ * access and says so, and so does this field. A type with levels (a secret's
+ * scope, a Unity Catalog catalog and schema) first offers the level above the
+ * object; choosing one goes on to the next in the same field. When the type
+ * has no list, or Databricks gives none, it is a text field with the server's
+ * note and the type's example. Typing a target in full always works.
  */
 export function ResourceObjectField({
   id,
@@ -108,6 +124,7 @@ export function ResourceObjectField({
   const [highlighted, setHighlighted] = useState("");
   const searchRef = useRef<DebouncedSearch | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchBoxRef = useRef<HTMLInputElement>(null);
   const noteId = useId();
   const { type } = entry;
 
@@ -119,7 +136,7 @@ export function ResourceObjectField({
     suggestResources({ type }, { signal: controller.signal }).then(
       (list) => {
         if (controller.signal.aborted) return;
-        if (list.source === "caller_token") {
+        if (isListing(list)) {
           setMode({ kind: "listing", first: list });
           setLastList(list);
         } else {
@@ -208,9 +225,11 @@ export function ResourceObjectField({
   }
 
   function pick(suggestion: ResourceSuggestion): void {
-    if (isScopePrefix(type, suggestion)) {
-      // A scope is the first half of a secret: go on to its keys.
+    if (isPrefixTarget(type, suggestion.target)) {
+      // A scope, catalog or schema is the first part of a target: go on inside it.
       changeText(suggestion.target);
+      // Choosing a row moves the focus off the search box; keep typing from here.
+      searchBoxRef.current?.focus();
       return;
     }
     onPick(suggestion);
@@ -236,7 +255,7 @@ export function ResourceObjectField({
   const typed = text.trim();
   const canUseTyped =
     typed !== "" &&
-    !(type === "secret" && typed.endsWith("/")) &&
+    !isPrefixTarget(type, typed) &&
     !items.some((item) => item.target === typed);
   const note =
     state.status === "failed"
@@ -245,6 +264,10 @@ export function ResourceObjectField({
         (list?.truncated === true
           ? "More match than are shown; type more of the name."
           : null));
+  const accessNote =
+    state.status !== "failed" && list?.source === "platform_token"
+      ? PLATFORM_ACCESS_NOTE
+      : null;
   const isProbing = mode.kind === "probing";
 
   return (
@@ -296,11 +319,8 @@ export function ResourceObjectField({
             onValueChange={setHighlighted}
           >
             <CommandInput
-              placeholder={
-                type === "secret"
-                  ? "Type a scope, then / and a key"
-                  : "Search by name, or type it in full"
-              }
+              ref={searchBoxRef}
+              placeholder={objectSearchPlaceholder(entry)}
               value={text}
               onValueChange={changeText}
               autoCapitalize="none"
@@ -323,13 +343,13 @@ export function ResourceObjectField({
                 </p>
               ) : null}
               {items.map((item) => {
-                const isScope = isScopePrefix(type, item);
+                const isStep = isPrefixTarget(type, item.target);
                 return (
                   <CommandItem
                     key={item.target}
                     value={`object:${item.target}`}
                     aria-label={
-                      isScope ? `${item.label}, open its keys` : item.label
+                      isStep ? prefixActionLabel(type, item.label) : item.label
                     }
                     onSelect={() => {
                       pick(item);
@@ -345,7 +365,7 @@ export function ResourceObjectField({
                         </span>
                       )}
                     </span>
-                    {isScope ? (
+                    {isStep ? (
                       <ChevronRightIcon
                         aria-hidden="true"
                         className="ml-auto text-muted-foreground"
@@ -377,6 +397,11 @@ export function ResourceObjectField({
               {note === null ? null : (
                 <p className="border-t px-3 py-2 text-xs text-muted-foreground">
                   {note}
+                </p>
+              )}
+              {accessNote === null ? null : (
+                <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                  {accessNote}
                 </p>
               )}
             </CommandList>

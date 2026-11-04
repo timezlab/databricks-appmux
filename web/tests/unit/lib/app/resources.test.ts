@@ -16,7 +16,9 @@ import {
   editDraftKey,
   emptyAttachDraft,
   findResourceType,
-  isScopePrefix,
+  isPrefixTarget,
+  objectSearchPlaceholder,
+  prefixActionLabel,
   requirementRows,
   requirementsSummary,
   resourceLevelLabel,
@@ -102,19 +104,60 @@ describe("the catalogue, as data", () => {
     assert.equal(resourceLevelLabel("READ"), "Read");
   });
 
-  it("treats a secret suggestion ending in / as a scope to go on typing from", () => {
-    const scope = {
-      target: "sales-secrets/",
-      label: "sales-secrets",
-      detail: null,
-      permissions: ["READ"],
-    };
-    assert.equal(isScopePrefix("secret", scope), true);
-    assert.equal(
-      isScopePrefix("secret", { ...scope, target: "sales-secrets/token" }),
+  it.each([
+    ["secret", "sales-secrets/", true],
+    ["secret", "sales-secrets/token", false],
+    ["uc_table", "main.", true],
+    ["uc_table", "main.sales.", true],
+    ["uc_table", "main.sales.orders", false],
+    ["uc_function", "main.sales.", true],
+    ["uc_function", "main.sales.total", false],
+    ["uc_volume", "/Volumes/main/", true],
+    ["uc_volume", "/Volumes/main/sales/", true],
+    ["uc_volume", "/Volumes/main/sales/files", false],
+    ["vector_search_index", "shared-endpoint/", true],
+    ["vector_search_index", "main.sales.docs-index", false],
+    ["lakebase_database", "projects/orders/", true],
+    ["lakebase_database", "projects/orders/branches/main/", true],
+    [
+      "lakebase_database",
+      "projects/orders/branches/main/endpoints/primary",
       false,
+    ],
+    // A type without levels never has a prefix, whatever its target ends in.
+    ["sql_warehouse", "1234567890abcdef/", false],
+    ["uc_connection", "crm.", false],
+    ["a_type_the_page_does_not_know", "x/", false],
+  ])(
+    "says whether a %s target %j is a step toward one: %s",
+    (type, target, expected) => {
+      assert.equal(isPrefixTarget(type, target), expected);
+    },
+  );
+
+  it("says in words what choosing a step does", () => {
+    assert.equal(
+      prefixActionLabel("secret", "sales-secrets"),
+      "sales-secrets, open its keys",
     );
-    assert.equal(isScopePrefix("sql_warehouse", scope), false);
+    assert.equal(prefixActionLabel("uc_table", "main"), "main, go inside it");
+  });
+
+  it("asks for a name one level at a time only for a type that has levels", () => {
+    assert.equal(
+      objectSearchPlaceholder(entry("secret")),
+      "Type a scope, then / and a key",
+    );
+    assert.equal(
+      objectSearchPlaceholder(
+        entry("uc_table", { target_hint: "main.sales.orders" }),
+      ),
+      "Search by name, or type it in full, such as main.sales.orders",
+    );
+    assert.equal(
+      objectSearchPlaceholder(entry("sql_warehouse")),
+      "Search by name, or type it in full",
+    );
   });
 });
 
