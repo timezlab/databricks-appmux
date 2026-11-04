@@ -1,0 +1,6 @@
+command: ["python", "-m", "uvicorn", "app:app"]
+env:
+  # The address of agent-hub, as the caller reaches it: under appmux
+  # https://<your-appmux-url>/<hub-slug>. Empty means "not set": the console then says so.
+  - name: PROVIDER_URL
+    value: ""

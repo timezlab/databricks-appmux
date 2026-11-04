@@ -1,17 +1,18 @@
 # Example child apps
 
-Six small apps, each a **standard Databricks App** (`app.yaml` and source, plus `requirements.txt`
+Eight small apps, each a **standard Databricks App** (`app.yaml` and source, plus `requirements.txt`
 for the Python ones), written in different stacks so you can register them in appmux by hand, once
 as an **app admin** (register, update, roll back, change config, share) and once as an **end user**
-(open `/<slug>/`). Two of them, an MCP server and an A2A agent that uses a free Databricks
-model, are for checking calls **between** Apps, inside appmux and outside it.
+(open `/<slug>/`). Four of them are for checking calls **between** Apps, inside appmux and outside
+it: an MCP server, an A2A agent that uses a free Databricks model, and a hub and a console that
+ask whether the called App can tell who is behind the call.
 
 Nothing in these folders knows about appmux, knows its slug, or needs a change to `app.yaml` or
 source to be hosted by it ([constitution I](../.specify/memory/constitution.md)). Each one also runs
 on a standalone Databricks App unchanged. They exist for hand testing; they are not part of the
 product, they are not shipped in the deploy folder (`scripts/assemble-deploy.sh` copies an
-allow-list that does not include `examples/`), and the Python gate lints all five Python apps and
-tests `mcp-tools` and `a2a-agent` (`tests/unit/test_example_*.py`). The Node app is checked by hand.
+allow-list that does not include `examples/`), and the Python gate lints all seven Python apps and
+tests `mcp-tools`, `a2a-agent`, `agent-hub` and `agent-console` (`tests/unit/test_example_*.py`). The Node app is checked by hand.
 
 > **Verification status.** `fastapi-notes`, `flask-session`, `streamlit-inspector` and `node-stream`
 > were run **locally only**. The three Python ones ran in a scratch virtual environment whose
@@ -27,6 +28,11 @@ tests `mcp-tools` and `a2a-agent` (`tests/unit/test_example_*.py`). The Node app
 > standalone Apps on the Free Edition workspace, calling each other and a free foundation model; the
 > results are in [What was verified](#what-was-verified) and in
 > [docs/reference/mcp-and-a2a.md](../docs/reference/mcp-and-a2a.md).
+>
+> `agent-hub` and `agent-console` were tested locally against fakes (a fake Databricks proxy in
+> front of the real hub) and then run on 2026-11-04 as children of the dev App, where only the
+> calls that need no delegation were measured. What the delegations change is **not yet
+> measured**; see [the reference](../docs/reference/mcp-and-a2a.md#who-the-target-sees-when-the-caller-is-an-app).
 
 ## The apps
 
@@ -38,6 +44,8 @@ tests `mcp-tools` and `a2a-agent` (`tests/unit/test_example_*.py`). The Node app
 | [node-stream](node-stream/README.md) | Node, `node:http` only, no dependency | `node server.js` | `stream` / **768 MB** | the Node runtime, a Server-Sent Events stream that stays open, relative asset and stream URLs under the prefix |
 | [mcp-tools](mcp-tools/README.md) | Starlette on uvicorn, an MCP server (stateless Streamable HTTP) | `python -m uvicorn app:app` | `tools` / 128 MB | four tools, `whoami` showing who the server sees at the end of a chain of Apps, being called by another App |
 | [a2a-agent](a2a-agent/README.md) | Starlette on uvicorn, an A2A 1.0 agent whose model is a free Databricks endpoint | `python -m uvicorn app:app` | `agent` / 256 MB | calling a model, an MCP server and another agent with the App's own identity; the shared-SP delegation and `CAN USE` they need |
+| [agent-hub](agent-hub/README.md) | Starlette on uvicorn, MCP and A2A in one App, a free Databricks model as the agent | `python -m uvicorn app:app` | `hub` / 256 MB | tools that run as the caller: `whoami` and `databricks_me`; what the hub sees for a person's call and for an App's |
+| [agent-console](agent-console/README.md) | Starlette on uvicorn, a page that calls the hub | `python -m uvicorn app:app` | `console` / 256 MB | the identity check: MCP and A2A, each sent as you (OBO) and as the App, and what the hub saw |
 
 Every app listens on the port appmux gives it (`8000` in this repo's setup; locally you pick it), and
 every app shows the same three things so you can tell a release from a config change:
@@ -71,13 +79,19 @@ endpoint, so nothing needs a paid model. What was measured, and the setup each c
 is in [docs/reference/mcp-and-a2a.md](../docs/reference/mcp-and-a2a.md). Both depend only on
 packages the Apps environment already holds (Starlette, uvicorn, httpx, the Databricks SDK).
 
+`agent-hub` and `agent-console` ask the next question: when A calls B, **does B know who is behind
+the call, and can it act as them?** The hub serves MCP and A2A and its tools run as the caller; the console
+calls it with the visitor's own token (needs OBO delegated to the console) or with its own identity
+(needs the shared service principal), and draws what the hub saw for each. They are the only examples
+that use the visitor's token.
+
 Packages: every Python requirement is already in the Apps environment, so no wheel folder, index or
 `wheel_sources` is needed ([design 5.3](../docs/product/v1-design.md)). The `requirements.txt` files
 use lower bounds, not `==` pins, so the environment's version satisfies them. The Node app has no
 dependency and no `requirements.txt` (that file would make appmux treat it as Python).
 
-No example uses a resource or a secret, and none calls an API with the visitor's token (`a2a-agent`
-calls with the App's **own** identity). A resource
+No example uses a resource or a secret, and only `agent-hub` and `agent-console` use the visitor's
+token (`a2a-agent` calls with the App's **own** identity). A resource
 example needs an object in your workspace and exact attach steps that have not been run in the
 container (tasks T129 and T147); an OBO call needs a scope on the appmux App. The apps do show
 whether the token header arrives, which is the part appmux controls (see

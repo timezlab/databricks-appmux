@@ -102,11 +102,47 @@ Since [ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md)
 ID, lower case>", "permission": "CAN_USE"}` admits that one SP and nobody else. It is in the code
 and its tests; a call through the Apps proxy with it has **not been measured yet** (below).
 
+## Who the target sees when the caller is an App
+
+[agent-hub](../../examples/agent-hub/README.md) serves MCP and A2A and its tools run **as the
+caller**: `whoami` returns the identity headers it received, and `databricks_me` calls Databricks
+with the caller's own `X-Forwarded-Access-Token`. [agent-console](../../examples/agent-console/README.md)
+calls the hub over both protocols, once with the visitor's token (OBO: the console must be delegated
+OBO to receive it) and once with its own identity (the shared service principal), and shows what the
+hub saw. Together they answer: **can the caller's identity be passed through MCP and A2A?** The
+protocols carry no identity of their own; it travels in the HTTP bearer, so the answer is the one
+in [Who the target sees](#who-the-target-sees), and what is left to measure is whether a
+scope-limited user token is accepted as the bearer of a call to another App.
+
+Measured on 2026-11-04 on the Free Edition dev App, with `hub` registered as a child of appmux and
+the Databricks CLI's bearer token as the caller (a person, no browser), **no delegation given to the
+hub**:
+
+| Call | Result |
+|---|---|
+| card, MCP `initialize`, A2A `SendMessage` (`call-tool`) | `200`, the same shapes the unit tests expect |
+| `whoami` over MCP and over A2A | the hub saw the person's e-mail in `X-Forwarded-Email` and `X-Forwarded-User`, the prefix `/hub`, and `access_token_header_present: false` |
+| `databricks_me` over MCP | refused in words: no user token came with the call, so there is no user to act as |
+| `GET /api/status` | the model is `databricks-gpt-oss-120b`; the hub's credentials are `configured: false` |
+
+So the person's identity **does** reach the hub through both protocols, because appmux and the
+platform set the identity headers from the bearer; their token does **not** reach it until a platform
+admin delegates OBO to the hub.
+
+Not measured yet, because each needs a delegation that has not been given on the dev App: the hub
+receiving the user's token (OBO) and `databricks_me` succeeding with the scopes the appmux App
+declares; the shared service principal as the console's identity and what the hub sees of it; the
+console receiving the visitor's token from a **browser** session and the Apps proxy accepting that
+token as the bearer of a call to another App; a `service_principal` grant admitting the console's
+call; the model answering `ask` with the hub's credentials.
+
 ## Not measured
 
 - The 300 s cut of the Apps proxy for a call that lasts that long (measured in spike 8 for a plain
   stream, not for MCP or A2A), and whether a stream that sends nothing for a while survives.
-- A user bearer passed on to a child by OBO, and an agent that calls on behalf of the visitor.
+- A user bearer passed on to a child by OBO, and an agent that calls on behalf of the visitor
+  (built as [agent-console](../../examples/agent-console/README.md), run only without delegations: see
+  the section above).
 - A `group` grant admitting an SP, and the identity of an SP in appmux's audit and metrics.
 - A `service_principal` grant (ADR 0020) admitting an SP's call through the Apps proxy.
 - Load: the cost of the extra hop through appmux, and what the free model's limit does to several
