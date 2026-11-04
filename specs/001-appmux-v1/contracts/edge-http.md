@@ -46,7 +46,7 @@ The edge refuses with `400`, and forwards nothing, a request with a header name 
 | `413` | request body over `max_request_body_mb` | short text |
 | `429` | more than `max_concurrent_requests` in flight for the app | `Retry-After: 1` |
 | `502` | the child is unreachable or closed the connection | status page |
-| `503` | the app is `crashed`, stopped or not yet `active`; or `self_check()` failed or the registry is unreachable at start (every route, `/` included); or any path but `/` while the process is starting | status page naming the app's state, the failed check or the reason |
+| `503` | the app is `crashed`, stopped, has no release (`no_release`: no `Retry-After`, since waiting does not change it) or is not yet `active`; or `self_check()` failed or the registry is unreachable at start (every route, `/` included); or any path but `/` while the process is starting | status page naming the app's state, the failed check or the reason |
 | `504` | no response within `request_timeout_s` | status page |
 
 Any other status is the child's own. An error body never carries a stack trace, a path or a registry message.

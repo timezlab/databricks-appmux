@@ -38,8 +38,8 @@ WEBSOCKET_TRY_AGAIN_LATER: Final = 1013
 _UNKNOWN_CHECK_NAME: Final = "unknown"
 _STARTING: Final = "starting"
 # What a visitor is told about an app with no route, by the state the app is in. The states are the
-# run states of the launcher (`stopped`, `starting`, `crashed`); `running` never reaches a page
-# because an app that runs has a route.
+# run states of the launcher (`stopped`, `starting`, `crashed`, `no_release`); `running` never
+# reaches a page because an app that runs has a route.
 _APP_STATE_ADVICE: Final = {
     "stopped": "An admin has stopped this app. Ask its owner to start it again.",
     _STARTING: (
@@ -49,6 +49,10 @@ _APP_STATE_ADVICE: Final = {
     "crashed": (
         "The app crashed and is not running. Ask its owner to read its log or to activate "
         "another release."
+    ),
+    "no_release": (
+        "The app has no release to serve: none has passed its health check yet. Waiting will not "
+        "change that. Ask its owner to update it or to activate a release."
     ),
 }
 
@@ -126,7 +130,7 @@ def self_check_failed_page(names: Sequence[str]) -> bytes:
 
 
 def app_unavailable_state(state: str) -> str:
-    """The state a page names: one of this build's three, and ``starting`` for any other text."""
+    """The state a page names: one of this build's four, and ``starting`` for any other text."""
     return state if state in _APP_STATE_ADVICE else _STARTING
 
 

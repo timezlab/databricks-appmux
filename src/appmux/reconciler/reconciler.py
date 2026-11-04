@@ -333,16 +333,22 @@ class Reconciler:
         await self._idle.wait()
 
     def run_state(self, slug: str, desired_state: str) -> RunState:
-        """How ``slug`` runs now: ``stopped``, ``starting`` (also while it waits to be restarted),
-        ``running`` (a copy has its route) or ``crashed`` (the restarts are used up)."""
+        """How ``slug`` runs now: ``stopped``, ``crashed`` (the restarts are used up), ``running``
+        (a copy has its route), ``starting`` (a copy is on its way, also while it waits to be
+        restarted) or ``no_release`` (nothing is serving and nothing is on its way)."""
         if desired_state == "stopped":
             return "stopped"
         state = self._states.get(slug)
-        if state is None:
-            return "starting"
-        if state.is_crashed:
-            return "crashed"
-        return "running" if state.live is not None else "starting"
+        if state is not None:
+            if state.is_crashed:
+                return "crashed"
+            if state.live is not None:
+                return "running"
+        try:
+            snapshot = self._registry.snapshot
+        except RegistryUnavailable:
+            return "starting"  # nothing loaded yet: the app has not been looked at
+        return "starting" if _has_release_on_its_way(snapshot, slug) else "no_release"
 
     def request_restart(self, slug: str) -> None:
         """Bring a new copy of the active release up beside the running one, then swap to it.
@@ -1058,6 +1064,29 @@ def _active_release(snapshot: RegistrySnapshot, slug: str) -> Release | None:
         ),
         None,
     )
+
+
+# Statuses of a release that a pass is building or checking. ``pending`` is left out on purpose: a
+# pending release is built only while it is the target (``_pending_target``).
+_ON_ITS_WAY_STATUSES: Final = frozenset({"building", "starting", "healthy"})
+
+
+def _has_release_on_its_way(snapshot: RegistrySnapshot, slug: str) -> bool:
+    """Whether a copy of ``slug`` will come up without a person acting.
+
+    True for an active release (its copy is being started or restarted), a release being built,
+    started or checked, and a target waiting to be built. False after a first release failed and
+    for an app never updated: its route stays closed until someone updates or activates one.
+    """
+    if _active_release(snapshot, slug) is not None:
+        return True
+    if any(
+        release.status in _ON_ITS_WAY_STATUSES and release.deleted_at is None
+        for release in snapshot.releases_for(slug)
+    ):
+        return True
+    config = snapshot.app_config(slug)
+    return config is not None and _pending_target(snapshot, config) is not None
 
 
 def _pending_target(snapshot: RegistrySnapshot, config: AppConfig) -> Release | None:

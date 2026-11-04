@@ -83,6 +83,14 @@ describe("what each state means to the person", () => {
     assert.equal(appStatePresentation("starting").tone, "info");
   });
 
+  it("an app with no release is a warning that says what to do, not a start in progress", () => {
+    const presentation = appStatePresentation("no_release");
+    assert.equal(presentation.tone, "warning");
+    assert.equal(presentation.label, "No release");
+    assert.match(presentation.description, /Update/);
+    assert.doesNotMatch(presentation.description, /starting/i);
+  });
+
   it("a request waiting for a decision stands out; a decided one is success or danger", () => {
     assert.equal(requestStatusPresentation("pending").tone, "warning");
     assert.equal(requestStatusPresentation("approved").tone, "success");

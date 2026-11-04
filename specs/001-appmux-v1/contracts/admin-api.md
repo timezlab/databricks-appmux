@@ -361,7 +361,7 @@ One app on the launcher.
 |---|---|---|---|
 | `slug` | string | always | The app |
 | `display_name` | string | always | Shown in the launcher |
-| `state` | string | always | One of `stopped`, `starting`, `running`, `crashed` |
+| `state` | string | always | One of `stopped`, `starting`, `running`, `crashed`, `no_release` (the app is meant to run, but no release is active and none is being built, so its route stays closed until a person updates it or activates a release) |
 | `permission` | string | always | The actor's level: `CAN_USE` or `CAN_MANAGE` (a platform admin holds `CAN_MANAGE` on every app) |
 | `open_modes` | array<string> | always | Empty when the app has a single **Open**; `["without_token", "as_user"]` when the app is OBO-delegated and the actor is a platform admin who is neither the owner nor named by a grant |
 
@@ -384,7 +384,7 @@ Returned by `GET /apps/{app}` and by every write that changes the `apps` row (`P
 | `owner` | string | always | Email of the owner (always an app admin) |
 | `source_path` | string | always | Folder snapshotted on Update, read with the presser's token |
 | `memory_budget_mb` | integer | always | 64 to 16384 |
-| `state` | string | always | One of `stopped`, `starting`, `running`, `crashed` |
+| `state` | string | always | One of `stopped`, `starting`, `running`, `crashed`, `no_release` (the app is meant to run, but no release is active and none is being built, so its route stays closed until a person updates it or activates a release) |
 | `runtime` | string or null | always | The runtime detected in the active release, `python` or `node`; `null` while no release is active |
 | `restart_to_apply` | boolean | always | `true` when a resource or an own-SP key changed after the app last started ("restart to apply") |
 | `version` | integer | always | Version of the app row; `UpdateAppRequest.version` |
@@ -417,7 +417,7 @@ Returned by `POST /apps/{app}/start`, `/stop` and `/restart`.
 
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
-| `state` | string | always | The run state right after the action: `stopped`, `starting`, `running` or `crashed` |
+| `state` | string | always | The run state right after the action: `stopped`, `starting`, `running`, `crashed` or `no_release` |
 | `desired_state` | string | always | `running` or `stopped` |
 
 #### ReleaseSummary

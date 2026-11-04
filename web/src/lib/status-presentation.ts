@@ -106,6 +106,11 @@ const APP_STATE: Record<AppState, StatusPresentation> = {
     "danger",
     "Stopped after repeated crashes; its route answers 503 until an admin acts.",
   ),
+  no_release: presentation(
+    "No release",
+    "warning",
+    "No release is serving, so the route is closed. Update to fetch one, or activate a release by hand.",
+  ),
 };
 
 const REQUEST_STATUS: Record<RequestStatus, StatusPresentation> = {

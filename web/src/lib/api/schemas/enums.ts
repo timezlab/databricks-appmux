@@ -3,7 +3,13 @@ import { z } from "./zod.ts";
 
 // ------------------------------------------------------------- closed lists
 
-export const AppState = z.enum(["stopped", "starting", "running", "crashed"]);
+export const AppState = z.enum([
+  "stopped",
+  "starting",
+  "running",
+  "crashed",
+  "no_release",
+]);
 
 export type AppState = z.infer<typeof AppState>;
 

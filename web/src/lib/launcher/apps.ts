@@ -20,22 +20,24 @@ export const APP_FILTER_MIN_COUNT = 11;
 
 /**
  * The order of the states, what needs attention first: a crashed app, then
- * one that is starting (a start can hang, as a Node.js app does in a small
- * memory budget), then a stopped one, then the running ones.
+ * one with no release (it stays closed until a person acts), then one that is
+ * starting (a start can hang, as a Node.js app does in a small memory
+ * budget), then a stopped one, then the running ones.
  */
 const ATTENTION_RANK: Readonly<Record<AppState, number>> = {
   crashed: 0,
-  starting: 1,
-  stopped: 2,
-  running: 3,
+  no_release: 1,
+  starting: 2,
+  stopped: 3,
+  running: 4,
 };
 
 /** "without token" is the default of design 9.1, so it comes first. */
 const OPEN_MODE_ORDER: readonly OpenMode[] = ["without_token", "as_user"];
 
 // The route of a child opens only once its health check passes (constitution
-// II), so a link to a stopped, starting or crashed app would land on a 404 or
-// 503. The reason says what has to happen instead, and who does it: a person
+// II), so a link to a stopped, starting, crashed or release-less app would
+// land on a 404 or 503. The reason says what has to happen instead, and who does it: a person
 // who manages the app starts it from its page; anyone else asks its admin.
 const NOT_OPEN_REASON: Record<
   Exclude<AppState, "running">,
@@ -52,6 +54,10 @@ const NOT_OPEN_REASON: Record<
   crashed: {
     manager: "Crashed. Restart it from Manage.",
     visitor: "Crashed. Ask the app admin to restart it.",
+  },
+  no_release: {
+    manager: "No release is serving. Update it from Manage.",
+    visitor: "No release is serving. Ask the app admin to update it.",
   },
 };
 const INVALID_SLUG_REASON =

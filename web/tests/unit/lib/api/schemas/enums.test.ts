@@ -18,7 +18,11 @@ import {
 
 describe("closed lists", () => {
   const lists: [name: string, schema: z.ZodEnum, expected: string[]][] = [
-    ["AppState", api.AppState, ["stopped", "starting", "running", "crashed"]],
+    [
+      "AppState",
+      api.AppState,
+      ["stopped", "starting", "running", "crashed", "no_release"],
+    ],
     ["DesiredState", api.DesiredState, ["running", "stopped"]],
     ["AppPermission", api.AppPermission, ["CAN_USE", "CAN_MANAGE"]],
     ["OpenMode", api.OpenMode, ["as_user", "without_token"]],

@@ -65,7 +65,12 @@ describe("the Open action (design 9.1: one Open, or two modes for a platform adm
   });
 
   it("offers no Open while the route is closed, and says why", () => {
-    for (const state of ["stopped", "starting", "crashed"] as const) {
+    for (const state of [
+      "stopped",
+      "starting",
+      "crashed",
+      "no_release",
+    ] as const) {
       const { open } = onlyRow({
         state,
         open_modes: ["without_token", "as_user"],
@@ -77,14 +82,39 @@ describe("the Open action (design 9.1: one Open, or two modes for a platform adm
     }
   });
 
-  it("the three reasons differ, so a person can tell the states apart", () => {
-    const reasons = (["stopped", "starting", "crashed"] as const).map(
-      (state) => {
-        const { open } = onlyRow({ state });
-        return open.kind === "unavailable" ? open.reason : "";
-      },
-    );
-    assert.equal(new Set(reasons).size, 3);
+  it("the four reasons differ, so a person can tell the states apart", () => {
+    const reasons = (
+      ["stopped", "starting", "crashed", "no_release"] as const
+    ).map((state) => {
+      const { open } = onlyRow({ state });
+      return open.kind === "unavailable" ? open.reason : "";
+    });
+    assert.equal(new Set(reasons).size, 4);
+  });
+
+  it("does not tell anyone to wait for an app that has no release", () => {
+    for (const permission of ["CAN_USE", "CAN_MANAGE"] as const) {
+      const { open } = onlyRow({ state: "no_release", permission });
+      assert.equal(open.kind, "unavailable", permission);
+      if (open.kind === "unavailable") {
+        assert.match(open.reason, /No release/, permission);
+        assert.doesNotMatch(open.reason, /health check passes/, permission);
+      }
+    }
+  });
+
+  it("sends a manager of an app with no release to Manage and anyone else to its admin", () => {
+    const manager = onlyRow({ state: "no_release", permission: "CAN_MANAGE" });
+    const user = onlyRow({ state: "no_release", permission: "CAN_USE" });
+    assert.equal(manager.open.kind, "unavailable");
+    assert.equal(user.open.kind, "unavailable");
+    if (
+      manager.open.kind === "unavailable" &&
+      user.open.kind === "unavailable"
+    ) {
+      assert.match(manager.open.reason, /from Manage/);
+      assert.match(user.open.reason, /Ask the app admin/);
+    }
   });
 
   it("tells a person who cannot manage a stopped or crashed app to ask its admin", () => {
@@ -233,16 +263,22 @@ describe("the rows", () => {
     assert.deepEqual(slugsOf(rows), ["a", "b"]);
   });
 
-  it("put what needs attention first: crashed, starting, stopped, then running, each by name", () => {
+  it("put what needs attention first: crashed, no release, starting, stopped, then running, each by name", () => {
     const rows = launcherAppRows([
       summary({ slug: "a-run", display_name: "Alpha", state: "running" }),
       summary({ slug: "z-stop", display_name: "Zulu", state: "stopped" }),
       summary({ slug: "b-stop", display_name: "Bravo", state: "stopped" }),
       summary({ slug: "m-start", display_name: "Mike", state: "starting" }),
       summary({ slug: "y-crash", display_name: "Yankee", state: "crashed" }),
+      summary({
+        slug: "n-none",
+        display_name: "November",
+        state: "no_release",
+      }),
     ]);
     assert.deepEqual(slugsOf(rows), [
       "y-crash",
+      "n-none",
       "m-start",
       "b-stop",
       "z-stop",

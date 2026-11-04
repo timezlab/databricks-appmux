@@ -181,7 +181,7 @@ Platform data is written with the **platform admin's own OBO token and Postgres 
 
 ### 5.1 States
 
-- **App:** `stopped`, `starting`, `running`, `crashed` (run state, in memory). The model leaves room for a later `sleeping` state.
+- **App:** `stopped`, `starting`, `running`, `crashed`, `no_release` (run state, in memory). `starting` means a copy is on its way: a release is being built, started or checked, or the active release's copy is coming up. `no_release` means the app is meant to run but no release is active and none is being built (a first release that failed its health check, or an app never updated), so its route stays closed until a person updates it or activates a release; waiting does not help, so the status page sends no `Retry-After`. The model leaves room for a later `sleeping` state.
 - **Release:** `pending → building → starting → healthy → active`, plus `failed` and `superseded`. A release interrupted mid-build returns to `pending`; a `failed` release is never retried automatically but can be activated by hand.
 - `app_config.target_release_no` is the release the app admin chose to go live by pressing Update or Activate (nobody approves it); the **active** release is what last passed health. They differ during an update or after a failed one, so a restart runs the last good release.
 

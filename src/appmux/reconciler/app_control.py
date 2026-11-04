@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Literal, Protocol
 
-# The same four words as ``admin.schemas.AppState``; this module may not import the admin package.
-RunState = Literal["stopped", "starting", "running", "crashed"]
+# The same five words as ``admin.schemas.AppState``; this module may not import the admin package.
+RunState = Literal["stopped", "starting", "running", "crashed", "no_release"]
 
 
 class AppControl(Protocol):

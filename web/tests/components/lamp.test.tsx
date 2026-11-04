@@ -43,4 +43,13 @@ describe("AppStateBadge", () => {
     render(<AppStateBadge state="crashed" />);
     expect(screen.getByText("Crashed")).toHaveAttribute("data-lamp", "failed");
   });
+
+  it("does not breathe for an app with no release, since nothing is on its way", () => {
+    const { container } = render(<AppStateBadge state="no_release" />);
+    expect(screen.getByText("No release")).not.toHaveAttribute(
+      "data-lamp",
+      "starting",
+    );
+    expect(container.querySelector(".animate-lamp-breathe")).toBeNull();
+  });
 });

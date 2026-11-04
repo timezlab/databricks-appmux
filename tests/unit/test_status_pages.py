@@ -32,7 +32,7 @@ def header_map(headers: list[tuple[bytes, bytes]]) -> dict[str, str]:
 # --- the page of an app that has no route ------------------------------------------------------
 
 
-@pytest.mark.parametrize("state", ["stopped", "starting", "crashed"])
+@pytest.mark.parametrize("state", ["stopped", "starting", "crashed", "no_release"])
 def test_the_page_of_an_unavailable_app_names_the_app_and_its_state(state: str) -> None:
     page = app_unavailable_page("sales", state).decode()
 
@@ -43,11 +43,10 @@ def test_the_page_of_an_unavailable_app_names_the_app_and_its_state(state: str) 
 
 
 def test_each_state_gets_its_own_advice() -> None:
-    advice = {
-        state: app_unavailable_page("sales", state) for state in ("stopped", "starting", "crashed")
-    }
+    states = ("stopped", "starting", "crashed", "no_release")
+    advice = {state: app_unavailable_page("sales", state) for state in states}
 
-    assert len(set(advice.values())) == 3
+    assert len(set(advice.values())) == len(states)
 
 
 @pytest.mark.parametrize("state", ["running", "", "booting <b>", "STOPPED"])
@@ -66,7 +65,12 @@ def test_a_slug_is_escaped_on_the_page() -> None:
 
 @pytest.mark.parametrize(
     ("state", "retry_after_s"),
-    [("starting", APP_STARTING_RETRY_AFTER_S), ("stopped", None), ("crashed", None)],
+    [
+        ("starting", APP_STARTING_RETRY_AFTER_S),
+        ("stopped", None),
+        ("crashed", None),
+        ("no_release", None),
+    ],
 )
 def test_only_an_app_that_is_coming_up_asks_the_client_to_come_back(
     state: str, retry_after_s: int | None

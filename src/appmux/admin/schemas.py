@@ -167,7 +167,7 @@ ResourceKey = SecretKey
 # ISO 8601 UTC with whole seconds and a trailing Z (contract, "Reading the schemas").
 UtcTime = Annotated[AwareDatetime, PlainSerializer(_format_time, return_type=str)]
 
-AppState = Literal["stopped", "starting", "running", "crashed"]
+AppState = Literal["stopped", "starting", "running", "crashed", "no_release"]
 DesiredState = Literal["running", "stopped"]
 AppPermission = Literal["CAN_USE", "CAN_MANAGE"]
 OpenMode = Literal["as_user", "without_token"]
@@ -1136,7 +1136,7 @@ class AppLogExit(_Body):
 
 
 class AppLogs(_Body):
-    state: Literal["stopped", "starting", "running", "crashed", "never_started"]
+    state: Literal["stopped", "starting", "running", "crashed", "no_release", "never_started"]
     instance: str | None
     lines: list[AppLogLine]
     next_after: int
