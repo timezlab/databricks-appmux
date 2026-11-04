@@ -26,15 +26,20 @@ What the tests assert, and what they leave to a person:
   only attempt allowed to succeed is the registry login, the accepted residual of design 8.4 (the
   appmux SP's low-privilege registry role, TD-002 in ``docs/tech-debt.md``); any other success, an
   inconclusive attempt or a skipped one fails the test, because a probe that cannot see must not
-  pass. Whether listing secret scopes belongs to that residual is not known: the first container
-  run decides, and a success there is a finding to record, not a number to loosen.
+  pass. Listing secret scopes is not in that residual. The first run (2026-11-04, against the dev
+  App on the Free Edition workspace) found that a child's token lists every scope name in both
+  modes while reading any value stays refused, so both containment tests fail on ``list_scopes``
+  until the owner decides: TD-027 in ``docs/tech-debt.md``. A success there is a finding to record,
+  not a number to loosen.
 
-The test talks to the edge on the container's own port and plays the Databricks proxy by sending the
-identity headers itself, which only works from inside the container. It does not run in the default
-gate: it is marked ``integration`` and skipped unless ``APPMUX_TEST_CONTAINER=1``;
-``scripts/sync-deploy.sh`` puts the code on a container. Nothing here has run against one, so no
-claim that it passes exists. No token, client id or secret value is read, printed or asserted by
-value; a report that repeated the admin's token fails.
+It does not run in the default gate: it is marked ``integration`` and skipped unless
+``APPMUX_TEST_CONTAINER=1``. Two ways to run it, both through ``ops_session.py``:
+``scripts/run-remote-tests.sh`` runs it from the dev machine against the deployed App as the owner
+of the CLI token (the way the 2026-11-04 run went; results in ``specs/001-appmux-v1/spikes/``),
+and on a container the test can play the Databricks proxy itself with identity headers. A run
+longer than one token life renews the CLI token (``APPMUX_TEST_TOKEN_PROFILE``). No token, client
+id or secret value is read, printed or asserted by value; a report that repeated the admin's token
+fails.
 
 Set-up the run needs (it fails loudly when one is missing, instead of passing on nothing). The
 platform setting ``attach_check_warehouse_id`` must name a SQL warehouse the admin can use, because
@@ -48,8 +53,10 @@ attaching a ``secret`` checks it with ``secret()``:
   application ids those two identities have (not secrets);
 * ``APPMUX_TEST_FOREIGN_SECRET_REFS``: comma-separated ``scope/key`` references of secrets that
   neither service principal may read;
-* ``APPMUX_TEST_REGISTRY_HOST``: the registry's host; ``APPMUX_TEST_REGISTRY_PORT``,
-  ``APPMUX_TEST_REGISTRY_DATABASE`` and ``APPMUX_TEST_REGISTRY_USER`` are optional;
+* ``APPMUX_TEST_REGISTRY_HOST``: the registry's host; ``APPMUX_TEST_REGISTRY_PORT`` and
+  ``APPMUX_TEST_REGISTRY_DATABASE`` are optional. Set ``APPMUX_TEST_REGISTRY_USER`` to the appmux
+  SP's application id too: without it the snooper's registry login without a token is *not
+  attempted*, and a skipped attempt fails the containment test by design;
 * ``APPMUX_TEST_TOKEN_CYCLE_S`` (4200) and ``APPMUX_TEST_TOKEN_POLL_S`` (300): how long the
   shared-SP child is polled, and how often.
 """
@@ -60,7 +67,7 @@ import os
 import secrets
 import time
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -91,7 +98,7 @@ DEFAULT_CYCLE_S: Final = 4200.0  # past the 3600 s a minted token lives
 DEFAULT_POLL_S: Final = 300.0
 SLUG_SUFFIX_BYTES: Final = 3
 # Design 8.4, exposure (1): the appmux SP's registry role. Nothing else may succeed with its token.
-ACCEPTED_SHARED_SP_RESIDUAL: Final = frozenset({"with_token: registry login"})
+ACCEPTED_SHARED_SP_RESIDUAL: Final = frozenset({"with token: registry login"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +154,25 @@ def snooper_env(setup: Setup) -> list[dict[str, Any]]:
         "SNOOP_REGISTRY_USER": setup.registry_user,
     }
     return [{"name": name, "value": value} for name, value in entries.items() if value]
+
+
+def attempt_names(entries: Iterable[str]) -> list[str]:
+    """The attempt of each ``"<case>: <attempt>"`` entry of the snooper's report.
+
+    The assertion already says which case it judges, and a message that repeats ``with token: ...``
+    is blanked by the remote runner's masking (it hides whatever follows ``token:``), which hid
+    exactly the names the failure needed.
+    """
+    return sorted(entry.partition(": ")[2] for entry in entries)
+
+
+def attempts_without_token(report: dict[str, Any]) -> str:
+    """What each attempt made without a credential did, for a failure message (no values)."""
+    attempts: dict[str, Any] = report["without_token"] or {}
+    return "; ".join(
+        f"{name}: {result.get('outcome')} ({result.get('detail')})"
+        for name, result in attempts.items()
+    )
 
 
 class Children:
@@ -220,7 +246,7 @@ class Children:
         assert response.status_code == 200, (
             f"/{slug}/report answered {response.status_code} {error_code(response)}"
         )
-        repeated = self.session.target.user_token in response.text
+        repeated = self.session.target.bearer() in response.text
         assert not repeated, f"/{slug}/report repeated the admin's access token"
         body: dict[str, Any] = response.json()
         return body
@@ -309,10 +335,11 @@ def test_an_own_sp_child_reaches_neither_other_apps_secrets_nor_the_registry(
 ) -> None:
     report = children.report(own_sp_child)
 
-    assert report["without_token_contained"] is True
+    assert report["without_token_contained"] is True, attempts_without_token(report)
     assert report["with_token_contained"] is True, (
-        f"succeeded {report['succeeded']}, inconclusive {report['inconclusive']}, "
-        f"not attempted {report['not_attempted']}"
+        f"succeeded {attempt_names(report['succeeded'])}, "
+        f"inconclusive {attempt_names(report['inconclusive'])}, "
+        f"not attempted {attempt_names(report['not_attempted'])}"
     )
 
 
@@ -330,7 +357,7 @@ def test_a_shared_sp_child_reaches_neither_other_apps_secrets_nor_the_registry_b
 ) -> None:
     report = children.report(shared_sp_child)
 
-    assert report["without_token_contained"] is True
+    assert report["without_token_contained"] is True, attempts_without_token(report)
     assert report["inconclusive"] == [] and report["not_attempted"] == []
     reads = {
         name: result for name, result in report["with_token"].items() if name.startswith("read ")
@@ -339,8 +366,10 @@ def test_a_shared_sp_child_reaches_neither_other_apps_secrets_nor_the_registry_b
         "the snooper tried no secret read; APPMUX_TEST_FOREIGN_SECRET_REFS was not applied"
     )
     assert {result["outcome"] for result in reads.values()} == {"refused"}
-    assert set(report["succeeded"]) <= ACCEPTED_SHARED_SP_RESIDUAL, (
-        f"succeeded {report['succeeded']}; only {sorted(ACCEPTED_SHARED_SP_RESIDUAL)} is accepted"
+    beyond_the_residual = set(report["succeeded"]) - ACCEPTED_SHARED_SP_RESIDUAL
+    assert not beyond_the_residual, (
+        f"succeeded beyond the residual: {attempt_names(beyond_the_residual)}; "
+        f"only {attempt_names(ACCEPTED_SHARED_SP_RESIDUAL)} is accepted"
     )
 
 
