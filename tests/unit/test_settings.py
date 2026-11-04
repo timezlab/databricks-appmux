@@ -549,13 +549,13 @@ def test_warehouse_id_when_given_is_not_empty() -> None:
         PlatformSettings.model_validate({"attach_check_warehouse_id": ""})
 
 
-@pytest.mark.parametrize("budget", [64, 512, 16384])
+@pytest.mark.parametrize("budget", [256, 512, 16384])
 def test_the_default_memory_budget_takes_the_range_of_an_apps_budget(budget: int) -> None:
     settings = PlatformSettings.model_validate({"default_memory_budget_mb": budget})
     assert settings.default_memory_budget_mb == budget
 
 
-@pytest.mark.parametrize("budget", [0, 63, 16385, 512.5, "512", True, None])
+@pytest.mark.parametrize("budget", [0, 63, 64, 255, 16385, 512.5, "512", True, None])
 def test_the_default_memory_budget_refuses_what_an_apps_budget_refuses(budget: object) -> None:
     with pytest.raises(ValidationError):
         PlatformSettings.model_validate({"default_memory_budget_mb": budget})

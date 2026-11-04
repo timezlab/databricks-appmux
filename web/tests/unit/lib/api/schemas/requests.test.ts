@@ -109,7 +109,7 @@ describe("request rules of the contract", () => {
       slug: "wiki",
       display_name: "Wiki",
       source_path: "/Workspace/x",
-      memory_budget_mb: 128,
+      memory_budget_mb: 256,
       owner: "a@example.com",
     };
     assert.ok(api.RegisterAppRequest.safeParse(base).success);
@@ -122,7 +122,7 @@ describe("request rules of the contract", () => {
       { slug: "Wiki" },
       { slug: "-wiki" },
       { slug: "a".repeat(32) },
-      { memory_budget_mb: 63 },
+      { memory_budget_mb: 255 },
       { memory_budget_mb: 16385 },
       { source_path: "/tmp/x" },
       { owner: "Alice@example.com" },
@@ -184,8 +184,8 @@ describe("reasons", () => {
       payload,
       reason: "why",
     });
-    accepts(api.CreatePermissionRequest, settings({ memory_budget_mb: 64 }));
-    rejects(api.CreatePermissionRequest, settings({ memory_budget_mb: 63 }));
+    accepts(api.CreatePermissionRequest, settings({ memory_budget_mb: 256 }));
+    rejects(api.CreatePermissionRequest, settings({ memory_budget_mb: 255 }));
     rejects(api.CreatePermissionRequest, settings({ source_path: "/tmp" }));
     rejects(
       api.CreatePermissionRequest,

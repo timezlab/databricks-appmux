@@ -155,7 +155,7 @@ describe("parseRegisterForm", () => {
         typo.errors.memory_budget_mb,
         "must be a whole number of MB",
       );
-      assert.equal(small.errors.memory_budget_mb, "must be at least 64");
+      assert.equal(small.errors.memory_budget_mb, "must be at least 256");
     }
   });
 

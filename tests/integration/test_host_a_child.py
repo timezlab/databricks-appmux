@@ -56,7 +56,7 @@ pytestmark = pytest.mark.integration
 
 API: Final = "/_appmux/api/v1"
 REQUEST_TIMEOUT_S: Final = 30.0
-MEMORY_BUDGET_MB: Final = 128
+MEMORY_BUDGET_MB: Final = 256
 POLL_INTERVAL_S: Final = 1.0
 # A release spends its time in the build, the sandbox start and the health deadline (60 s default).
 RELEASE_TIMEOUT_S: Final = 240.0

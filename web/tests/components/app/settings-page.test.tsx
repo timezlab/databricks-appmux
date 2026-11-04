@@ -227,7 +227,7 @@ describe("AppSettingsPage, for a platform admin", () => {
   });
 
   it.each([
-    ["32", /must be at least 64/],
+    ["32", /must be at least 256/],
     ["lots", /must be a whole number of MB/],
     ["", /is required/],
   ])(

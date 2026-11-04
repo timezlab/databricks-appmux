@@ -13,7 +13,8 @@ const RESOURCE_KEY_PATTERN = /^[a-z0-9][a-z0-9._-]{0,62}$/;
 
 const WORKSPACE_PATH_PREFIX = "/Workspace/";
 
-export const MEMORY_BUDGET_MIN_MB = 64;
+/** The floor of a budget a person types; the server stores apps saved under an older, lower one. */
+export const MEMORY_BUDGET_MIN_MB = 256;
 
 export const MEMORY_BUDGET_MAX_MB = 16384;
 

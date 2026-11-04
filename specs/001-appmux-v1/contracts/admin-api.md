@@ -181,7 +181,7 @@ Used by `POST /apps`. The values pass the same checks as a `register` request.
 | `slug` | string | required | Lower-case letters, digits and `-`, starting with a letter or digit, at most 31 characters; not taken |
 | `display_name` | string | required | Shown in the launcher; not blank |
 | `source_path` | string | required | A workspace folder, starting with `/Workspace/` |
-| `memory_budget_mb` | integer | optional | 64 to 16384; left out, the app gets the platform's `default_memory_budget_mb` |
+| `memory_budget_mb` | integer | optional | 256 to 16384; left out, the app gets the platform's `default_memory_budget_mb` |
 | `owner` | string | required | Email of the owner, lower case |
 
 #### UpdateAppRequest
@@ -194,7 +194,7 @@ Used by `PATCH /apps/{app}`. At least one field besides `version` must be presen
 | `slug` | string | optional | The new slug; same form as at registration, and free |
 | `display_name` | string | optional | The new name |
 | `source_path` | string | optional | The new folder, starting with `/Workspace/` |
-| `memory_budget_mb` | integer | optional | 64 to 16384 |
+| `memory_budget_mb` | integer | optional | 256 to 16384 |
 
 #### SetOwnerRequest
 
@@ -383,7 +383,7 @@ Returned by `GET /apps/{app}` and by every write that changes the `apps` row (`P
 | `display_name` | string | always | Shown in the launcher |
 | `owner` | string | always | Email of the owner (always an app admin) |
 | `source_path` | string | always | Folder snapshotted on Update, read with the presser's token |
-| `memory_budget_mb` | integer | always | 64 to 16384 |
+| `memory_budget_mb` | integer | always | 64 to 16384: the floor of a new budget is 256, and an app saved under the older floor of 64 keeps what it has |
 | `state` | string | always | One of `stopped`, `starting`, `running`, `crashed`, `no_release` (the app is meant to run, but no release is active and none is being built, so its route stays closed until a person updates it or activates a release) |
 | `runtime` | string or null | always | The runtime detected in the active release, `python` or `node`; `null` while no release is active |
 | `restart_to_apply` | boolean | always | `true` when a resource or an own-SP key changed after the app last started ("restart to apply") |
@@ -633,7 +633,7 @@ Returned by `GET /platform`.
 |---|---|---|---|
 | `settings` | object | always | The effective value of each key of [data model 4.1](../../../docs/product/v1-data-model.md#41-platform_settings) except `platform_admins` and `egress_global`, which have their own fields; a key never set holds its default |
 | `settings.memory_reserve_mb` | integer | always | Memory kept for appmux itself |
-| `settings.default_memory_budget_mb` | integer | always | The memory budget of a new app: what approving a `register` request gives it, and what `POST /apps` uses when it names none; 64 to 16384 |
+| `settings.default_memory_budget_mb` | integer | always | The memory budget of a new app: what approving a `register` request gives it, and what `POST /apps` uses when it names none; 256 to 16384 |
 | `settings.package_mode` | string | always | One of `index`, `wheelhouse`, `wheelhouse+index` |
 | `settings.default_wheel_sources` | array<string> | always | Folders every Update also reads wheels from |
 | `settings.shared_sp_delegation_allowed` | boolean | always | The master switch |
@@ -665,7 +665,7 @@ One app on the platform page; held in `PlatformView.apps`. It carries the platfo
 | `slug` | string | always | The app |
 | `display_name` | string | always | |
 | `source_path` | string | always | The folder snapshotted on Update |
-| `memory_budget_mb` | integer | always | 64 to 16384 |
+| `memory_budget_mb` | integer | always | 64 to 16384: the floor of a new budget is 256, and an app saved under the older floor of 64 keeps what it has |
 | `owner` | string | always | Email of the owner |
 | `obo_delegated` | boolean | always | The visitor's token may be passed down to this app |
 | `shared_sp_delegated` | boolean | always | The appmux service principal's token may be lent to this app |

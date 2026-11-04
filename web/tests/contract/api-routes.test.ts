@@ -69,7 +69,7 @@ describe("client", () => {
               slug: "a",
               display_name: "A",
               source_path: "/Workspace/a",
-              memory_budget_mb: 64,
+              memory_budget_mb: 256,
               owner: "o@example.com",
             }),
             options,

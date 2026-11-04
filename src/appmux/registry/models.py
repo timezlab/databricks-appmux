@@ -183,6 +183,8 @@ class App(RowModel):
     display_name: NonBlankText
     owner: LowerText
     source_path: Annotated[str, StringConstraints(pattern=r"^/Workspace/")]
+    # The bounds the database checks (``migrations/0001_baseline.sql``), wider than the floor of a
+    # new budget (``settings.MEMORY_BUDGET_MIN_MB``) so an app stored below it keeps loading.
     memory_budget_mb: Annotated[int, Field(ge=64, le=16384)]
     obo_delegated: bool = False
     shared_sp_delegated: bool = False

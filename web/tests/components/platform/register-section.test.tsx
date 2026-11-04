@@ -191,7 +191,7 @@ describe("RegisterSection", () => {
 
     expect(
       screen.getByRole("textbox", { name: /^Memory budget/ }),
-    ).toHaveAccessibleDescription(/must be at least 64/);
+    ).toHaveAccessibleDescription(/must be at least 256/);
     expect(registerApp).not.toHaveBeenCalled();
   });
 

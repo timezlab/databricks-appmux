@@ -44,7 +44,11 @@ DEFAULT_UI_DIR: Final = Path("web/out")
 RELEASES_KEPT_FREE: Final = 4
 MAX_REQUEST_TIMEOUT_S: Final = 290  # below the platform proxy's 300 s
 # The bounds of one app's memory budget (data model 4.2); the platform default budget shares them.
-MEMORY_BUDGET_MIN_MB: Final = 64
+# The floor is what a person may type now: below it a runtime that reserves address space at start
+# (the sandbox caps it at twice the budget) dies or hangs, so 64 MB "worked" only for a bare
+# script. The registry row and its database check keep 64 (``registry/models.py``), so an app
+# saved under the old floor still loads and runs until someone changes its budget.
+MEMORY_BUDGET_MIN_MB: Final = 256
 MEMORY_BUDGET_MAX_MB: Final = 16384
 
 

@@ -89,13 +89,13 @@ describe("parseSettingDraft", () => {
     );
   });
 
-  it("keeps the default memory budget in the bounds of one app's budget, 64 to 16,384 MB", () => {
-    assert.equal(valueOf("default_memory_budget_mb", "64"), 64);
+  it("keeps the default memory budget in the bounds of one app's budget, 256 to 16,384 MB", () => {
+    assert.equal(valueOf("default_memory_budget_mb", "256"), 256);
     assert.equal(valueOf("default_memory_budget_mb", " 768 "), 768);
     assert.equal(valueOf("default_memory_budget_mb", "16384"), 16384);
     assert.equal(
-      errorOf("default_memory_budget_mb", "63"),
-      "must be at least 64",
+      errorOf("default_memory_budget_mb", "255"),
+      "must be at least 256",
     );
     assert.equal(
       errorOf("default_memory_budget_mb", "16385"),

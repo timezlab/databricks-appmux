@@ -28,8 +28,8 @@ describe("registration fields", () => {
     }
   });
 
-  it("memory budget: 64 to 16384, an integer, and optional (the platform default)", () => {
-    for (const good of [64, 16384, null]) {
+  it("memory budget: 256 to 16384, an integer, and optional (the platform default)", () => {
+    for (const good of [256, 16384, null]) {
       accepts(
         api.RegisterAppRequest,
         variant(register, { memory_budget_mb: good }),
@@ -37,7 +37,7 @@ describe("registration fields", () => {
       );
     }
     accepts(api.RegisterAppRequest, without(register, "memory_budget_mb"));
-    for (const bad of [63, 16385, 64.5, "64"]) {
+    for (const bad of [63, 64, 255, 16385, 256.5, "256"]) {
       rejects(
         api.RegisterAppRequest,
         variant(register, { memory_budget_mb: bad }),
@@ -86,8 +86,8 @@ describe("registration fields", () => {
     rejects(api.UpdateAppRequest, { slug: "a" }, "no version");
     accepts(api.UpdateAppRequest, { version: 1, slug: "a".repeat(31) });
     rejects(api.UpdateAppRequest, { version: 1, slug: "a".repeat(32) });
-    accepts(api.UpdateAppRequest, { version: 1, memory_budget_mb: 64 });
-    rejects(api.UpdateAppRequest, { version: 1, memory_budget_mb: 63 });
+    accepts(api.UpdateAppRequest, { version: 1, memory_budget_mb: 256 });
+    rejects(api.UpdateAppRequest, { version: 1, memory_budget_mb: 255 });
     accepts(api.UpdateAppRequest, { version: 1, memory_budget_mb: 16384 });
     rejects(api.UpdateAppRequest, { version: 1, memory_budget_mb: 16385 });
     rejects(api.UpdateAppRequest, { version: 1, source_path: "/tmp" });

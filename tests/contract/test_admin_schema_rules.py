@@ -595,11 +595,11 @@ def test_a_slug_is_refused(slug: str) -> None:
         schemas.RegisterAppRequest.model_validate(REGISTER | {"slug": slug})
 
 
-@pytest.mark.parametrize("budget", [63, 16385, 64.5, "512", True])
-def test_a_memory_budget_is_an_integer_from_64_to_16384(budget: object) -> None:
+@pytest.mark.parametrize("budget", [63, 64, 255, 16385, 256.5, "512", True])
+def test_a_memory_budget_is_an_integer_from_256_to_16384(budget: object) -> None:
     with pytest.raises(ValidationError):
         schemas.RegisterAppRequest.model_validate(REGISTER | {"memory_budget_mb": budget})
-    for good in (64, 16384):
+    for good in (256, 16384):
         accepted(schemas.RegisterAppRequest, REGISTER | {"memory_budget_mb": good})
 
 
@@ -998,12 +998,26 @@ def takes(build: Any, *body: Any, **fields: Any) -> bool:
     return True
 
 
-@pytest.mark.parametrize("budget", [63, 64, 16384, 16385])
-def test_the_memory_budget_limits_are_the_registrys(budget: int) -> None:
+@pytest.mark.parametrize("budget", [63, 64, 255, 256, 16384, 16385])
+def test_the_registry_takes_every_memory_budget_the_request_takes(budget: int) -> None:
     request = example("RegisterAppRequest") | {"memory_budget_mb": budget}
-    assert takes(schemas.RegisterAppRequest.model_validate, request) == takes(
-        registry_app, memory_budget_mb=budget
+    if takes(schemas.RegisterAppRequest.model_validate, request):
+        assert takes(registry_app, memory_budget_mb=budget)
+
+
+@pytest.mark.parametrize("budget", [64, 128, 255])
+def test_an_app_stored_below_the_floor_of_a_new_budget_still_loads(budget: int) -> None:
+    """A floor governs what a person types; an app stored under the old floor keeps running."""
+    assert not takes(
+        schemas.RegisterAppRequest.model_validate,
+        example("RegisterAppRequest") | {"memory_budget_mb": budget},
     )
+    assert takes(registry_app, memory_budget_mb=budget)
+
+
+@pytest.mark.parametrize("budget", [0, 63, 16385])
+def test_the_registry_refuses_a_budget_outside_its_own_bounds(budget: int) -> None:
+    assert not takes(registry_app, memory_budget_mb=budget)
 
 
 @pytest.mark.parametrize(

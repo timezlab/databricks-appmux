@@ -55,7 +55,7 @@ describe("friendlyIssueMessage", () => {
     });
     const [issue] = small.issues;
     assert.ok(issue);
-    assert.equal(friendlyIssueMessage(issue), "At least 64");
+    assert.equal(friendlyIssueMessage(issue), "At least 256");
   });
 
   it("keeps the contract's own message for a custom rule", () => {
@@ -78,7 +78,7 @@ describe("errorsFromZod", () => {
     });
     assert.deepEqual(errorsFromZod(error, { dropPathPrefix: "payload" }), {
       slug: "lower-case letters, digits and -, at most 31 characters",
-      memory_budget_mb: "At least 64",
+      memory_budget_mb: "At least 256",
       reason: "must not be blank",
     });
   });

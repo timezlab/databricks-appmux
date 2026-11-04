@@ -328,7 +328,7 @@ Once running, an app is judged by crashes ([5.6](#56-crash-restart-and-shutdown)
 
 ### 5.7 Memory and admission control
 
-Each app has a memory budget set by the platform admin: a new app starts with the platform default (`default_memory_budget_mb`, 512 MB unless changed, 64 to 16,384 MB like any budget), the platform admin can change the default, change one app's budget, or give a directly registered app another budget, and an app admin can ask for more with a `settings` request ([9.4](#94-requests-to-a-platform-admin)). Changing the default does not touch apps that already exist. At startup appmux reads the container's memory limit. It refuses to start or update an app when the running budgets, the update overlap, appmux's reserve and per-child overhead (pump ≈ 10 MB, slirp 2–3 MB, measured) would exceed it. Worked example, the 8 GiB container measured on Free Edition:
+Each app has a memory budget set by the platform admin: a new app starts with the platform default (`default_memory_budget_mb`, 512 MB unless changed, 256 to 16,384 MB like any budget a person types; an app saved with a smaller one, down to 64 MB, keeps it), the platform admin can change the default, change one app's budget, or give a directly registered app another budget, and an app admin can ask for more with a `settings` request ([9.4](#94-requests-to-a-platform-admin)). Changing the default does not touch apps that already exist. At startup appmux reads the container's memory limit. It refuses to start or update an app when the running budgets, the update overlap, appmux's reserve and per-child overhead (pump ≈ 10 MB, slirp 2–3 MB, measured) would exceed it. Worked example, the 8 GiB container measured on Free Edition:
 
 ```
 limit                    8192 MB

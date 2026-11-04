@@ -58,7 +58,7 @@ describe("formErrors", () => {
           RegisterAppRequest.safeParse({ ...valid, memory_budget_mb: 10 }),
         ),
       ),
-      { memory_budget_mb: "must be at least 64" },
+      { memory_budget_mb: "must be at least 256" },
     );
     assert.deepEqual(
       formErrors(

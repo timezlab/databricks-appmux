@@ -65,7 +65,7 @@ BROWSER_RUN_TIMEOUT_S: Final = 900.0
 SETTLE_SECONDS: Final = 3
 WATCH_SECONDS: Final = 21
 SLUG_SUFFIX_BYTES: Final = 3
-MEMORY_BUDGET_MB: Final = 128
+MEMORY_BUDGET_MB: Final = 256
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 WEB_DIR: Final = REPO_ROOT / "web"
