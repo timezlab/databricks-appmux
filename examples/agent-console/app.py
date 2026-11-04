@@ -492,6 +492,23 @@ class Hub:
 # --- the identity check ---------------------------------------------------------------------
 
 
+def _who_the_hub_saw(saw: JsonObject) -> tuple[Any, str | None, str | None]:
+    """The identity to show for a ``whoami`` answer: ``(who, how it is known, why not)``.
+
+    The owner of the token, as Databricks reports it to the hub, wins over the headers: it is the
+    identity the token acts as. The proxy's header is the fallback only when no token came, because
+    then nothing else exists. A token that Databricks refused names nobody; the header is not
+    trusted in its place.
+    """
+    owner = saw.get("token_owner")
+    if saw.get("access_token_header_present") and isinstance(owner, dict):
+        if owner.get("ok"):
+            return owner.get("user_name"), "token", None
+        return None, "token", str(owner.get("error") or "Databricks did not name the owner")
+    header_email = saw.get("x_forwarded_email")
+    return header_email, ("header" if header_email is not None else None), None
+
+
 async def identity_check(hub: Hub, caller: Caller) -> JsonObject:
     """What the hub saw for ``whoami`` and ``databricks_me`` under each protocol and identity."""
 
@@ -499,7 +516,8 @@ async def identity_check(hub: Hub, caller: Caller) -> JsonObject:
         whoami = await hub.call(CallRequest(identity, protocol, "whoami"), caller)
         me = await hub.call(CallRequest(identity, protocol, "databricks_me"), caller)
         saw = whoami.provider_saw or {}
-        seen_email = saw.get("x_forwarded_email")
+        header_email = saw.get("x_forwarded_email")
+        seen_email, seen_via, owner_error = _who_the_hub_saw(saw)
         user_name: Any = None
         if me.error is None:
             try:
@@ -514,6 +532,9 @@ async def identity_check(hub: Hub, caller: Caller) -> JsonObject:
                 "ok": whoami.error is None,
                 "error": whoami.error,
                 "seen_email": seen_email,
+                "seen_via": seen_via,
+                "header_email": header_email,
+                "owner_error": owner_error,
                 "token_forwarded": saw.get("access_token_header_present"),
             },
             "databricks_me": {"ok": me.error is None, "user_name": user_name, "error": me.error},
@@ -750,6 +771,10 @@ async function showContext() {
 
 function verdict(cell) {
   if (!cell.whoami.ok) return el("p", cell.whoami.error, "verdict bad");
+  if (cell.whoami.owner_error) {
+    const reason = "Databricks did not say who owns the token: " + cell.whoami.owner_error;
+    return el("p", reason, "verdict bad");
+  }
   if (cell.same_as_you) return el("p", "The hub sees you.", "verdict good");
   return el("p", "The hub sees a different identity.", "verdict bad");
 }
@@ -759,7 +784,8 @@ function cellNode(cell) {
   td.append(verdict(cell));
   if (cell.whoami.ok) {
     const token = cell.whoami.token_forwarded ? ", token present" : ", no token";
-    td.append(el("p", "whoami: " + cell.whoami.seen_email + token));
+    const via = cell.whoami.seen_via ? " (from the " + cell.whoami.seen_via + ")" : "";
+    td.append(el("p", "whoami: " + (cell.whoami.seen_email ?? "unknown") + via + token));
   }
   const me = cell.databricks_me;
   td.append(el("p", "databricks_me: " + (me.ok ? me.user_name : me.error)));

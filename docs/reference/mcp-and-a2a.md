@@ -106,8 +106,10 @@ and its tests; a call through the Apps proxy with it has **not been measured yet
 ## Who the target sees when the caller is an App
 
 [agent-hub](../../examples/agent-hub/README.md) serves MCP and A2A and its tools run **as the
-caller**: `whoami` returns the identity headers it received, and `databricks_me` calls Databricks
-with the caller's own `X-Forwarded-Access-Token`. [agent-console](../../examples/agent-console/README.md)
+caller**: `whoami` asks Databricks who owns the token that came with the call (`token_owner`) and
+shows the identity headers beside it, and `databricks_me` calls Databricks with the caller's own
+`X-Forwarded-Access-Token`. The two 2026-11-04 runs below were made before `whoami` asked Databricks;
+they read the headers. [agent-console](../../examples/agent-console/README.md)
 calls the hub over both protocols, once with the visitor's token (OBO: the console must be delegated
 OBO to receive it) and once with its own identity (the shared service principal), and shows what the
 hub saw. Together they answer: **can the caller's identity be passed through MCP and A2A?** The

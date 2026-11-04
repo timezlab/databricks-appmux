@@ -11,7 +11,10 @@ revision (one JSON body per answer), A2A as 1.0 with the JSON-RPC binding. Clien
 full protocols, such as the official ``mcp`` and ``a2a-sdk`` packages, work against it.
 
 One set of tools, two doors
-    ``whoami``          the identity headers of the call, as the Databricks proxy forwarded them.
+    ``whoami``          who is calling: ``token_owner`` is what Databricks says owns the token that
+                        came with the call (the answer to trust), next to the identity headers the
+                        Databricks proxy forwarded (to compare). Without a token only the headers
+                        exist, and ``token_owner`` says so.
     ``databricks_me``   asks Databricks who the caller is **with the caller's own token** (the
                         ``X-Forwarded-Access-Token`` header), so it is an action taken as that
                         person, not a report of a header.
@@ -133,12 +136,18 @@ PREFIX_HEADER: Final = "x-forwarded-prefix"
 REQUEST_ID_HEADER: Final = "x-request-id"
 OBO_HEADER: Final = "x-forwarded-access-token"
 ANONYMOUS: Final = "anonymous"
+MISSING_OBO_MESSAGE: Final = (
+    "no user token came with this call, so there is no user to act as. A token arrives only when "
+    "a platform admin delegated OBO to this App; without it the proxy forwards none, whoever the "
+    "caller is"
+)
 
 SYSTEM_PROMPT: Final = (
     "You are the assistant of agent-hub, a demo of Databricks Apps. Your tools run as the person "
-    "talking to you: whoami says who the Databricks proxy told this App is calling, and "
-    "databricks_me asks Databricks, with that person's own token, who they are. When a tool can "
-    "give the answer, call it instead of guessing. Answer in one or two sentences."
+    "talking to you: whoami says who is calling, naming the owner of the caller's token as "
+    "Databricks reports it and the identity headers the proxy set, and databricks_me asks "
+    "Databricks, with the caller's own token, who they are. When a tool can give the answer, "
+    "call it instead of guessing. Answer in one or two sentences."
 )
 
 
@@ -322,8 +331,9 @@ class Toolbox:
                 Tool(
                     name="whoami",
                     description=(
-                        "Return the identity headers this App received with the call: who the "
-                        "Databricks proxy says is calling. A token is never shown."
+                        "Return who is calling: the owner of the token that came with the call, "
+                        "as Databricks reports it for that token, and the identity headers the "
+                        "proxy set, to compare. A token is never shown."
                     ),
                     input_schema={"type": "object", "properties": {}},
                     run=self._whoami,
@@ -378,15 +388,27 @@ class Toolbox:
         return await self._tools[name].run(arguments, caller)
 
     async def _whoami(self, arguments: JsonObject, caller: Caller) -> str:
-        return json.dumps(caller.describe(), indent=2)
+        # The headers are what the proxy says; ``token_owner`` is what Databricks says about the
+        # token that came with the call. They are shown side by side so a reader can compare them,
+        # and the owner is the one to trust: it is the identity the token actually acts as.
+        description = caller.describe()
+        description["token_owner"] = await self._token_owner_or_reason(caller)
+        return json.dumps(description, indent=2)
 
     async def _databricks_me(self, arguments: JsonObject, caller: Caller) -> str:
+        return json.dumps(await self._ask_who_owns(caller))
+
+    async def _token_owner_or_reason(self, caller: Caller) -> JsonObject:
+        """The token's owner, or why there is none; a tool that only reports must not fail."""
+        try:
+            return {"ok": True, **await self._ask_who_owns(caller)}
+        except ToolError as problem:
+            return {"ok": False, "error": str(problem)}
+
+    async def _ask_who_owns(self, caller: Caller) -> JsonObject:
+        """Ask Databricks who owns the caller's token, by presenting that token as the bearer."""
         if caller.access_token is None:
-            raise ToolError(
-                "no user token came with this call, so there is no user to act as. A token "
-                "arrives only when a platform admin delegated OBO to this App; without it the "
-                "proxy forwards none, whoever the caller is"
-            )
+            raise ToolError(MISSING_OBO_MESSAGE)
         try:
             host = await self._credentials.host()
         except CredentialsMissing as problem:
@@ -406,13 +428,11 @@ class Toolbox:
             me = response.json()
         except ValueError as problem:
             raise ToolError("Databricks answered something that is not JSON") from problem
-        return json.dumps(
-            {
-                "user_name": me.get("userName"),
-                "display_name": me.get("displayName"),
-                "id": me.get("id"),
-            }
-        )
+        return {
+            "user_name": me.get("userName"),
+            "display_name": me.get("displayName"),
+            "id": me.get("id"),
+        }
 
     async def _add(self, arguments: JsonObject, caller: Caller) -> str:
         total = _number(arguments, "a") + _number(arguments, "b")

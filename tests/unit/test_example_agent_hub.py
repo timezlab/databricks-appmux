@@ -329,6 +329,47 @@ def test_mcp_whoami_reports_the_identity_the_proxy_forwarded_and_never_the_token
     _never_shows_a_token(json.dumps(result))
 
 
+def test_mcp_whoami_names_the_owner_of_the_token_as_databricks_says_not_the_header() -> None:
+    # The header and the token disagree on purpose: the answer must come from the token.
+    workspace = Workspace(me={"userName": "owner@example.com", "displayName": "Owner", "id": "7"})
+    client, _ = _build(workspace)
+
+    result = _tool(client, "whoami", {}, DANA_WITH_TOKEN)
+
+    seen = json.loads(_tool_text(result))
+    assert seen["token_owner"] == {
+        "ok": True,
+        "user_name": "owner@example.com",
+        "display_name": "Owner",
+        "id": "7",
+    }
+    assert seen["x_forwarded_email"] == "dana@example.com"  # still shown, to compare
+    assert [r.headers["authorization"] for r in workspace.me_requests] == [f"Bearer {USER_OBO}"]
+    _never_shows_a_token(json.dumps(result))
+
+
+def test_mcp_whoami_without_a_token_has_no_owner_to_name() -> None:
+    client, workspace = _build()
+
+    seen = json.loads(_tool_text(_tool(client, "whoami", {}, DANA)))
+
+    assert seen["token_owner"]["ok"] is False
+    assert "no user token" in seen["token_owner"]["error"]
+    assert workspace.me_requests == []
+
+
+def test_mcp_whoami_still_answers_when_databricks_refuses_the_token() -> None:
+    client, _ = _build(Workspace(me={"detail": "insufficient scope"}, me_status=403))
+
+    result = _tool(client, "whoami", {}, DANA_WITH_TOKEN)
+
+    assert result.get("isError") is not True
+    seen = json.loads(_tool_text(result))
+    assert seen["token_owner"]["ok"] is False
+    assert "403" in seen["token_owner"]["error"]
+    assert seen["x_forwarded_email"] == "dana@example.com"
+
+
 def test_mcp_whoami_without_identity_headers_says_anonymous() -> None:
     client, _ = _build()
 

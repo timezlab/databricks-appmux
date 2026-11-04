@@ -74,8 +74,15 @@ class FakeCredentials:
 class Workspace(httpx.AsyncBaseTransport):
     """What the hub reaches: a scripted chat route and the SCIM route that says who a token is."""
 
-    def __init__(self, *replies: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        *replies: dict[str, Any],
+        owner_name: str | None = None,
+        me_status: int = 200,
+    ) -> None:
         self.replies = list(replies)
+        self.owner_name = owner_name  # who Databricks says owns the user's token, if not Dana
+        self.me_status = me_status
         self.chat_requests: list[httpx.Request] = []
         self.me_requests: list[httpx.Request] = []
 
@@ -88,8 +95,15 @@ class Workspace(httpx.AsyncBaseTransport):
                 return httpx.Response(
                     200, json={"userName": APP_IDENTITY, "displayName": "agent-console"}
                 )
+            if self.me_status != 200:
+                return httpx.Response(self.me_status, json={"detail": "insufficient scope"})
             return httpx.Response(
-                200, json={"userName": DANA_EMAIL, "displayName": "Dana", "id": "42"}
+                200,
+                json={
+                    "userName": self.owner_name or DANA_EMAIL,
+                    "displayName": "Dana",
+                    "id": "42",
+                },
             )
         assert request.url.path == "/serving-endpoints/chat/completions", request.url.path
         self.chat_requests.append(request)
@@ -175,8 +189,10 @@ def _build(
     provider_url: str = HUB_URL,
     obo_delegated: bool = True,
     credentials_missing: bool = False,
+    owner_name: str | None = None,
+    me_status: int = 200,
 ) -> tuple[TestClient, Platform, Workspace]:
-    workspace = Workspace(*replies)
+    workspace = Workspace(*replies, owner_name=owner_name, me_status=me_status)
     platform = Platform(_hub_app(workspace), obo_delegated=obo_delegated)
     app = console.create_app(
         console.Settings(provider_url=provider_url),
@@ -526,6 +542,43 @@ def test_the_identity_check_shows_what_the_hub_sees_for_each_protocol_and_each_i
         assert app["whoami"]["token_forwarded"] is True
         assert app["databricks_me"] == {"ok": True, "user_name": APP_IDENTITY, "error": None}
     _never_shows_a_token(response.text)
+
+
+def test_the_identity_check_names_who_the_token_belongs_to_not_what_the_header_says() -> None:
+    # Databricks says the forwarded token belongs to someone else than the header claims.
+    client, _, _ = _build(owner_name="owner@example.com")
+
+    check = client.post("/api/identity-check", json={}, headers=DANA_WITH_TOKEN).json()
+
+    me = next(c for c in check["cells"] if (c["protocol"], c["identity"]) == ("mcp", "me"))
+    assert me["whoami"]["seen_email"] == "owner@example.com"
+    assert me["whoami"]["seen_via"] == "token"
+    assert me["whoami"]["header_email"] == DANA_EMAIL
+    assert me["same_as_you"] is False
+
+
+def test_the_identity_check_falls_back_to_the_header_only_when_no_token_came() -> None:
+    client, _, _ = _build(obo_delegated=False)
+
+    check = client.post("/api/identity-check", json={}, headers=DANA_WITH_TOKEN).json()
+
+    app = next(c for c in check["cells"] if (c["protocol"], c["identity"]) == ("mcp", "app"))
+    assert app["whoami"]["token_forwarded"] is False
+    assert app["whoami"]["seen_via"] == "header"
+    assert app["whoami"]["seen_email"] == APP_IDENTITY
+
+
+def test_the_identity_check_does_not_trust_the_header_when_databricks_refuses_the_token() -> None:
+    client, _, _ = _build(me_status=403)
+
+    check = client.post("/api/identity-check", json={}, headers=DANA_WITH_TOKEN).json()
+
+    me = next(c for c in check["cells"] if (c["protocol"], c["identity"]) == ("mcp", "me"))
+    assert me["whoami"]["token_forwarded"] is True
+    assert me["whoami"]["seen_via"] == "token"
+    assert me["whoami"]["seen_email"] is None
+    assert "403" in me["whoami"]["owner_error"]
+    assert me["same_as_you"] is None
 
 
 def test_the_identity_check_without_your_token_fills_the_me_rows_with_the_reason() -> None:

@@ -21,7 +21,10 @@ app. Which calls between Apps work, and what each failure looks like, is in
     so the hub cannot tell which child called.
 - **The identity check**: `POST /api/identity-check` calls the hub eight times (MCP and A2A, each
   as me and as this App, each with `whoami` and `databricks_me`) and the page draws a 2×2 table:
-  who the hub saw, whether a user token arrived, whether Databricks agrees, and whether it is you.
+  who the hub saw, whether a token arrived, and whether it is you. "Who the hub saw" is the owner of
+  the token, as Databricks reports it to the hub (`whoami`'s `token_owner`), marked "from the
+  token". Only when no token came does the table fall back to the proxy's header, marked "from the
+  header"; a token Databricks refused names nobody and the header is not used in its place.
 - **One call**: pick a protocol, an identity and an action (`whoami`, `databricks_me`, `discover`,
   and over A2A `ask`, which sends a sentence to the hub's model) and see the wire steps with their
   HTTP status, the answer, and the task details.
