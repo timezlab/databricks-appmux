@@ -90,16 +90,16 @@ databricks workspace import-dir examples/agent-console \
 
 ## What was measured
 
-On 2026-11-04, on the Free Edition dev App, with `hub` and `console` registered as children and
-released, **no delegation given**: the hub answered its card, MCP `initialize` and `whoami` over MCP
-and A2A to the Databricks CLI's bearer token, and saw the person's e-mail but no user token. The
-table is in [the reference](../../docs/reference/mcp-and-a2a.md#who-the-target-sees-when-the-caller-is-an-app).
+On 2026-11-04, on the Free Edition dev App, with `hub` and `console` registered as children and OBO
+and the shared service principal delegated to both, the Databricks CLI's token (a person, no browser)
+as the caller: **me** over MCP and over A2A, for `whoami` and `databricks_me`, all matched the caller
+(the hub saw the person, received their token, and `databricks_me` returned their user name); `ask`
+over A2A as **me** made the model call both tools and name the person; **this App** over both
+protocols answered `404` because the hub had no grant for it. The table is in
+[the reference](../../docs/reference/mcp-and-a2a.md#who-the-target-sees-when-the-caller-is-an-app).
 
-**Not measured**: the console's own table on the dev App (it needs the delegations of step 3 and 4
-above and a browser), the shared service principal as the console's identity, the visitor's OBO token
-as the bearer of a call to the hub, `databricks_me` with that token, and a `service_principal` grant
-admitting the console. Until those run, which of the four cells shows "The hub sees you" is a
-prediction, not a result.
+**Not measured**: the page as a person's browser sees it (the browser's token, not the CLI's), and
+**this App** with a grant on the hub (a `service_principal` grant or `everyone`).
 
 ## What was verified
 

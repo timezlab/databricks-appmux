@@ -115,7 +115,7 @@ What the hub needs from the platform, in order (the API calls are in
   answer and the caller's token together; a tool that fails; a tool the model invented; the retry on
   `429`; missing credentials; `GetTask` limited to the caller's own tasks; streaming; no response
   shows a token. The model and the workspace are fakes in those tests.
-- **On a workspace** (Free Edition dev App, 2026-11-04, as a child with no delegation): the card,
-  MCP `initialize`, `whoami` over MCP and A2A, and `databricks_me` refused for want of a token; see
-  [What was measured](../agent-console/README.md#what-was-measured) in the console's README. `ask`
-  (the model) was not run there: it needs the shared service principal.
+- **On a workspace** (Free Edition dev App, 2026-11-04, as a child with OBO and the shared service
+  principal delegated, called with the CLI's token): the card, MCP `initialize`, `whoami` and
+  `databricks_me` over MCP and A2A, and `ask` with the free model, which called both tools; see
+  [What was measured](../agent-console/README.md#what-was-measured).

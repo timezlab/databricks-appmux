@@ -30,9 +30,10 @@ tests `mcp-tools`, `a2a-agent`, `agent-hub` and `agent-console` (`tests/unit/tes
 > [docs/reference/mcp-and-a2a.md](../docs/reference/mcp-and-a2a.md).
 >
 > `agent-hub` and `agent-console` were tested locally against fakes (a fake Databricks proxy in
-> front of the real hub) and then run on 2026-11-04 as children of the dev App, where only the
-> calls that need no delegation were measured. What the delegations change is **not yet
-> measured**; see [the reference](../docs/reference/mcp-and-a2a.md#who-the-target-sees-when-the-caller-is-an-app).
+> front of the real hub) and then run on 2026-11-04 as children of the dev App with OBO and the
+> shared service principal delegated, called with the CLI's token. Not yet measured: a browser's
+> token, and the console's own identity with a grant on the hub; see
+> [the reference](../docs/reference/mcp-and-a2a.md#who-the-target-sees-when-the-caller-is-an-app).
 
 ## The apps
 
