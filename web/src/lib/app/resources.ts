@@ -53,12 +53,41 @@ export function resourceLevelLabel(level: string): string {
   return capitalise(level.toLowerCase().replaceAll("_", " "));
 }
 
-/** A secret scope offered by the suggestions: a prefix to go on typing from, not a target. */
-export function isScopePrefix(
-  type: string,
-  suggestion: ResourceSuggestion,
-): boolean {
-  return type === "secret" && suggestion.target.endsWith("/");
+/**
+ * What a target of a type with levels ends in while it is only a step toward
+ * one: a secret scope, a Unity Catalog catalog or schema, a vector search
+ * endpoint, a Lakebase project or branch. The server answers such a step with
+ * a target that ends in the separator, which the attach form refuses, so the
+ * field goes on from it. A type not listed here has no levels.
+ */
+const PREFIX_SEPARATOR: ReadonlyMap<string, string> = new Map([
+  ["secret", "/"],
+  ["uc_table", "."],
+  ["uc_function", "."],
+  ["uc_volume", "/"],
+  ["vector_search_index", "/"],
+  ["lakebase_database", "/"],
+]);
+
+/** Whether `target` is a step toward a target of this type (a prefix to go on typing from). */
+export function isPrefixTarget(type: string, target: string): boolean {
+  const separator = PREFIX_SEPARATOR.get(type);
+  return separator !== undefined && target.endsWith(separator);
+}
+
+/** What choosing a step does, for a screen reader: the visual cue is a chevron. */
+export function prefixActionLabel(type: string, label: string): string {
+  return type === "secret"
+    ? `${label}, open its keys`
+    : `${label}, go inside it`;
+}
+
+/** The hint in the search box of the object field. */
+export function objectSearchPlaceholder(entry: ResourceTypeEntry): string {
+  if (entry.type === "secret") return "Type a scope, then / and a key";
+  return PREFIX_SEPARATOR.has(entry.type)
+    ? `Search by name, or type it in full, such as ${entry.target_hint}`
+    : "Search by name, or type it in full";
 }
 
 // ------------------------------------------------------------- access modes
