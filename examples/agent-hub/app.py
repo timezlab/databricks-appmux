@@ -230,9 +230,9 @@ class DatabricksCredentials:
 class Caller:
     """Who the proxy says is calling, from the headers of one request.
 
-    ``access_token`` is the caller's own token, present only for a person when OBO was delegated to
-    this App. It is kept out of ``repr`` and out of ``describe`` so that it cannot reach a log, a
-    task or a model by accident.
+    ``access_token`` is the caller's own token (a person's, or an App's service principal's),
+    present only when OBO was delegated to this App. It is kept out of ``repr`` and out of
+    ``describe`` so that it cannot reach a log, a task or a model by accident.
     """
 
     email: str
