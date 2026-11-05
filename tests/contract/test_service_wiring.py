@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, Final
 
 import pytest
@@ -40,6 +41,7 @@ from service_harness import (
     ServiceDoubles,
     install_service_doubles,
     managed_registry,
+    sandbox_with_rules,
 )
 from starlette.types import Message
 
@@ -279,6 +281,32 @@ async def test_a_restart_by_an_administrator_reaches_the_reconciler_through_the_
     assert restarted.status == 200, restarted.body
     assert ("request_restart", "sales") in reconciler.calls
     assert restarted.json()["state"] == "crashed"  # the state is the reconciler's own answer
+    await entry.stop_background(task)
+
+
+async def test_an_egress_save_by_an_administrator_reaches_the_running_sandbox_through_real_wiring(
+    monkeypatch: pytest.MonkeyPatch, doubles: ServiceDoubles, tmp_path: Path
+) -> None:
+    script_canary(monkeypatch, doubles)
+    registry = managed_registry(doubles.log)
+    gate = Gate()
+    task = await start_like_serve(monkeypatch, registry, gate)
+    (reconciler,) = doubles.reconcilers
+    sandbox, supervisor = sandbox_with_rules(tmp_path, "sales", "1-1")
+    reconciler.children = [("sales", sandbox)]
+    rules = [{"action": "allow", "cidr": "198.51.100.0/24", "port": "443", "comment": "an API"}]
+
+    saved = await call(
+        gate,
+        "PUT",
+        f"{MOUNT}/apps/sales/egress",
+        email=DANA,
+        json_body={"version": 1, "rules": rules},
+    )
+
+    assert saved.status == 200, saved.body
+    (seen,) = supervisor.rules_seen
+    assert [rule["cidr"] for rule in seen["app_rules"]] == ["198.51.100.0/24"]
     await entry.stop_background(task)
 
 

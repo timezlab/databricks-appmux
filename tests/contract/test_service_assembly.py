@@ -44,6 +44,7 @@ from service_harness import (
     RecordingReconciler,
     Workspace,
     install_reconciler,
+    sandbox_with_rules,
 )
 from stub_registry import StubRegistry
 
@@ -609,6 +610,7 @@ def sandbox_child(
         log_path=scratch / "child.log",
         stderr_path=scratch / "child.err",
         memory_budget_mb=memory_budget_mb,
+        rules_path=scratch / "rules.json",
     )
 
 
@@ -1412,3 +1414,119 @@ async def test_an_app_without_the_shared_service_principal_needs_no_token_files(
     files = reconciler.kwargs["launcher"]._run_dir_files
 
     assert not files.needed_by(environment_of_child)
+
+
+# --- the egress lists reach the running sandboxes (T066, TD-016) ---------------------------------
+
+APP_EGRESS_PORT: Final = 8123  # DATABRICKS_APP_PORT of ``environment()``
+
+
+def set_app_egress(registry: StubRegistry, slug: str, cidrs: list[str]) -> None:
+    """The app's own egress list as an admin saved it: allow each ``cidr`` on port 443."""
+    app = registry.snapshot.app(slug)
+    assert app is not None
+    rules = [{"action": "allow", "cidr": cidr, "port": "443", "comment": ""} for cidr in cidrs]
+    registry.seed("apps", {**app.model_dump(), "egress": rules})
+
+
+def cidrs_of(rules: list[dict[str, Any]]) -> list[str]:
+    return [rule["cidr"] for rule in rules]
+
+
+async def service_with_sandboxes(
+    tmp_path: Path, registry: StubRegistry, *slugs: str
+) -> tuple[Service, dict[str, Any]]:
+    """A started service whose reconciler runs one sandbox child per slug; the sandboxes by slug."""
+    service = make_service(tmp_path / "work", registry=registry)
+    await service.start_children(registry)
+    sandboxes = {slug: sandbox_with_rules(tmp_path / "scratch", slug, "1-1") for slug in slugs}
+    RecordingReconciler.instances[-1].children = [
+        (slug, child) for slug, (child, _) in sandboxes.items()
+    ]
+    return service, {slug: process for slug, (_, process) in sandboxes.items()}
+
+
+async def test_an_app_egress_save_rewrites_that_sandboxs_rules_and_signals_only_it(
+    tmp_path: Path,
+) -> None:
+    registry = seeded_registry()
+    service, processes = await service_with_sandboxes(tmp_path, registry, "sales", "docs")
+    set_app_egress(registry, "sales", ["203.0.113.0/24"])  # saved after the start
+
+    await service.egress_reloader("sales")
+
+    (seen,) = processes["sales"].rules_seen
+    assert cidrs_of(seen["app_rules"]) == ["203.0.113.0/24"]
+    assert cidrs_of(seen["global_rules"]) == [
+        rule.cidr for rule in global_egress_rules(registry.snapshot)
+    ]
+    assert (seen["container_ip"], seen["appmux_port"]) == (str(CONTAINER_IP), APP_EGRESS_PORT)
+    assert processes["docs"].rules_seen == []
+
+
+async def test_a_global_egress_save_reaches_every_running_sandbox_with_its_own_list(
+    tmp_path: Path,
+) -> None:
+    registry = seeded_registry()
+    set_app_egress(registry, "sales", ["203.0.113.0/24"])
+    service, processes = await service_with_sandboxes(tmp_path, registry, "sales", "docs")
+    registry.seed(
+        "platform_settings",
+        {
+            "key": "egress_global",
+            "value": [{"action": "deny", "cidr": "192.0.2.0/24", "port": "any", "comment": ""}],
+            "updated_by": ALICE,
+            "updated_at": NOW,
+        },
+    )
+
+    await service.egress_reloader(None)
+
+    (sales_seen,) = processes["sales"].rules_seen
+    (docs_seen,) = processes["docs"].rules_seen
+    assert cidrs_of(sales_seen["app_rules"]) == ["203.0.113.0/24"]
+    assert cidrs_of(docs_seen["app_rules"]) == []
+    assert (
+        cidrs_of(sales_seen["global_rules"])
+        == cidrs_of(docs_seen["global_rules"])
+        == ["192.0.2.0/24"]
+    )
+
+
+async def test_the_old_copy_still_draining_and_the_new_one_both_read_the_saved_list(
+    tmp_path: Path,
+) -> None:
+    registry = seeded_registry()
+    service = make_service(tmp_path / "work", registry=registry)
+    await service.start_children(registry)
+    old, old_process = sandbox_with_rules(tmp_path / "scratch", "sales", "1-1")
+    new, new_process = sandbox_with_rules(tmp_path / "scratch", "sales", "2-2")
+    RecordingReconciler.instances[-1].children = [("sales", old), ("sales", new)]
+    set_app_egress(registry, "sales", ["203.0.113.0/24"])
+
+    await service.egress_reloader("sales")
+
+    assert [cidrs_of(seen["app_rules"]) for seen in old_process.rules_seen] == [["203.0.113.0/24"]]
+    assert [cidrs_of(seen["app_rules"]) for seen in new_process.rules_seen] == [["203.0.113.0/24"]]
+
+
+async def test_a_child_that_is_not_a_sandbox_has_no_pump_to_signal(tmp_path: Path) -> None:
+    registry = seeded_registry()
+    service, processes = await service_with_sandboxes(tmp_path, registry, "sales")
+    RecordingReconciler.instances[-1].children.append(("docs", object()))
+
+    await service.egress_reloader(None)
+
+    assert len(processes["sales"].rules_seen) == 1
+
+
+async def test_before_the_reconciler_runs_an_egress_save_has_nothing_to_signal(
+    tmp_path: Path,
+) -> None:
+    service = make_service(tmp_path, is_self_check_passing=lambda: False)
+    await service.start_children(seeded_registry())
+
+    await service.egress_reloader("sales")
+    await service.egress_reloader(None)
+
+    assert RecordingReconciler.instances == []

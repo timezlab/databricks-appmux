@@ -12,8 +12,10 @@ shows in what order things happened.
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from ipaddress import IPv4Address
+from pathlib import Path
 from typing import Any, ClassVar, Final
 
 import httpx
@@ -25,6 +27,7 @@ import appmux.assembly as assembly
 from appmux import __main__ as entry
 from appmux.reconciler.admission import MemoryLedger
 from appmux.reconciler.output import OutputRing
+from appmux.reconciler.sandbox_adapter import RULES_FILE_NAME, SandboxRunningChild
 
 CONTAINER_IP: Final = IPv4Address("10.0.2.15")
 MEMORY_LIMIT_MB: Final = 8192
@@ -112,6 +115,54 @@ class RecordingReconciler:
         self.log.append("reconciler stop_all")
         if self.stop_error is not None:
             raise self.stop_error
+
+
+class RulesFileSandbox:
+    """A running sandbox whose supervisor reads its rules file when signalled, as the pump does.
+
+    ``rules_seen`` holds what the file said at each signal, so a test sees both the content and
+    that it was written before the signal.
+    """
+
+    sandbox_pid: int | None = 4242
+
+    def __init__(self, rules_path: Path) -> None:
+        self._rules_path = rules_path
+        self.rules_seen: list[dict[str, Any]] = []
+
+    def reload_rules(self) -> bool:
+        self.rules_seen.append(json.loads(self._rules_path.read_text(encoding="utf-8")))
+        return True
+
+    async def wait_started(self, *, timeout_s: float) -> None:
+        return None
+
+    async def wait(self) -> Any:
+        raise AssertionError("not used")
+
+    async def stop(self, *, grace_s: float) -> Any:
+        raise AssertionError("not used")
+
+    async def read_stats(self, *, timeout_s: float) -> Any:
+        return None
+
+
+def sandbox_with_rules(
+    run_base: Path, slug: str, instance: str
+) -> tuple[SandboxRunningChild, RulesFileSandbox]:
+    """A running sandbox child with a scratch directory of its own, and its supervisor."""
+    scratch = run_base / slug / instance
+    scratch.mkdir(parents=True)
+    process = RulesFileSandbox(scratch / RULES_FILE_NAME)
+    child = SandboxRunningChild(
+        process,
+        socket_path=scratch / "relay.sock",
+        log_path=scratch / "child.log",
+        stderr_path=scratch / "child.err",
+        memory_budget_mb=256,
+        rules_path=scratch / RULES_FILE_NAME,
+    )
+    return child, process
 
 
 class ManagedRegistry(StubRegistry):

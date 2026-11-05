@@ -268,6 +268,7 @@ def _load_wiring(
             bootstrap_admins=settings.appmux_bootstrap_admins,
             self_check=self_check,
             closed_targets=_closed_targets(settings),
+            egress_reloader=service.egress_reloader,
             ui_app=ui_app,
             routes=routes,
             upstream_client=upstream,

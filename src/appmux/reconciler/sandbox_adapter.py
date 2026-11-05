@@ -105,6 +105,8 @@ class SandboxProcess(Protocol):
 
     async def read_stats(self, *, timeout_s: float) -> PumpStats | None: ...
 
+    def reload_rules(self) -> bool: ...
+
 
 StartSandbox = Callable[[SandboxSpec], Awaitable[SandboxProcess]]
 
@@ -247,10 +249,12 @@ class SandboxRunningChild:
         log_path: Path,
         stderr_path: Path,
         memory_budget_mb: int,
+        rules_path: Path,
         host_run_dir: _HostRunDir | None = None,
     ) -> None:
         self._process = process
         self._socket_path = socket_path
+        self._rules_path = rules_path
         self._output = (_OutputFile(log_path, "stdout"), _OutputFile(stderr_path, "stderr"))
         self._memory_budget_mb = memory_budget_mb
         self._host_run_dir = host_run_dir
@@ -320,6 +324,17 @@ class SandboxRunningChild:
         """
         self._over_memory_reason = reason
         await self._process.stop(grace_s=MEMORY_STOP_GRACE_S)
+
+    # What the egress reloader needs (T066): the file the pump reads, and the signal to read it.
+
+    @property
+    def rules_path(self) -> Path:
+        """The file this sandbox's egress pump loads its rules from."""
+        return self._rules_path
+
+    def reload_rules(self) -> bool:
+        """Ask the supervisor to read ``rules_path`` again; ``False`` if it is no longer running."""
+        return self._process.reload_rules()
 
     # What the metrics sampler reads (T192): which sandbox this is, its pid, its pump's counters.
 
@@ -417,6 +432,7 @@ class SandboxChildLauncher:
             log_path=spec.log_path,
             stderr_path=scratch_dir / CHILD_ERR_NAME,
             memory_budget_mb=child.memory_budget_mb,
+            rules_path=spec.rules_path,
             host_run_dir=host_run_dir,
         )
 

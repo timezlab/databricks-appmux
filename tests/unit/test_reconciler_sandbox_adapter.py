@@ -40,6 +40,8 @@ class FakeHandle:
         self.stopped_with: list[float] = []
         self.start_error: SandboxStartError | None = None
         self.exit = SandboxExit(status=3, signal=None)
+        self.reload_requests = 0
+        self.is_running = True
 
     async def wait_started(self, *, timeout_s: float) -> None:
         self.started_with.append(timeout_s)
@@ -52,6 +54,10 @@ class FakeHandle:
     async def stop(self, *, grace_s: float) -> SandboxExit:
         self.stopped_with.append(grace_s)
         return self.exit
+
+    def reload_rules(self) -> bool:
+        self.reload_requests += 1
+        return self.is_running
 
 
 class FakeStarter:
@@ -668,3 +674,35 @@ async def test_a_child_stopped_the_ordinary_way_has_no_memory_reason(tmp_path: P
     exit_ = await running.stop(grace_s=1.0)
 
     assert "uses " not in exit_.description
+
+
+# --- the rules file and the reload signal (T066) -----------------------------------------------
+
+
+async def test_a_running_sandbox_names_the_rules_file_its_pump_reads(tmp_path: Path) -> None:
+    starter = FakeStarter()
+
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    (spec,) = starter.specs
+    assert running.rules_path == spec.rules_path
+
+
+async def test_a_running_sandbox_passes_the_reload_request_to_its_supervisor(
+    tmp_path: Path,
+) -> None:
+    starter = FakeStarter()
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    assert running.reload_rules() is True
+    assert starter.handle.reload_requests == 1
+
+
+async def test_a_sandbox_that_has_ended_answers_the_reload_request_with_false(
+    tmp_path: Path,
+) -> None:
+    starter = FakeStarter()
+    starter.handle.is_running = False
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    assert running.reload_rules() is False

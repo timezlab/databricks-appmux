@@ -56,7 +56,7 @@ from pydantic import SecretStr
 
 from appmux.admin.environment import ChildSetup
 from appmux.admin.identity import state_from_desired
-from appmux.admin.platform import EGRESS_GLOBAL_KEY
+from appmux.admin.platform import EGRESS_GLOBAL_KEY, ClosedTargets
 from appmux.admin.resources import DatabricksAttachChecker
 from appmux.identity.directory import DirectoryLookup
 from appmux.metrics.aggregate import MetricsAggregator
@@ -91,6 +91,7 @@ from appmux.reconciler.swap import ConnectionCloser
 from appmux.reconciler.update import UpdateService
 from appmux.reconciler.update_packages import UpdatePackages
 from appmux.registry.client import RegistryClient
+from appmux.sandbox.pump import PumpReloader, PumpTarget
 from appmux.sandbox.rules import EgressRule
 from appmux.sandbox.watchdog import (
     CHECK_INTERVAL_S,
@@ -292,6 +293,7 @@ class Service:
         self._releases_dir = work_dir / RELEASES_DIR_NAME
         self._overlays_dir = work_dir / OVERLAYS_DIR_NAME
         self._reconciler: Reconciler | None = None
+        self._pump_reloader: PumpReloader | None = None
         self._cleanup_sleep = cleanup_sleep
         self._cleanup_task: asyncio.Task[None] | None = None
         self._memory_watch_interval_s = memory_watch_interval_s
@@ -360,6 +362,15 @@ class Service:
         # Nothing runs yet, so anything left here belongs to a process that is gone.
         await asyncio.to_thread(functools.partial(shutil.rmtree, self._run_dir, ignore_errors=True))
         self._reconciler = self._reconciler_for(container_ip, memory_limit_mb)
+        closed_targets = ClosedTargets(
+            container_ip=container_ip, appmux_port=self._settings.databricks_app_port
+        )
+        self._pump_reloader = PumpReloader(
+            running=self._pump_targets,
+            app_rules=self._app_egress_rules,
+            global_rules=lambda: global_egress_rules(self._registry.snapshot),
+            closed_targets=lambda: closed_targets,
+        )
         await self._reconciler.start()
         self._start_memory_watch()
 
@@ -454,6 +465,31 @@ class Service:
             for slug, child in self._reconciler.running_children()
             if isinstance(child, SandboxRunningChild)
         ]
+
+    # --- the egress lists of the running sandboxes (T066) ----------------------------------------
+
+    async def egress_reloader(self, app_slug: str | None) -> None:
+        """The ``EgressReloader`` of the egress routes: the saved list reaches the running pumps.
+
+        ``None`` means the global list changed and every running sandbox is served. Before the
+        reconciler runs there is no sandbox, and the first one reads the lists when it starts.
+        """
+        if self._pump_reloader is not None:
+            await self._pump_reloader(app_slug)
+
+    def _pump_targets(self) -> list[PumpTarget]:
+        """Every sandbox running now: live, draining and still coming up."""
+        if self._reconciler is None:
+            return []
+        return [
+            PumpTarget(slug=slug, rules_path=child.rules_path, handle=child)
+            for slug, child in self._reconciler.running_children()
+            if isinstance(child, SandboxRunningChild)
+        ]
+
+    def _app_egress_rules(self, slug: str) -> tuple[EgressRule, ...]:
+        app = self._registry.snapshot.app(slug)
+        return tuple(app.egress) if app is not None else ()
 
     # --- the memory watchdog (TD-029) -----------------------------------------------------------
 
