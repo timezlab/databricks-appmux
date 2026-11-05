@@ -234,6 +234,36 @@ def test_only_the_children_over_budget_are_returned_each_against_its_own_budget(
     assert [offence.slug for offence in offenders] == ["small"]
 
 
+def test_the_sandbox_allowance_is_added_after_the_headroom_and_not_multiplied_by_it() -> None:
+    # The tree of a sandbox holds the app and the sandbox's own processes (about 61 MB measured,
+    # TD-032); an app that stays inside its budget must not be stopped for the sandbox's share.
+    child = WatchedChild(slug="sales", root_pid=100, budget_mb=100, allowance_mb=60)
+    headroom = 1.5  # 100 x 1.5 + 60 = 210 MB
+
+    at_limit = find_offenders(
+        [child], headroom_factor=headroom, measure_rss_bytes=fixed_readings({100: 210})
+    )
+    beyond = find_offenders(
+        [child], headroom_factor=headroom, measure_rss_bytes=fixed_readings({100: 211})
+    )
+
+    assert at_limit == []
+    assert [offence.limit_mb for offence in beyond] == [210]
+
+
+def test_an_offence_over_a_limit_with_an_allowance_names_the_allowance() -> None:
+    child = WatchedChild(slug="ml", root_pid=300, budget_mb=200, allowance_mb=64)
+
+    (offence,) = find_offenders(
+        [child], headroom_factor=1.25, measure_rss_bytes=fixed_readings({300: 400})
+    )
+
+    assert offence.limit_mb == 314  # 200 x 1.25 + 64
+    assert offence.reason == (
+        "uses 400 MB, over its limit of 314 MB (budget 200 MB, plus 64 MB for the sandbox itself)"
+    )
+
+
 # ---- real processes: the tree is measured, only the offender is stopped --------------------------
 
 

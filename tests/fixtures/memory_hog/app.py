@@ -15,6 +15,10 @@ Configuration
     HOG_INTERVAL_SECONDS  pause between allocations, default 0.1. A very small value makes a "fast
                           allocator", the known gap of the watchdog (TD-003).
     HOG_MAX_MB            stop growing at this many megabytes; default 0, which means no cap.
+    HOG_START_DELAY_SECONDS  pause before the first allocation, default 0. The memory watchdog
+                          (TD-029) stops a child that grows this fast within a second or two of its
+                          start, which can be before the health check passes; ``app.yaml`` sets a
+                          delay so the release is up first and the stop happens to a running app.
 
 HTTP paths
     GET /          200 ``{"fixture": "memory_hog", "status": "ok"}``.
@@ -50,7 +54,10 @@ def configured_chunk_mb() -> int:
     return int(os.environ.get("HOG_CHUNK_MB", DEFAULT_CHUNK_MB))
 
 
-def allocate_until_stopped(chunk_mb: int, interval_seconds: float, max_mb: int) -> None:
+def allocate_until_stopped(
+    chunk_mb: int, interval_seconds: float, max_mb: int, start_delay_seconds: float
+) -> None:
+    time.sleep(start_delay_seconds)
     while True:
         if max_mb != UNLIMITED and (len(held_chunks) + 1) * chunk_mb > max_mb:
             stop_reason.append("cap")
@@ -86,6 +93,7 @@ if __name__ == "__main__":
             configured_chunk_mb(),
             float(os.environ.get("HOG_INTERVAL_SECONDS", DEFAULT_INTERVAL_SECONDS)),
             int(os.environ.get("HOG_MAX_MB", UNLIMITED)),
+            float(os.environ.get("HOG_START_DELAY_SECONDS", 0)),
         ),
         daemon=True,
     ).start()

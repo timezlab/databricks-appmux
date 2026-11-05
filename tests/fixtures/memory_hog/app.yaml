@@ -7,3 +7,8 @@ command: ["python", "app.py"]
 env:
   - name: HOG_MAX_MB
     value: "1536"
+  # The memory watchdog stops this fixture within a second or two of its first allocation. Without
+  # a delay that can come before the health check passes, and the release fails instead of an
+  # active app being stopped, which is what test_failure_table.py row 19 looks at.
+  - name: HOG_START_DELAY_SECONDS
+    value: "5"

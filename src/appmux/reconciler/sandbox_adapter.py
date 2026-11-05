@@ -73,6 +73,10 @@ RULES_FILE_NAME: Final = "rules.json"
 HOST_RUN_DIR_NAME: Final = "run"
 # The SIGTERM grace of a child stopped for filling its run directory.
 RUN_DIR_STOP_GRACE_S: Final = 5.0
+# The SIGTERM grace of a child stopped for holding more memory than its limit. Shorter than the
+# run directory's: a child that is still allocating is the container's out-of-memory kill away
+# from taking the other apps with it, and nothing it would flush in a few seconds is worth that.
+MEMORY_STOP_GRACE_S: Final = 2.0
 # Enough for the last 40 lines of a chatty child; the registry keeps fewer (``clean_log_tail``).
 LOG_READ_BYTES: Final = 16 * 1024
 # How long the metrics sampler waits for a pump's counters; under its own 3 s probe timeout.
@@ -242,12 +246,15 @@ class SandboxRunningChild:
         socket_path: Path,
         log_path: Path,
         stderr_path: Path,
+        memory_budget_mb: int,
         host_run_dir: _HostRunDir | None = None,
     ) -> None:
         self._process = process
         self._socket_path = socket_path
         self._output = (_OutputFile(log_path, "stdout"), _OutputFile(stderr_path, "stderr"))
+        self._memory_budget_mb = memory_budget_mb
         self._host_run_dir = host_run_dir
+        self._over_memory_reason: str | None = None
 
     @property
     def socket_path(self) -> Path:
@@ -279,6 +286,8 @@ class SandboxRunningChild:
         description = exit_.describe()
         if host_run_dir is not None and host_run_dir.offence is not None:
             return ChildExit(f"{host_run_dir.offence.reason}; {description}")
+        if self._over_memory_reason is not None:
+            return ChildExit(f"{self._over_memory_reason}; {description}")
         if exit_.signal is not None:
             return ChildExit(description, signal=_signal_name(exit_.signal))
         return ChildExit(description, code=exit_.status)
@@ -295,6 +304,22 @@ class SandboxRunningChild:
         return [
             line for new, room in zip(found, rooms, strict=True) for line in new.lines(room=room)
         ]
+
+    # What the memory watchdog reads and does (TD-029).
+
+    @property
+    def memory_budget_mb(self) -> int:
+        """The app's memory budget this copy was started with."""
+        return self._memory_budget_mb
+
+    async def stop_over_memory(self, reason: str) -> None:
+        """Stop the sandbox because its tree holds more than its limit; ``wait`` then says why.
+
+        Only ends the process. The reconciler's own ``wait`` collects the exit and releases what
+        the run directory kept, so this does not (a second release would stop the keeper twice).
+        """
+        self._over_memory_reason = reason
+        await self._process.stop(grace_s=MEMORY_STOP_GRACE_S)
 
     # What the metrics sampler reads (T192): which sandbox this is, its pid, its pump's counters.
 
@@ -391,6 +416,7 @@ class SandboxChildLauncher:
             socket_path=socket_path,
             log_path=spec.log_path,
             stderr_path=scratch_dir / CHILD_ERR_NAME,
+            memory_budget_mb=child.memory_budget_mb,
             host_run_dir=host_run_dir,
         )
 

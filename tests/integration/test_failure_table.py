@@ -67,10 +67,12 @@ Rows tested elsewhere (T180 added the ones marked *):
 
 Row 19. ``RLIMIT_AS`` is set from the budget and ``memory_hog`` allocates until something stops it.
 The test asserts that the allocation is stopped before the memory held passes the address-space
-limit and that a neighbour answers throughout. The RSS watchdog of the design (``sandbox/watchdog.
-watch``) is not started by the service, so this test cannot show it acting; the test accepts either
-way of stopping (``MemoryError`` inside the child, or the child gone) and prints which one it saw.
-That the watchdog is not wired is TD-029.
+limit and that a neighbour answers throughout. Two things can stop it: ``RLIMIT_AS`` (a
+``MemoryError`` inside the child) or the RSS watchdog (``sandbox/watchdog.watch``, which the service
+has started since TD-029 was fixed; the child is then gone). The test accepts either and prints
+which one it saw. A second test covers the case only the watchdog can stop: a child that spreads
+its memory over several processes, each far below the address-space limit
+(``memory_hog_workers``). It reads the reason the watchdog gave from the app's logs.
 
 Row 20. Killing ``slirp4netns`` leaves the child with no way out, and the design treats that as a
 crash of that child (restart with backoff, then ``crashed``). The supervisor used to wait only for
@@ -107,6 +109,11 @@ OK: Final = 200
 # for the build and for a slow container.
 HOG_WAIT_S: Final = 120.0
 HELPER_DEATH_WAIT_S: Final = 90.0
+# memory_hog_workers waits 4 s, then writes its memory in about 2 s; the watchdog reads once a
+# second. The rest is slack for the build and for a slow container.
+WORKERS_WAIT_S: Final = 120.0
+# What the watchdog writes into the app's logs (``sandbox.watchdog.Offence.reason``).
+WATCHDOG_REASON: Final = "over its limit of"
 
 
 @pytest.fixture(scope="module")
@@ -180,6 +187,39 @@ def test_a_child_that_allocates_past_its_budget_is_stopped_and_the_neighbour_kee
     print(f"failure table row 19: budget {BUDGET_MB} MB, limit {limit_mb} MB, saw {seen}")
     assert done, f"after {HOG_WAIT_S:g} s the child was still allocating: {seen}"
     assert seen.get("held_mb", 0) <= limit_mb, f"the child held more than its limit: {seen}"
+    assert set(neighbour_statuses) == {OK}, (
+        f"the neighbour did not answer 200 throughout: {sorted(set(neighbour_statuses))}"
+    )
+
+
+def test_a_child_that_spreads_its_memory_over_several_processes_is_stopped_by_the_watchdog(
+    session: AdminSession, neighbour: str
+) -> None:
+    workers = _start(session, "memory_hog_workers", "workers")
+    report = session.open_app(workers, "/report").json()
+    held_by_all_mb = report["workers"] * report["worker_mb"]
+    address_space_limit_mb = int(BUDGET_MB * ADDRESS_SPACE_HEADROOM_FACTOR)
+    # The premise of the test: no single worker comes near its own address-space limit, so
+    # RLIMIT_AS cannot be what stops this child, while all of them together are well over the
+    # budget. If this fails the fixture or the budget changed, not the watchdog.
+    assert report["worker_mb"] < address_space_limit_mb // 2, report
+    assert held_by_all_mb > BUDGET_MB, report
+    neighbour_statuses: list[int] = []
+    reasons: list[str] = []
+
+    def stopped_for_memory() -> bool:
+        neighbour_statuses.append(session.open_app(neighbour).status_code)
+        lines = session.read(f"/apps/{workers}/logs")["lines"]
+        reasons[:] = [line["text"] for line in lines if WATCHDOG_REASON in line["text"]]
+        return bool(reasons)
+
+    done = _poll(stopped_for_memory, limit_s=WORKERS_WAIT_S)
+
+    print(f"failure table row 19 (workers): holds {held_by_all_mb} MB in total, saw {reasons[:1]}")
+    assert done, (
+        f"after {WORKERS_WAIT_S:g} s the logs of {workers} have no line with {WATCHDOG_REASON!r}: "
+        "the watchdog did not stop a child holding several times its budget"
+    )
     assert set(neighbour_statuses) == {OK}, (
         f"the neighbour did not answer 200 throughout: {sorted(set(neighbour_statuses))}"
     )

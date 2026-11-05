@@ -20,6 +20,7 @@ from appmux.reconciler.output import OUTPUT_MAX_LINES, OutputRing
 from appmux.reconciler.sandbox_adapter import (
     MAX_OUTPUT_READ_BYTES,
     MAX_SOCKET_PATH_BYTES,
+    MEMORY_STOP_GRACE_S,
     PUMP_STATS_TIMEOUT_S,
     SandboxChildLauncher,
 )
@@ -630,3 +631,40 @@ async def test_the_pump_counters_are_asked_of_the_supervisor_within_a_bound(
     assert stats is not None
     assert stats["bytes_to_slirp"] == 900
     assert handle.stats_timeouts == [PUMP_STATS_TIMEOUT_S]
+
+
+# --- what the memory watchdog asks of a running sandbox (TD-029) --------------------------------
+
+
+async def test_a_running_sandbox_knows_the_budget_it_was_started_with(tmp_path: Path) -> None:
+    starter = FakeStarter()
+
+    running = await launcher(tmp_path, starter).start(child_start(memory_budget_mb=384))
+
+    assert running.memory_budget_mb == 384
+
+
+async def test_a_child_stopped_for_its_memory_ends_with_the_reason_in_its_exit(
+    tmp_path: Path,
+) -> None:
+    starter = FakeStarter()
+    starter.handle = BlockedHandle()
+    running = await launcher(tmp_path, starter).start(child_start())
+    waiting = asyncio.create_task(running.wait())
+    await asyncio.sleep(0)
+
+    await running.stop_over_memory("uses 400 MB, over its limit of 314 MB (budget 200 MB)")
+
+    exit_ = await asyncio.wait_for(waiting, timeout=5.0)
+    assert exit_.description.startswith("uses 400 MB, over its limit of 314 MB (budget 200 MB); ")
+    assert starter.handle.stopped_with == [MEMORY_STOP_GRACE_S]
+
+
+async def test_a_child_stopped_the_ordinary_way_has_no_memory_reason(tmp_path: Path) -> None:
+    starter = FakeStarter()
+    starter.handle = BlockedHandle()
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    exit_ = await running.stop(grace_s=1.0)
+
+    assert "uses " not in exit_.description

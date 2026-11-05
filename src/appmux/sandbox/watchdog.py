@@ -7,9 +7,10 @@ best-effort layers stand in for one:
   the kernel refuses a process's allocations beyond the budget times a headroom factor. It
   bounds each process, not the tree, and counts address space, not resident memory.
 * an RSS watchdog (:func:`watch`) that sums the resident memory of each child's process tree and
-  stops the one child that is beyond its budget times a headroom factor. It polls, so a fast
-  allocator can still reach the container's limit between two readings: the known gap in
-  TD-003, stated, not hidden.
+  stops the one child that is beyond its budget times a headroom factor, plus an allowance for
+  the sandbox's own processes (they sit in the same tree and do not grow with the budget). It
+  polls, so a fast allocator can still reach the container's limit between two readings: the
+  known gap in TD-003, stated, not hidden. ``Service.start_children`` starts it (TD-029).
 
 Both factors are untuned defaults. They are the plan's to set once SC-003 measures the fixtures
 (``memory_fastapi``, ``memory_hog``) inside a sandbox; the figures below are only the reasoning
@@ -54,29 +55,37 @@ _PAGE_SIZE_BYTES: Final = resource.getpagesize()
 
 @dataclass(frozen=True, slots=True)
 class WatchedChild:
-    """One running child: the host pid at the root of its process tree and its budget."""
+    """One running child: the host pid at the root of its process tree and its budget.
+
+    ``allowance_mb`` is what the tree holds besides the app: the sandbox's own processes (the
+    egress pump, ``slirp4netns``, the supervisor). It is added to the limit after the headroom,
+    because it does not grow with the budget; leaving it out would stop a small app that stays
+    inside its budget.
+    """
 
     slug: str
     root_pid: int
     budget_mb: int
+    allowance_mb: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class Offence:
-    """A child whose process tree holds more than its budget times the headroom."""
+    """A child whose process tree holds more than its budget times the headroom, plus allowance."""
 
     slug: str
     root_pid: int
     budget_mb: int
     rss_mb: int
     limit_mb: int
+    allowance_mb: int = 0
 
     @property
     def reason(self) -> str:
-        return (
-            f"uses {self.rss_mb} MB, over its limit of {self.limit_mb} MB "
-            f"(budget {self.budget_mb} MB)"
-        )
+        budget = f"budget {self.budget_mb} MB"
+        if self.allowance_mb:
+            budget += f", plus {self.allowance_mb} MB for the sandbox itself"
+        return f"uses {self.rss_mb} MB, over its limit of {self.limit_mb} MB ({budget})"
 
 
 # ---- reading /proc ------------------------------------------------------------------------------
@@ -151,10 +160,10 @@ def find_offenders(
     headroom_factor: float = RSS_HEADROOM_FACTOR,
     measure_rss_bytes: Callable[[int], int] = process_tree_rss_bytes,
 ) -> list[Offence]:
-    """The children whose tree holds more than ``budget_mb * headroom_factor``."""
+    """The children whose tree holds more than ``budget_mb * headroom_factor + allowance_mb``."""
     offenders: list[Offence] = []
     for child in children:
-        limit_bytes = int(child.budget_mb * headroom_factor * _BYTES_PER_MB)
+        limit_bytes = int((child.budget_mb * headroom_factor + child.allowance_mb) * _BYTES_PER_MB)
         rss_bytes = measure_rss_bytes(child.root_pid)
         if rss_bytes > limit_bytes:
             offenders.append(
@@ -164,6 +173,7 @@ def find_offenders(
                     budget_mb=child.budget_mb,
                     rss_mb=rss_bytes // _BYTES_PER_MB,
                     limit_mb=limit_bytes // _BYTES_PER_MB,
+                    allowance_mb=child.allowance_mb,
                 )
             )
     return offenders

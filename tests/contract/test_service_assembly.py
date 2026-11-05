@@ -57,15 +57,17 @@ from appmux.packages.modes import PackageMode
 from appmux.packages.overlay import pip_index_environment
 from appmux.packages.store import ContentStoreError
 from appmux.packages.wheels import WheelStore
+from appmux.reconciler.admission import OVERHEAD_PER_CHILD_MB
 from appmux.reconciler.build import StoreReleaseBuilder
 from appmux.reconciler.child_env import EnvironmentRefused
 from appmux.reconciler.children import ChildStartError
 from appmux.reconciler.route_table import RouteTable
-from appmux.reconciler.sandbox_adapter import SandboxRunningChild
+from appmux.reconciler.sandbox_adapter import MEMORY_STOP_GRACE_S, SandboxRunningChild
 from appmux.registry.client import RegistryClient
 from appmux.registry.errors import RegistryError
 from appmux.registry.models import Release
-from appmux.sandbox.launcher import LAUNCH_SOCKET_NAME
+from appmux.sandbox.launcher import LAUNCH_SOCKET_NAME, SandboxExit
+from appmux.sandbox.watchdog import RSS_HEADROOM_FACTOR
 from appmux.secrets.resolver import MissingResourceKeys, SecretUnreadable, UnreadableSecret
 from appmux.secrets.shared_sp_token import TOKEN_COMMAND_PATH
 from appmux.settings import EnvironmentSettings, PlatformSettings
@@ -112,6 +114,7 @@ def make_service(
     upstream: UpstreamClient | None = None,
     cleanup_sleep: Callable[[float], Awaitable[None]] | None = None,
     metrics_root: Path | None = None,
+    memory_watch_interval_s: float | None = None,
 ) -> Service:
     return Service(
         settings=environment(),
@@ -129,6 +132,11 @@ def make_service(
         metrics_stop_budget_s=METRICS_STOP_BUDGET_S,
         work_dir=tmp_path,
         **({} if cleanup_sleep is None else {"cleanup_sleep": cleanup_sleep}),
+        **(
+            {}
+            if memory_watch_interval_s is None
+            else {"memory_watch_interval_s": memory_watch_interval_s}
+        ),
         # The tests' machine's own /sys and /proc are not the container's: an empty root by default.
         metrics_root=metrics_root if metrics_root is not None else tmp_path / "no-container",
     )
@@ -586,14 +594,21 @@ class SandboxStandIn:
 
 
 def sandbox_child(
-    root: Path, slug: str, instance: str, sandbox_pid: int | None
+    root: Path,
+    slug: str,
+    instance: str,
+    sandbox_pid: int | None,
+    *,
+    memory_budget_mb: int = 256,
+    process: SandboxStandIn | None = None,
 ) -> SandboxRunningChild:
     scratch = root / "run" / slug / instance
     return SandboxRunningChild(
-        SandboxStandIn(sandbox_pid),
+        process if process is not None else SandboxStandIn(sandbox_pid),
         socket_path=scratch / "relay.sock",
         log_path=scratch / "child.log",
         stderr_path=scratch / "child.err",
+        memory_budget_mb=memory_budget_mb,
     )
 
 
@@ -901,6 +916,158 @@ async def test_a_new_release_wakes_the_reconciler_once_it_runs(tmp_path: Path) -
 
     (reconciler,) = RecordingReconciler.instances
     assert reconciler.calls == [("start", None), ("wake", "sales")]
+
+
+# --- the memory watchdog (TD-029) --------------------------------------------------------------
+
+MEMORY_WATCH_INTERVAL_S: Final = 0.01
+WATCH_TIMEOUT_S: Final = 5.0
+
+
+class StoppableSandboxStandIn(SandboxStandIn):
+    """A sandbox that runs until it is told to stop, and notes how it was told."""
+
+    def __init__(self, sandbox_pid: int | None) -> None:
+        super().__init__(sandbox_pid)
+        self.stopped_with: list[float] = []
+        self.is_stopped = asyncio.Event()
+
+    async def wait(self) -> SandboxExit:
+        await self.is_stopped.wait()
+        return SandboxExit(status=137, signal=9)
+
+    async def stop(self, *, grace_s: float) -> SandboxExit:
+        self.stopped_with.append(grace_s)
+        self.is_stopped.set()
+        return SandboxExit(status=137, signal=9)
+
+
+def watched_sandbox(
+    root: Path, slug: str, *, sandbox_pid: int, own_mb: int, app_mb: int, budget_mb: int
+) -> tuple[SandboxRunningChild, StoppableSandboxStandIn]:
+    """A sandbox whose root holds ``own_mb`` and whose app (a child of it) holds ``app_mb``."""
+    fake_process(root, sandbox_pid, 1, own_mb)
+    fake_process(root, sandbox_pid + 1, sandbox_pid, app_mb)
+    process = StoppableSandboxStandIn(sandbox_pid)
+    child = sandbox_child(
+        root, slug, f"1-{sandbox_pid}", sandbox_pid, memory_budget_mb=budget_mb, process=process
+    )
+    return child, process
+
+
+async def watched_service(
+    tmp_path: Path, *children: tuple[str, SandboxRunningChild]
+) -> tuple[Service, StubRegistry]:
+    registry = seeded_registry()
+    service = make_service(
+        tmp_path / "work",
+        registry=registry,
+        metrics_root=tmp_path / "root",
+        memory_watch_interval_s=MEMORY_WATCH_INTERVAL_S,
+    )
+    await service.start_children(registry)
+    RecordingReconciler.instances[-1].children = list(children)
+    return service, registry
+
+
+async def a_few_rounds_of_the_watch() -> None:
+    await asyncio.sleep(MEMORY_WATCH_INTERVAL_S * 20)
+
+
+async def test_a_sandbox_over_its_limit_is_stopped_with_the_reason_and_its_neighbour_is_not(
+    tmp_path: Path,
+) -> None:
+    root = fake_container(tmp_path / "root")
+    hog, hog_process = watched_sandbox(
+        root, "sales", sandbox_pid=500, own_mb=20, app_mb=600, budget_mb=256
+    )
+    tidy, tidy_process = watched_sandbox(
+        root, "docs", sandbox_pid=600, own_mb=20, app_mb=100, budget_mb=256
+    )
+    service, _ = await watched_service(tmp_path, ("sales", hog), ("docs", tidy))
+
+    await asyncio.wait_for(hog_process.is_stopped.wait(), timeout=WATCH_TIMEOUT_S)
+    exit_ = await asyncio.wait_for(hog.wait(), timeout=WATCH_TIMEOUT_S)
+    await a_few_rounds_of_the_watch()
+
+    limit_mb = int(256 * RSS_HEADROOM_FACTOR + OVERHEAD_PER_CHILD_MB)
+    assert exit_.description.startswith(
+        f"uses 620 MB, over its limit of {limit_mb} MB "
+        f"(budget 256 MB, plus {OVERHEAD_PER_CHILD_MB} MB for the sandbox itself); "
+    )
+    assert hog_process.stopped_with == [MEMORY_STOP_GRACE_S]
+    assert tidy_process.stopped_with == []
+    await service.stop()
+
+
+@pytest.mark.parametrize("budget_mb", [64, 256, 1024])
+async def test_an_app_inside_its_budget_is_not_stopped_for_the_sandboxs_own_memory(
+    tmp_path: Path, budget_mb: int
+) -> None:
+    # The tree holds the sandbox's processes beside the app: 61 MB measured on a container
+    # (TD-032). Comparing the tree with the budget alone would stop every small app.
+    root = fake_container(tmp_path / "root")
+    child, process = watched_sandbox(
+        root, "sales", sandbox_pid=500, own_mb=61, app_mb=budget_mb, budget_mb=budget_mb
+    )
+    service, _ = await watched_service(tmp_path, ("sales", child))
+
+    await a_few_rounds_of_the_watch()
+
+    assert process.stopped_with == []
+    await service.stop()
+
+
+async def test_a_sandbox_that_has_not_reported_its_pid_is_not_measured_or_stopped(
+    tmp_path: Path,
+) -> None:
+    root = fake_container(tmp_path / "root")
+    coming_up = sandbox_child(root, "sales", "1-1", sandbox_pid=None, memory_budget_mb=64)
+    service, _ = await watched_service(tmp_path, ("sales", coming_up))
+
+    await a_few_rounds_of_the_watch()
+
+    await service.stop()  # nothing to stop, and nothing raised on the way
+
+
+async def test_starting_the_children_twice_stops_an_offender_once(tmp_path: Path) -> None:
+    root = fake_container(tmp_path / "root")
+    hog, process = watched_sandbox(
+        root, "sales", sandbox_pid=500, own_mb=20, app_mb=600, budget_mb=256
+    )
+    service, registry = await watched_service(tmp_path, ("sales", hog))
+
+    await service.start_children(registry)
+    await asyncio.wait_for(process.is_stopped.wait(), timeout=WATCH_TIMEOUT_S)
+    await a_few_rounds_of_the_watch()
+
+    assert len(process.stopped_with) == 1
+    await service.stop()
+
+
+async def test_stopping_the_service_ends_the_watch(tmp_path: Path) -> None:
+    root = fake_container(tmp_path / "root")
+    service, _ = await watched_service(tmp_path)
+    await service.stop()
+    hog, process = watched_sandbox(
+        root, "sales", sandbox_pid=500, own_mb=20, app_mb=600, budget_mb=256
+    )
+    RecordingReconciler.instances[-1].children = [("sales", hog)]
+
+    await a_few_rounds_of_the_watch()
+
+    assert process.stopped_with == []
+
+
+async def test_a_failed_self_check_starts_no_watch(tmp_path: Path) -> None:
+    service = make_service(
+        tmp_path, is_self_check_passing=lambda: False, memory_watch_interval_s=0.01
+    )
+
+    await service.start_children(seeded_registry())
+
+    assert [task for task in asyncio.all_tasks() if task.get_name() == "memory watchdog"] == []
+    await service.stop()
 
 
 # --- stopping -------------------------------------------------------------------------------

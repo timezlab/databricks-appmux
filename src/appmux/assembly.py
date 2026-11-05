@@ -15,7 +15,9 @@ The steps run in this order, each only after the registry loaded:
 3. ``start_children``: the reconciler starts **only if the self-check passed** (FR-013: with a
    failed self-check no route opens; the platform admin reads the result and restarts). It reads
    the container's memory limit once; a limit nobody states stops the start, because admission
-   control would otherwise decide against a guess.
+   control would otherwise decide against a guess. The memory watchdog starts with it: once a
+   second it sums the resident memory of each running sandbox's process tree and stops the one
+   that holds more than its budget with headroom (``sandbox/watchdog.py``, design 5.7, TD-029).
 4. ``start_metrics``: the per-minute counters start being written to the registry. The sampler
    reads the container's cgroup and ``/proc`` (``metrics/sources.py``, under ``metrics_root``), the
    reconciler's running children and the registry's app count; the reconciler and the registry
@@ -28,7 +30,8 @@ rename, stop before a delete, the state of an app), their ``RenameCascade`` and 
 memory books of ``GET /platform``. Before the reconciler runs (the self-check failed) these answer
 from the registry alone and change nothing, because no copy exists to move.
 
-``stop`` is the ``SIGTERM`` hook: the clean-up loop is cancelled, the children are stopped in
+``stop`` is the ``SIGTERM`` hook: the clean-up loop and the memory watchdog are cancelled, the
+children are stopped in
 parallel within ``stop_budget_s``, the last minute of metrics is written within
 ``metrics_stop_budget_s``, then the clients close, whatever the stop did.
 
@@ -64,6 +67,7 @@ from appmux.packages.overlay import OverlayBuilder, SandboxStepRunner, pip_index
 from appmux.packages.store import ContentStore, WorkspaceHttpApi
 from appmux.packages.wheels import WheelStore
 from appmux.reconciler.admission import (
+    OVERHEAD_PER_CHILD_MB,
     MemoryLedger,
     MemoryLimitUnreadableError,
     read_container_memory_limit_mb,
@@ -88,6 +92,13 @@ from appmux.reconciler.update import UpdateService
 from appmux.reconciler.update_packages import UpdatePackages
 from appmux.registry.client import RegistryClient
 from appmux.sandbox.rules import EgressRule
+from appmux.sandbox.watchdog import (
+    CHECK_INTERVAL_S,
+    Offence,
+    WatchedChild,
+    process_tree_rss_bytes,
+    watch,
+)
 from appmux.secrets.credentials import ChildCredentials, CredentialsRefused
 from appmux.secrets.resolver import (
     DatabricksSecretReader,
@@ -266,6 +277,7 @@ class Service:
         work_dir: Path = WORK_DIR,
         cleanup_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         metrics_root: Path = ROOT,
+        memory_watch_interval_s: float = CHECK_INTERVAL_S,
     ) -> None:
         self._settings = settings
         self._registry = registry
@@ -282,6 +294,8 @@ class Service:
         self._reconciler: Reconciler | None = None
         self._cleanup_sleep = cleanup_sleep
         self._cleanup_task: asyncio.Task[None] | None = None
+        self._memory_watch_interval_s = memory_watch_interval_s
+        self._memory_watch_task: asyncio.Task[None] | None = None
 
         self.routes = routes
         self.closer = closer
@@ -347,6 +361,7 @@ class Service:
         await asyncio.to_thread(functools.partial(shutil.rmtree, self._run_dir, ignore_errors=True))
         self._reconciler = self._reconciler_for(container_ip, memory_limit_mb)
         await self._reconciler.start()
+        self._start_memory_watch()
 
     async def start_metrics(self, registry: Registry) -> None:
         """Start sampling and flushing the metrics; once only."""
@@ -440,6 +455,63 @@ class Service:
             if isinstance(child, SandboxRunningChild)
         ]
 
+    # --- the memory watchdog (TD-029) -----------------------------------------------------------
+
+    def _start_memory_watch(self) -> None:
+        # The same root as the sampler, so a test points both at one fake /proc.
+        measure_rss_bytes = functools.partial(
+            process_tree_rss_bytes, proc_root=self._metrics_root / "proc"
+        )
+        self._memory_watch_task = asyncio.create_task(
+            watch(
+                self._watched_children,
+                self._stop_over_memory,
+                interval_s=self._memory_watch_interval_s,
+                measure_rss_bytes=measure_rss_bytes,
+            ),
+            name="memory watchdog",
+        )
+
+    def _watched_children(self) -> list[WatchedChild]:
+        """Every running sandbox whose process tree can be found, with what it may hold."""
+        if self._reconciler is None:
+            return []
+        watched: list[WatchedChild] = []
+        for slug, child in self._reconciler.running_children():
+            if not isinstance(child, SandboxRunningChild):
+                continue
+            root_pid = child.sandbox_pid
+            if root_pid is None:  # still coming up: the supervisor has not said its pid
+                continue
+            watched.append(
+                WatchedChild(
+                    slug=slug,
+                    root_pid=root_pid,
+                    budget_mb=child.memory_budget_mb,
+                    # The sandbox's own processes are in the tree; admission counts the same share.
+                    allowance_mb=OVERHEAD_PER_CHILD_MB,
+                )
+            )
+        return watched
+
+    async def _stop_over_memory(self, offence: Offence) -> None:
+        """Stop the one sandbox that ``offence`` names; the reconciler sees it end and says why."""
+        if self._reconciler is None:
+            return
+        for _slug, child in self._reconciler.running_children():
+            if isinstance(child, SandboxRunningChild) and child.sandbox_pid == offence.root_pid:
+                await child.stop_over_memory(offence.reason)
+                return
+        # It ended between the reading and now (or was replaced): nothing is left to stop.
+
+    async def _stop_memory_watch(self) -> None:
+        task, self._memory_watch_task = self._memory_watch_task, None
+        if task is None:
+            return
+        task.cancel()
+        # Waited for, so no stop of the watchdog's is still under way while the children stop.
+        await asyncio.gather(task, return_exceptions=True)
+
     def output(self, slug: str) -> OutputRing | None:
         """What ``slug``'s child wrote; ``None`` before the reconciler (or that child) ran."""
         return None if self._reconciler is None else self._reconciler.output(slug)
@@ -447,6 +519,7 @@ class Service:
     async def stop(self) -> None:
         """``SIGTERM``: stop the children within the budget, then close the clients."""
         await self._stop_cleanup()
+        await self._stop_memory_watch()
         try:
             if self._reconciler is not None:
                 await self._reconciler.stop_all(self._stop_budget_s)

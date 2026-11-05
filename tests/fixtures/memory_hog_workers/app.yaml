@@ -1,0 +1,3 @@
+# Hostile fixture: run it only inside an appmux sandbox. It starts worker processes that hold
+# memory; the totals are capped in app.py whatever the environment says.
+command: ["python", "app.py"]

@@ -27,7 +27,8 @@ do what their names say.
 | `pkg_env_writer` | Tries to write into the shared package environment or an overlay; every attempt must fail with `EROFS`. It pins one wheel (`make_wheels.py`) so its release has an overlay to probe. |
 | `network_scanner` | Tries `localhost`, the container IP, the metadata endpoint and other destinations a child must not reach. |
 | `fork_bomb` | Forks until refused: proves `RLIMIT_NPROC` (`max_processes_per_child`). |
-| `memory_hog` | Allocates until stopped: proves the memory watchdog and address-space limit (TD-003). Its `app.yaml` sets `HOG_MAX_MB=1536` as a net, three times the limit of a 256 MB budget. |
+| `memory_hog` | Allocates until stopped: proves the memory watchdog and address-space limit (TD-003). Its `app.yaml` sets `HOG_MAX_MB=1536` as a net, three times the limit of a 256 MB budget, and `HOG_START_DELAY_SECONDS=5` so the health check passes before the first allocation (the watchdog is fast enough to stop it first otherwise). |
+| `memory_hog_workers` | Spreads its allocation over several worker processes, each below its own address-space limit, so only the tree-wide watchdog can stop it (TD-029). Defaults: 4 workers × 150 MB, capped at 8 workers and 300 MB each, and a start delay of 4 s; `GET /report` returns the configured sizes, not what the workers hold. |
 | `secret_registry_snooper` | Tries other apps' secrets and the registry, with and without the shared-SP token (design 8.3, 8.4). |
 
 ## Failing apps (a release must fail or an app must stop in the way the design says)
