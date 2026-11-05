@@ -2009,3 +2009,11 @@ Each of these showed up as a failure on the first container run and is fixed:
 
 `test_failure_table` rows other than 19 and 20 are covered elsewhere (its docstring lists where).
 Not run is not passed: none of these files has a result.
+
+### Clean-up
+
+At the end of the day the throwaway service principal (`appmux-test-own-sp`) and the two scratch
+secret scopes (`appmux-t-own-sp`, `appmux-t-foreign`) made for the credential-modes and
+service-principal-grant runs were deleted, and the workspace was listed again: no scope and no such
+principal left. Before that, the dev App's own permission list was compared with the one saved before
+the grant run: 4 entries, identical. The dev App runs the normal code.
