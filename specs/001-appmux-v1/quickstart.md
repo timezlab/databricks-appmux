@@ -27,6 +27,7 @@ scripts/fetch-slirp4netns.sh  # once, and again when the pin changes: build/slir
 scripts/sync-deploy.sh        # assemble build/deploy/, sync it to the workspace folder, deploy, wait
 scripts/fetch-logs.sh         # fetch the app logs, identifiers masked
 scripts/run-remote-tests.sh   # the container scenarios below, from this machine, as the CLI's token owner
+scripts/run-container-tests.sh  # the ones that need to run inside the App (capacity, /proc); restarts the App
 ```
 
 Expected: from the first seconds of the start `/` answers `200` "starting" and every other path `503` (the startup gate, [design 5.6](../../docs/product/v1-design.md#56-crash-restart-and-shutdown)); the app is not restarted by the platform while `self_check` runs; then the platform page shows `self_check` **ok** with every check of [design 6.4](../../docs/product/v1-design.md#64-self-check-failures-and-gaps) listed; no child exists yet.

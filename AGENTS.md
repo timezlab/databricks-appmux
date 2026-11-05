@@ -39,7 +39,11 @@ GitHub Spec Kit (`specify` CLI).
   `uv run ruff check .` · `uv run mypy src` · `uv run pytest tests/unit tests/contract tests/load`.
   Tests marked `integration` need a Databricks container and are skipped unless
   `APPMUX_TEST_CONTAINER=1`; they run from your machine against the deployed dev App through
-  `scripts/run-remote-tests.sh` (the Databricks CLI's OAuth token is the caller).
+  `scripts/run-remote-tests.sh` (the Databricks CLI's OAuth token is the caller). The ones that
+  cannot be played through the proxy (500 requests a second on the edge's own port, the edge's CPU,
+  `/proc`, killing a helper) run inside the App with `scripts/run-container-tests.sh [pytest args]`:
+  it restarts the dev App with a test entry, so every hosted app is down for the minutes a start
+  takes, and it always deploys the normal code again.
 - UI (`web/`, after `npm ci`; Node >= 22.18): `npm run typecheck` · `npm run lint` ·
   `npm run format:check` · `npm test` (unit + component) · `npm run build` (writes `web/out`) ·
   `npm run test:export` and `npm run test:e2e` (both read `web/out`, so run them after the

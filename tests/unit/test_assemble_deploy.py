@@ -15,7 +15,7 @@ The same file proves that ``sync-deploy.sh`` and ``fetch-logs.sh`` stop on an
 unset local variable before they call the Databricks CLI (a stub stands in for
 the CLI and must never be called), that ``sync-deploy.sh`` hands the CLI a copy outside the
 repository, that both scripts mask tokens and identifiers through the one helper in
-``scripts/lib/mask-identifiers.sh`` (fake values only), and that all four scripts parse.
+``scripts/lib/mask-identifiers.sh`` (fake values only), and that every script parses.
 ``scripts/vendor-wheels.sh`` has its own file, ``test_vendor_wheels.py``.
 """
 
@@ -37,6 +37,7 @@ ASSEMBLE = SCRIPTS_DIR / "assemble-deploy.sh"
 SYNC = SCRIPTS_DIR / "sync-deploy.sh"
 FETCH_LOGS = SCRIPTS_DIR / "fetch-logs.sh"
 VENDOR_WHEELS = SCRIPTS_DIR / "vendor-wheels.sh"
+RUN_CONTAINER_TESTS = SCRIPTS_DIR / "run-container-tests.sh"
 
 FAKE_VERSION = "1.2.3"
 SLIRP_RELATIVE = "bin/slirp4netns"
@@ -658,6 +659,69 @@ def test_sync_deploy_leaves_the_placeholder_when_no_bootstrap_admin_is_given(
     assert kept.read_text() == APP_YAML_WITH_ADMIN_ENTRY
 
 
+OVERLAY_APP_YAML = APP_YAML_WITH_ADMIN_ENTRY.replace(
+    'command: ["python", "-m", "appmux"]', 'command: ["python", "container_test_entry.py"]'
+)
+
+
+def overlay_folder(tmp_path: Path) -> Path:
+    """A folder of test-run files: its own app.yaml (another command) and two more files."""
+    folder = tmp_path / "overlay"
+    write(folder / "app.yaml", OVERLAY_APP_YAML)
+    write(folder / "container_test_entry.py", "print('entry')\n")
+    write(folder / "tests" / "integration" / "test_a.py", "def test_a(): ...\n")
+    return folder
+
+
+def test_sync_deploy_lays_an_overlay_over_the_synced_copy_only(
+    tree: FakeTree, stub_cli: StubCli, tmp_path: Path
+) -> None:
+    folder = overlay_folder(tmp_path)
+
+    result, kept = synced_app_yaml(tree, stub_cli, tmp_path, APPMUX_DEPLOY_OVERLAY=str(folder))
+
+    assert result.returncode == 0, result.stderr
+    synced = {line.removeprefix("./") for line in stub_cli.sync_listing.read_text().splitlines()}
+    assert {"container_test_entry.py", "tests/integration/test_a.py"} <= synced
+    assert synced >= EXPECTED_DEPLOY_FILES, "the overlay adds files; it removes none"
+    assert "container_test_entry.py" in kept.read_text(), "the overlay's app.yaml wins"
+    # The repository, the assembled folder and a release built from it never see the overlay.
+    assert "container_test_entry.py" not in (tree.root / "app.yaml").read_text()
+    assert "container_test_entry.py" not in (tree.deploy / "app.yaml").read_text()
+    assert not (tree.deploy / "tests").exists()
+
+
+def test_sync_deploy_puts_the_bootstrap_admin_in_the_overlays_app_yaml(
+    tree: FakeTree, stub_cli: StubCli, tmp_path: Path
+) -> None:
+    folder = overlay_folder(tmp_path)
+
+    result, kept = synced_app_yaml(
+        tree,
+        stub_cli,
+        tmp_path,
+        APPMUX_DEPLOY_OVERLAY=str(folder),
+        APPMUX_DEPLOY_BOOTSTRAP_ADMIN=OWNER_ADDRESS,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "container_test_entry.py" in kept.read_text(), "the overlay's app.yaml was synced"
+    assert f"value: {OWNER_ADDRESS}\n" in kept.read_text()
+    assert BOOTSTRAP_PLACEHOLDER not in kept.read_text()
+
+
+def test_sync_deploy_refuses_an_overlay_that_is_not_a_folder_before_calling_the_cli(
+    tree: FakeTree, stub_cli: StubCli, tmp_path: Path
+) -> None:
+    result = run_script(
+        SYNC, sync_environment(tree, stub_cli, APPMUX_DEPLOY_OVERLAY=str(tmp_path / "absent"))
+    )
+
+    assert result.returncode != 0
+    assert "APPMUX_DEPLOY_OVERLAY" in result.stderr
+    assert not stub_cli.calls.exists()
+
+
 def test_sync_deploy_never_prints_the_bootstrap_admin(
     tree: FakeTree, stub_cli: StubCli, tmp_path: Path
 ) -> None:
@@ -1090,7 +1154,9 @@ def test_fetch_logs_rejects_bad_arguments_before_calling_the_cli(
 
 
 @pytest.mark.parametrize(
-    "script", [ASSEMBLE, SYNC, FETCH_LOGS, VENDOR_WHEELS], ids=lambda path: path.name
+    "script",
+    [ASSEMBLE, SYNC, FETCH_LOGS, VENDOR_WHEELS, RUN_CONTAINER_TESTS],
+    ids=lambda path: path.name,
 )
 def test_every_script_parses_and_is_executable(script: Path) -> None:
     syntax = subprocess.run(

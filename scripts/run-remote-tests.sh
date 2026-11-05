@@ -131,19 +131,9 @@ except (KeyError, ValueError):
 ')
 printf 'the token has %s minutes left\n' "$token_minutes_left"
 
-# The fixtures go up from a copy: the wheels of the offline-install ones and of pkg_env_writer
-# (it needs an overlay to probe) are built into it (they are never committed), bytecode is left out, and databricks sync does not read this
-# repository's .gitignore.
-fixtures_stage="$work_dir/fixtures"
-cp -a -- "$repo_root/tests/fixtures" "$fixtures_stage"
-find "$fixtures_stage" -name __pycache__ -type d -prune -exec rm -rf -- {} +
-for fixture in wheels_only wheel_reuse env_covered newer_wheel pkg_env_writer; do
-  python3 -I "$fixtures_stage/$fixture/make_wheels.py" "$fixtures_stage/$fixture/wheels" > /dev/null
-done
-
-printf 'syncing the fixtures to the workspace\n'
-call_cli sync --full "$fixtures_stage" "$fixtures_folder" | mask_identifiers \
-  || die "databricks sync of the fixtures failed"
+# shellcheck source=lib/sync-fixtures.sh
+source "$script_dir/lib/sync-fixtures.sh"
+sync_fixtures "$repo_root" "$work_dir/fixtures" "$fixtures_folder"
 
 printf 'running pytest against %s as the owner of the CLI token\n' "$app_name"
 cd -- "$repo_root"

@@ -32,6 +32,12 @@
 #                              release zip keep the placeholder. It makes that person the
 #                              first platform admin of this development App (the integration
 #                              tests need one). The value is never printed.
+#   APPMUX_DEPLOY_OVERLAY      a folder whose files are copied over the synced copy (its app.yaml
+#                              replaces the assembled one), for a test run inside the container
+#                              (scripts/run-container-tests.sh). Like the bootstrap admin it reaches
+#                              the synced copy only: the repository, build/deploy and a release zip
+#                              never hold it. The bootstrap admin is put into the overlay's app.yaml
+#                              the same way.
 #   APPMUX_REPO_ROOT, APPMUX_BUILD_DIR   as in assemble-deploy.sh.
 #
 # Nothing in the output names the workspace: CLI output passes through
@@ -68,6 +74,11 @@ bootstrap_admin_pattern='^[A-Za-z0-9][A-Za-z0-9._+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2
 if [[ -n "${APPMUX_DEPLOY_BOOTSTRAP_ADMIN:-}" ]]; then
   [[ "$APPMUX_DEPLOY_BOOTSTRAP_ADMIN" =~ $bootstrap_admin_pattern ]] \
     || die "APPMUX_DEPLOY_BOOTSTRAP_ADMIN must be one plain e-mail address (the value is not shown)"
+fi
+
+if [[ -n "${APPMUX_DEPLOY_OVERLAY:-}" ]]; then
+  [[ -d "$APPMUX_DEPLOY_OVERLAY" ]] \
+    || die "APPMUX_DEPLOY_OVERLAY must be an existing folder"
 fi
 
 app_name=${APPMUX_APP_NAME:-appmux}
@@ -146,6 +157,12 @@ call_cli() {
 # copy that lives outside the repository instead of depending on how that interacts.
 sync_source="$work_dir/deploy"
 cp -a -- "$deploy_dir" "$sync_source"
+
+if [[ -n "${APPMUX_DEPLOY_OVERLAY:-}" ]]; then
+  cp -a -- "$APPMUX_DEPLOY_OVERLAY"/. "$sync_source"/
+  printf 'overlay laid over the synced copy (%d files)\n' \
+    "$(find "$APPMUX_DEPLOY_OVERLAY" -type f | wc -l)"
+fi
 
 if [[ -n "${APPMUX_DEPLOY_BOOTSTRAP_ADMIN:-}" ]]; then
   substitute_bootstrap_admin "$sync_source/app.yaml" \
