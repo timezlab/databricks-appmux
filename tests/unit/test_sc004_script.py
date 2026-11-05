@@ -207,5 +207,79 @@ def test_a_call_that_hears_the_token_back_fails_and_a_clean_one_passes() -> None
     ) as client:
         walk = script.Walkthrough(client, target)
         with pytest.raises(AssertionError, match="repeated the access token") as caught:
-            walk.call(target.admin_email, "GET", "/me", with_token=True)
+            walk.call(target.admin_email, "GET", "/me")
     assert token not in str(caught.value)
+
+
+def test_the_admins_token_travels_with_every_call_of_the_admin_and_with_nobody_elses() -> None:
+    """The Apps proxy puts the token on every request of the person it belongs to.
+
+    The first three container runs (2026-11-05) each stopped at a call that the service answers
+    ``403`` without the admin's token (register, a platform setting, an app's egress); a flag per
+    call kept missing one, so the token goes with every call of the admin, and only theirs.
+    """
+    import httpx
+
+    token = "tok-test"  # noqa: S105 - a placeholder, not a credential
+    target = script.Target(
+        base_url="http://appmux.invalid",
+        admin_email="dana@example.com",
+        user_token=token,
+        fixtures_folder="/Workspace/Shared/fixtures",
+        group="Walkthrough Group",
+        scope_and_key="scope/key",
+        warehouse_id="0000000000000000",
+    )
+    seen: list[tuple[str, str | None]] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            (request.headers["x-forwarded-email"], request.headers.get("x-forwarded-access-token"))
+        )
+        return httpx.Response(200, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(record), base_url=target.base_url) as client:
+        walk = script.Walkthrough(client, target)
+        walk.call(target.admin_email, "GET", "/me")
+        walk.call(target.admin_email, "PUT", "/platform/settings/x", json={"value": True})
+        walk.call(script.GRACE, "GET", "/me")
+
+    assert seen == [(target.admin_email, token), (target.admin_email, token), (script.GRACE, None)]
+
+
+def test_clean_up_waits_for_a_slow_delete_and_a_timeout_does_not_strand_the_other_apps() -> None:
+    """Deleting a running app takes about 33 s (TD-031), longer than a call's 30 s.
+
+    The fourth container run (2026-11-05) passed all ten steps, then its clean-up raised
+    ``ReadTimeout`` on the first delete and left the app after it in the registry.
+    """
+    import httpx
+
+    target = script.Target(
+        base_url="http://appmux.invalid",
+        admin_email="dana@example.com",
+        user_token="tok-test",  # noqa: S106 - a placeholder, not a credential
+        fixtures_folder="/Workspace/Shared/fixtures",
+        group="Walkthrough Group",
+        scope_and_key="scope/key",
+        warehouse_id="0000000000000000",
+    )
+    asked: list[tuple[str, float | None]] = []
+
+    def slow_then_fast(request: httpx.Request) -> httpx.Response:
+        asked.append((request.url.path, request.extensions["timeout"]["read"]))
+        if request.url.path.endswith("/second"):
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(204)
+
+    with httpx.Client(
+        transport=httpx.MockTransport(slow_then_fast), base_url=target.base_url
+    ) as client:
+        walk = script.Walkthrough(client, target)
+        walk.created_apps.extend(["first", "second"])
+        with pytest.warns(UserWarning, match="could not delete the walkthrough app second"):
+            walk.delete_created_apps()
+
+    # The newest app is deleted first; its timeout is a warning, and the older one is still asked.
+    assert [path for path, _ in asked] == [f"{script.API}/apps/second", f"{script.API}/apps/first"]
+    assert {read for _, read in asked} == {script.DELETE_TIMEOUT_S}

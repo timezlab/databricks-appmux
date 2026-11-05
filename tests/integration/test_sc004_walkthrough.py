@@ -26,11 +26,17 @@ names what to remove.
 The test talks to the edge on the container's own port and plays the Databricks proxy by sending
 the identity headers itself, for the platform admin and for the placeholder people (Grace, and the
 users she shares with), which only works from inside the container. The platform admin's own token
-is sent on the two kinds of call that read the workspace with it (Update and attach) and nowhere
-else; no response may contain it. It does not run in the default gate: it is marked ``integration``
-and skipped unless ``APPMUX_TEST_CONTAINER=1``; ``scripts/sync-deploy.sh`` puts the code on a
-container. Nothing here has run against one, so no claim that the walkthrough passes exists, and a
-step whose route is not mounted yet fails with the status it got.
+goes with every call made as the admin, as the Apps proxy sends it, and with nobody else's: the
+service answers ``403 user_token_missing`` or ``registry_role_missing`` without it to the calls
+that read the workspace with it (Update and attach) and to those that write the row kinds only the
+admin's database role may write (register, approve and deny, delete an app, a platform setting, an
+app's egress). No response may contain it. It does not run in the default gate: it is marked
+``integration`` and skipped unless ``APPMUX_TEST_CONTAINER=1``; ``scripts/run-container-tests.sh``
+runs it in the dev App's container. The first three runs (2026-11-05) each stopped at one such call
+(register, a platform setting, an app's egress) because the token was sent per call and one was
+missed; that is why it is now sent on every call of the admin. The fourth passed every step and then
+timed out deleting a running app (about 33 s); clean-up now waits longer and only warns. The fifth
+passed (spike log, "SC-004: the scripted walkthrough").
 
 The bodies come from the contract's own request models (``appmux.admin.schemas``). The default
 gate does not collect this directory's tests (and ``tests/conftest.py`` skips them), so
@@ -79,6 +85,8 @@ from appmux.admin.schemas import (
 
 API: Final = "/_appmux/api/v1"
 REQUEST_TIMEOUT_S: Final = 30.0
+# Deleting an app that is running takes about 33 s (docs/tech-debt.md, TD-031): longer than a call.
+DELETE_TIMEOUT_S: Final = 180.0
 POLL_INTERVAL_S: Final = 1.0
 RELEASE_TIMEOUT_S: Final = 240.0
 STATE_TIMEOUT_S: Final = 60.0
@@ -256,12 +264,12 @@ class Walkthrough:
         json: object | None = None,
         params: dict[str, str] | None = None,
         expect: Sequence[int] = (200,),
-        with_token: bool = False,
     ) -> httpx.Response:
         headers = {"X-Forwarded-Email": person}
         if method != "GET":
             headers["Sec-Fetch-Site"] = "same-origin"
-        if with_token:
+        if person == self.admin:
+            # What the Apps proxy does for the person the token belongs to, on every request.
             headers["X-Forwarded-Access-Token"] = self.target.user_token
         response = self._client.request(
             method, f"{API}{path}", json=json, params=params, headers=headers
@@ -323,9 +331,7 @@ class Walkthrough:
 
     def update(self, slug: str) -> int:
         """Press Update with the person's own token; the number of the new release."""
-        response = self.call(
-            self.admin, "POST", f"/apps/{slug}/releases", expect=(202,), with_token=True
-        )
+        response = self.call(self.admin, "POST", f"/apps/{slug}/releases", expect=(202,))
         self.expect_audit("release.create")
         return int(response.json()["release_no"])
 
@@ -370,30 +376,50 @@ class Walkthrough:
 
     # --- clean-up: best effort, a failure is a warning that names what to remove ------------
 
-    def _admin_write(self, method: str, path: str, *, json: object | None = None) -> int:
-        response = self._client.request(
-            method,
-            f"{API}{path}",
-            json=json,
-            headers={"X-Forwarded-Email": self.admin, "Sec-Fetch-Site": "same-origin"},
-        )
-        return response.status_code
+    def _admin_write(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: object | None = None,
+        timeout_s: float = REQUEST_TIMEOUT_S,
+    ) -> str:
+        """The answer's status as text, or ``no answer`` when the call timed out or broke.
+
+        Clean-up is best effort: whatever it cannot do becomes a warning that names it, so one
+        slow call does not strand the apps after it.
+        """
+        try:
+            response = self._client.request(
+                method,
+                f"{API}{path}",
+                json=json,
+                headers={
+                    "X-Forwarded-Email": self.admin,
+                    "Sec-Fetch-Site": "same-origin",
+                    # Delete answers 403 user_token_missing without it, and the app would stay.
+                    "X-Forwarded-Access-Token": self.target.user_token,
+                },
+                timeout=timeout_s,
+            )
+        except httpx.HTTPError as problem:
+            return f"no answer: {type(problem).__name__}"
+        return str(response.status_code)
 
     def delete_created_apps(self) -> None:
         for slug in reversed(self.created_apps):
-            status = self._admin_write("DELETE", f"/apps/{slug}")
-            if status not in {204, 404}:
+            status = self._admin_write("DELETE", f"/apps/{slug}", timeout_s=DELETE_TIMEOUT_S)
+            if status not in {"204", "404"}:
                 warnings.warn(
-                    f"could not delete the walkthrough app {slug} (status {status}); "
-                    "remove it by hand",
+                    f"could not delete the walkthrough app {slug} ({status}); remove it by hand",
                     stacklevel=2,
                 )
 
     def restore_setting(self, key: str, value: bool | int | str | None) -> None:
         status = self._admin_write("PUT", f"/platform/settings/{key}", json=setting_body(value))
-        if status != 200:
+        if status != "200":
             warnings.warn(
-                f"could not put the setting {key} back (status {status}); set it by hand",
+                f"could not put the setting {key} back ({status}); set it by hand",
                 stacklevel=2,
             )
 
@@ -590,7 +616,6 @@ def step_resources(walk: Walkthrough, slugs: Slugs) -> None:
             "PUT",
             f"/apps/{bundle}/resources/{key}",
             json=attach_body(offers[key], target=resource_target),
-            with_token=True,
         ).json()
         walk.expect_audit("resource.attach")
         assert attached["check_result"] in {"ok", "unverified"}

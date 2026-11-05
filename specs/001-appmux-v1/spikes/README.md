@@ -1898,6 +1898,9 @@ happen in the nine. The runner was changed along the way: bounded log reads, a s
 unreadable reads that prints the App's state, and a restore that removes the overlay files
 (`tests/unit/test_run_container_tests.py`).
 
+Six more invocations followed after the supervisor fix (the row 20 re-run and the five SC-004 ones
+below); each produced a pytest result and each ended with the restore succeeding.
+
 ### Results
 
 | Test file (tests) | Task | Result |
@@ -1908,6 +1911,7 @@ unreadable reads that prints the App's state, and a restore that removes the ove
 | `test_capacity` (3) | T162 | **passed**, see below |
 | `test_requests_walkthrough` (4) | T148 | passed (4) |
 | `test_failure_table` (2) | T180 | row 19 passed; row 20 **failed** (the product, TD-030), then **passed** after the supervisor fix, see below |
+| `test_sc004_walkthrough` (1) | T167 | **passed** on the fifth invocation, see below |
 
 ### SC-002: a weakened sandbox fails closed (T070)
 
@@ -1978,6 +1982,38 @@ already running:
   10.28 s` (Free Edition only). The test's own `noticed=` line was not captured (pytest hides the
   output of a passing test), so no figure for the time to notice is recorded.
 
+### SC-004: the scripted walkthrough (T167)
+
+`1 passed in 79.37 s` (Free Edition only; the platform admin was the token's owner, Grace and the
+people she shares with were placeholder addresses sent as `X-Forwarded-Email`). All ten steps of the
+criterion ran through the admin API with no SQL typed: register directly; request a new app and
+approve it; request and approve OBO delegation, shared-SP delegation and a settings change (display
+name and memory budget); rename by request; ask for a slug that was free and was taken when the
+admin pressed Approve (closed as denied by itself); an egress rule; open another team's app as
+a platform admin and read its snapshot source; share with a user, a Databricks group and an app admin;
+attach two of the three offers of a `databricks.yml` (a secret in a scratch scope and a SQL warehouse),
+leaving the third `missing`; update, tag, label, lock, unlock, activate the older release and delete
+the newer; restart and stop. The final state, read through the API, matched: one release left, named
+`first`, tagged `stable`, unlocked; the owner and the raised budget as approved; every request ended
+in the status the script expected; and the audit rows the steps must write appear in the log in
+order. The test deleted its apps afterwards and put the platform setting back; no walkthrough app was
+left on the dev App.
+
+It took five invocations; the first four each found a defect in the **test**, none in the product:
+
+| Invocation | Stopped at | Cause |
+|---|---|---|
+| 1 | register (step 1), `403 user_token_missing` | the script sent the admin's token only on Update and attach |
+| 2 | the platform setting (step 3), `403 registry_role_missing` | same: the row kind is writable only by the admin's database role |
+| 3 | the app's egress rule (step 5), `403 registry_role_missing` | same; `apps` rows are admin-role writes |
+| 4 | all ten steps passed, then the clean-up raised `ReadTimeout` | deleting a running app takes about 33 s ([TD-031](../../../docs/tech-debt.md#td-031-deleting-a-running-renamed-app-took-33-seconds)), the call allowed 30 s; the app after it stayed (deleted by exact slug) |
+| 5 | **passed**, no error, no leftover app | the token now goes with every call of the admin (as the real proxy does); the delete waits 180 s and a timeout is a warning |
+
+What this does not show: `attach` answered `ok` or `unverified` for each attached resource (the test
+accepts both and does not print which), so whether the attach check reached the warehouse in this run
+is not recorded. The walkthrough ran once on one container; it is a pass of a script, not a count of
+runs.
+
 ### Request walkthrough (T148)
 
 Four tests passed: a request approved into an app owned by the requester, stopped with no release;
@@ -2001,6 +2037,9 @@ Each of these showed up as a failure on the first container run and is fixed:
   held 538 MB of the ledger. They were deleted by exact slug and the run was repeated.
 * A delete that timed out aborted the walkthrough's cleanup and left three apps behind; they were
   deleted by exact slug and the cleanup is now best-effort.
+* The SC-004 script sent the admin's token only on some calls (see the table above); it now sends it
+  on every call made as the admin, and never as anybody else (`tests/unit/test_sc004_script.py`
+  pins both). Its clean-up now waits 180 s for a delete and reports a timeout as a warning.
 
 ### What did not run
 
@@ -2009,7 +2048,6 @@ Each of these showed up as a failure on the first container run and is fixed:
 | `test_open_modes` (3) | T155 | the dev App's own OBO delegation changed for the run, which is a change to the App's configuration the owner has not been asked about |
 | `test_offline_install` (4) | T137 | the platform setting `package_mode` set to `wheelhouse` for the run (a setting of the whole slot) |
 | `test_resources_container` (4) | T129 | a scratch secret, a SQL warehouse and a second person's token |
-| `test_sc004_walkthrough` (1) | T167 | a Databricks group, a secret and a warehouse to attach |
 | `test_ui_on_container` (7) | T177 | a Chromium inside the container, and the built `web/out` in the overlay |
 
 `test_failure_table` rows other than 19 and 20 are covered elsewhere (its docstring lists where).

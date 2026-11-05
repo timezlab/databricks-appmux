@@ -249,8 +249,9 @@ Entry schema — copy for each new item:
 ## TD-031: Deleting a running renamed app took 33 seconds
 - **Where:** `DELETE /_appmux/api/v1/apps/{slug}`, the reconciler's stop path (`STOP_GRACE_S` is 10 s in `src/appmux/sandbox/`)
 - **Symptom:** in `test_requests_walkthrough.py` on a container (2026-11-05), deleting the running app that had been renamed took 33.0 s (status `204`); deleting the three stopped apps took 0.1 s each. The stop grace is 10 s, so about 23 s is unexplained. The cleanup of the test now allows 180 s per delete and carries on when one times out, so the run no longer depends on it.
-- **Why deferred:** one observation, no cause; nothing is lost, the delete finished.
-- **Trigger to fix:** a second long delete, or a report of the admin UI waiting on one. Start by timing the stop of a running app that has not been renamed.
+- **Second observation (2026-11-05, same day):** in the SC-004 walkthrough a delete in the clean-up ran past the 30 s the call allowed (`ReadTimeout`; the app was gone afterwards). The test does not print which slug, but of the four apps only the one that had run and been renamed was missing from the list after, which points at the renamed app again (inference). That app had been stopped by the test before the delete, so it is not only a *running* app that is slow.
+- **Why deferred:** no cause yet; nothing is lost, the delete finishes. The tests wait up to 180 s for a delete and treat a timeout as a warning.
+- **Trigger to fix:** met by the second observation. Start by timing the delete of an app that was renamed, running and not running, and of one that never was renamed.
 - **Created:** 2026-11-05
 
 ## TD-032: Admission assumes 13 MB of sandbox overhead and the measured figure is 61 MB
