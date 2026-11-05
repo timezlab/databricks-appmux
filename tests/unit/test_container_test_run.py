@@ -334,6 +334,8 @@ def fake_repository(root: Path) -> Path:
         "tests/unit/test_unit.py",
         "tests/contract/test_contract.py",
         "tests/fixtures/light_fastapi/app.py",
+        "tests/fixtures/wheels_only/app.py",
+        "tests/fixtures/wheels_only/requirements.txt",
         "tests/integration/__pycache__/ops_session.cpython-311.pyc",
     ):
         path = repository / relative
@@ -379,7 +381,11 @@ def test_the_overlay_holds_what_a_test_run_needs_and_no_other_test(
     } <= files
     assert not [name for name in files if "__pycache__" in name]
     assert not [name for name in files if name.startswith(("tests/unit", "tests/contract"))]
-    assert not [name for name in files if name.startswith("tests/fixtures")]
+    # No fixture code goes to the container (it is hostile and runs only in a sandbox); the
+    # pinned requirements are data, and test_offline_install compares releases with them.
+    assert [name for name in files if name.startswith("tests/fixtures")] == [
+        "tests/fixtures/wheels_only/requirements.txt"
+    ]
 
 
 def test_the_run_configuration_is_read_back_by_the_entry_as_it_was_given(

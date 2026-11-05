@@ -47,6 +47,10 @@ ENTRY_OWNED_VARIABLES: Final = frozenset(
 )
 ENTRY_FILE: Final = "container_test_entry.py"
 TEST_DIRECTORIES: Final = ("integration", "load")
+# The fixtures are hostile apps that run only in a sandbox, so none of their code goes to the
+# container. Their pinned requirements are data, and test_offline_install.py compares what a
+# release recorded with them.
+FIXTURE_DATA_FILE: Final = "requirements.txt"
 # What pytest needs that the platform's Python does not install; all pure Python (checked below).
 TEST_LIBRARIES: Final = ("pytest", "_pytest", "pluggy", "iniconfig")
 # Single-file modules of those distributions: pytest imports ``py`` (a shim it ships as a file
@@ -193,6 +197,10 @@ def build_overlay(
         shutil.copytree(
             repo_root / "tests" / directory, out_dir / "tests" / directory, ignore=ignore
         )
+    for lock_file in sorted((repo_root / "tests" / "fixtures").glob(f"*/{FIXTURE_DATA_FILE}")):
+        destination = out_dir / "tests" / "fixtures" / lock_file.parent.name / FIXTURE_DATA_FILE
+        destination.parent.mkdir(parents=True)
+        shutil.copy2(lock_file, destination)
     vendor_test_libraries(site_packages, out_dir / entry.LIBS_DIRECTORY)
 
 
