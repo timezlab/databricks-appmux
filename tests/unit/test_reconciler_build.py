@@ -20,7 +20,7 @@ from reconciler_fakes import (
     stub_registry_class,
 )
 
-from appmux.packages.store import ContentStoreError
+from appmux.packages.store import ContentStoreError, DigestMismatch
 from appmux.reconciler import build as build_module
 from appmux.reconciler.build import BuildFailed, StoreReleaseBuilder
 from appmux.registry.models import Release
@@ -136,6 +136,23 @@ async def test_a_store_that_cannot_be_read_fails_the_build_without_the_workspace
 
     with pytest.raises(BuildFailed, match="workspace status 500"):
         await builder.build(release(3))
+
+
+async def test_a_snapshot_whose_bytes_do_not_match_its_digest_fails_the_build(
+    tmp_path: Path,
+) -> None:
+    # Design 11, "snapshot digest does not match at start": the store refuses bytes that are not
+    # the ones its name promises, and the build fails with that, so the release ends `failed`. The
+    # design quotes `snapshot sha256 mismatch`; the store's own sentence is what is shown.
+    builder, store, releases_dir = make(tmp_path)
+    store.error = DigestMismatch(
+        f"the file stored as {digest_of(3)} holds other bytes; it was discarded"
+    )
+
+    with pytest.raises(BuildFailed, match="holds other bytes; it was discarded"):
+        await builder.build(release(3))
+
+    assert not (releases_dir / "sales" / "3").exists()
 
 
 async def test_a_deleted_release_has_no_snapshot_to_build_from(tmp_path: Path) -> None:

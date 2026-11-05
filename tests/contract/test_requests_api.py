@@ -570,6 +570,23 @@ def test_the_shared_sp_is_not_approved_while_the_switch_is_off() -> None:
     assert inbox.app("sales").shared_sp_delegated is False
 
 
+def test_a_request_of_someone_who_lost_can_manage_is_not_approved_and_nothing_is_written() -> None:
+    # Design 11, "approval fails its check": the asker held CAN_MANAGE when they asked; GRACE holds
+    # no grant now (CAROL still does), so the request is seeded as hers.
+    inbox = Inbox()
+    inbox.seed(1, kind="settings", payload={"display_name": "Sales EU"}, requested_by=GRACE)
+
+    response = inbox.call("POST", "/requests/1/approve", DANA, {"note": "ok"})
+
+    assert error_code(response, 409) == "requester_not_admin"
+    assert inbox.app("sales").display_name == "Sales"
+    assert inbox.registry.writes == ()
+    assert inbox.registry.audit_rows == ()
+    request = inbox.registry.snapshot.request(1)
+    assert request is not None
+    assert request.status == "pending"
+
+
 def test_an_approval_without_the_admins_database_role_writes_nothing() -> None:
     inbox = Inbox(platform_writer_tokens={"some-other-token"})
     inbox.seed(1, kind="settings", payload={"display_name": "Sales EU"})

@@ -877,6 +877,22 @@ async def test_only_the_app_without_a_route_is_affected(rig: Rig) -> None:
     assert len(docs.received) == 1
 
 
+async def test_requests_keep_flowing_from_memory_while_the_registry_is_down(rig: Rig) -> None:
+    # Design 11, "Lakebase down while running": routing and authorization read the snapshot the
+    # service holds in memory, so a visitor who may open the app still reaches it, and one who may
+    # not still gets the 404.
+    child = await rig.serve("sales", answer(body=b"still here"))
+    before = await rig.request("GET", "/sales/x")
+    rig.registry.go_down()
+
+    allowed = await rig.request("GET", "/sales/x")
+    refused = await rig.request("GET", "/sales/x", email=FRANK)
+
+    assert (before.status, allowed.status, allowed.body) == (200, 200, b"still here")
+    assert refused.status == 404
+    assert len(child.received) == 2
+
+
 async def test_a_visitor_who_may_not_open_the_app_gets_404_not_its_state(rig: Rig) -> None:
     unknown = await rig.request("GET", "/nowhere/x", email=FRANK)
 

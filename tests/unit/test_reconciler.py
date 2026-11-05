@@ -13,7 +13,7 @@ from reconciler_world import World, answer_after, socket_of
 
 from appmux.reconciler.admission import MemoryLedger
 from appmux.reconciler.build import BuildFailed
-from appmux.reconciler.child_env import ResourcesMissing
+from appmux.reconciler.child_env import EnvironmentRefused, ResourcesMissing
 from appmux.reconciler.swap import DRAIN_S
 
 pytestmark = pytest.mark.anyio
@@ -244,6 +244,25 @@ async def test_missing_resources_fail_the_release_before_anything_is_built() -> 
     assert world.launcher.started == []
 
 
+async def test_a_secret_appmux_cannot_read_fails_the_release_before_anything_starts() -> None:
+    # Design 11, "the appmux SP cannot read a referenced secret". The environment factory turns a
+    # SecretUnreadable into an EnvironmentRefused carrying its message (assembly.py), so the
+    # reconciler sees this; test_service_assembly.py pins the other half.
+    advice = (
+        "cannot read secret 'sales-secrets': ask the scope's manager to give the appmux service "
+        "principal READ on scope 'sales-secrets'"
+    )
+    world = pending_app(target_release_no=1)
+    world.environments.fail_with = EnvironmentRefused(advice)
+
+    await world.run()
+
+    assert world.history(1) == ["failed"]
+    assert world.row(1).status_reason == advice
+    assert world.builder.built == []
+    assert world.launcher.started == []
+
+
 async def test_a_secret_the_child_printed_is_removed_from_the_stored_log() -> None:
     world = pending_app(target_release_no=1, probe_answer="connection refused")
     world.environments.environment = {"API_KEY": "sk-test-value-123", "MODE": "demo"}
@@ -383,6 +402,32 @@ async def test_a_new_release_that_fails_health_leaves_the_old_one_and_its_route_
     assert old.is_running
     assert old.stops == []
     assert not world.launcher.child_of("sales", 2).is_running
+
+
+async def test_a_new_release_whose_build_fails_leaves_the_old_one_and_its_route_alone() -> None:
+    # Design 11, "build fails": the failed release keeps its reason and log tail, and the running
+    # release keeps serving.
+    world = await serving_release_one()
+    world.release(2)
+    await world.target(2)
+    world.builder.fail = BuildFailed("no wheel for 'foo' (sha256 3b1e) in the wheel sources", "log")
+    opened_before = list(world.routes.opened)
+    closed_before = list(world.routes.closed)
+
+    await world.wake()
+
+    assert world.status(2) == "failed"
+    assert world.row(2).status_reason == "no wheel for 'foo' (sha256 3b1e) in the wheel sources"
+    assert world.row(2).build_log_tail == "log"
+    assert world.status(1) == "active"
+    assert world.route_of() == 1
+    assert world.routes.opened == opened_before
+    assert world.routes.closed == closed_before
+    old = world.launcher.child_of("sales", 1)
+    assert old.is_running
+    assert old.stops == []
+    # Release 2 was never started: its build failed first.
+    assert [(child.slug, child.release_no) for child in world.launcher.started] == [("sales", 1)]
 
 
 async def test_a_release_that_does_not_fit_beside_the_old_one_fails_and_the_old_one_serves() -> (

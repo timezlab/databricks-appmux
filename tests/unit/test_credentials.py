@@ -899,6 +899,23 @@ async def test_a_start_that_cannot_get_a_shared_token_is_refused_with_what_to_do
     assert "start" in refusal.value.message
 
 
+async def test_an_own_service_principal_is_unaffected_by_a_shared_token_that_cannot_be_minted() -> (
+    None
+):
+    # Design 11, "shared-SP token cannot be minted": own SP is unaffected.
+    tokens, minter = shared_tokens()
+    minter.failing = True
+    credentials, _ = credentials_over(own_sp_snapshot(), tokens=tokens)
+
+    variables = await credentials.credentials_for("sales")
+
+    assert dict(variables) == {
+        "DATABRICKS_CLIENT_ID": CLIENT_ID,
+        "DATABRICKS_CLIENT_SECRET": CLIENT_SECRET,
+    }
+    assert minter.mints == 0
+
+
 async def test_a_process_that_cannot_mint_refuses_a_shared_delegation() -> None:
     snapshot = snapshot_of(app_row(shared_sp=True), config_row(), shared_sp_allowed=True)
     credentials, _ = credentials_over(snapshot, tokens=None)
