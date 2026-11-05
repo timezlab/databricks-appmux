@@ -10,6 +10,8 @@ check that judges nothing. The file is loaded by path because the test directori
 from __future__ import annotations
 
 import importlib.util
+import json
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -182,14 +184,40 @@ def test_a_page_that_asked_once_is_not_polling() -> None:
     assert len(problems) == 1 and "1 call(s)" in problems[0]
 
 
+def test_the_parallel_calls_of_one_refresh_are_one_poll() -> None:
+    # The dashboard asks for its window and the window before it in one go (Promise.all), so
+    # every refresh is two calls a few ms apart. That is one poll every five seconds, not a burst.
+    refreshes = (400, 5400, 10_400, 15_400)
+    page = _page(*((t + offset, "GET", API) for t in refreshes for offset in (0, 2)))
+
+    assert ui.poll_gaps_ms(page) == [5000, 5000, 5000]
+    assert ui.poll_problems(page) == []
+
+
+def test_calls_just_inside_the_refresh_window_are_one_poll_and_just_outside_are_two() -> None:
+    inside = _page((400, "GET", API), (400 + ui.SAME_REFRESH_WINDOW_MS, "GET", API))
+    outside = _page((400, "GET", API), (400 + ui.SAME_REFRESH_WINDOW_MS + 1, "GET", API))
+
+    assert ui.poll_gaps_ms(inside) == []
+    assert ui.poll_gaps_ms(outside) == [ui.SAME_REFRESH_WINDOW_MS + 1]
+
+
+def test_a_chain_of_close_calls_does_not_stretch_one_refresh_for_ever() -> None:
+    # Every call is inside the window of the one before it, but not of the first: a loop that
+    # asks every 80 ms is a burst, so the window is measured from the first call of the refresh.
+    page = _page(*((400 + step * 80, "GET", API) for step in range(6)))
+
+    assert len(ui.poll_gaps_ms(page)) >= 2
+
+
 def test_a_burst_and_a_long_silence_are_both_refused() -> None:
-    burst = _page((400, "GET", API), (450, "GET", API), (5450, "GET", API))
+    burst = _page((400, "GET", API), (700, "GET", API), (5700, "GET", API))
     silence = _page((400, "GET", API), (5400, "GET", API), (30_400, "GET", API))
 
     burst_problems = ui.poll_problems(burst)
     silence_problems = ui.poll_problems(silence)
 
-    assert len(burst_problems) == 1 and " 50 ms apart" in burst_problems[0]
+    assert len(burst_problems) == 1 and " 300 ms apart" in burst_problems[0]
     assert len(silence_problems) == 1 and " 25000 ms apart" in silence_problems[0]
 
 
@@ -234,3 +262,90 @@ def test_the_polling_pages_the_check_expects_exist_in_the_built_export() -> None
     for directory in ui.POLLING_PAGES:
         page = app_dir / directory / "page.tsx" if directory else app_dir / "page.tsx"
         assert page.is_file(), f"web/src/app has no page for {directory or 'the launcher'}"
+
+
+BEARER = "Bearer placeholder-token-for-the-test"
+
+
+def test_the_browser_gets_its_configuration_on_stdin_and_never_on_the_command_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The configuration holds the bearer token of a remote run, so it must stay off argv."""
+    seen: dict[str, Any] = {}
+
+    def fake_run(command: list[str], **options: Any) -> subprocess.CompletedProcess[str]:
+        seen["command"] = command
+        seen["input"] = options.get("input")
+        return subprocess.CompletedProcess(command, 0, stdout='{"pages": []}', stderr="")
+
+    monkeypatch.setattr(ui.subprocess, "run", fake_run)
+    config = {"headers": {"Authorization": BEARER}, "pages": []}
+
+    report = ui.run_browser(config)
+
+    assert report == {"pages": []}
+    assert not any("placeholder-token" in part for part in seen["command"])
+    assert json.loads(seen["input"]) == config
+
+
+def test_a_failed_browser_run_says_what_the_browser_said(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(command: list[str], **options: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            command, 1, stdout="", stderr="chromium is not installed"
+        )
+
+    monkeypatch.setattr(ui.subprocess, "run", fake_run)
+
+    with pytest.raises(pytest.fail.Exception, match="chromium is not installed"):
+        ui.run_browser({"headers": {}, "pages": []})
+
+
+def _loaded_page(**changes: Any) -> dict[str, Any]:
+    page: dict[str, Any] = {
+        "name": "launcher",
+        "status": 200,
+        "violations": [],
+        "pageErrors": [],
+        "consoleErrors": [],
+        "networkChanged": False,
+        "attempts": 1,
+    }
+    return page | changes
+
+
+def test_a_page_that_loaded_cleanly_has_no_load_problems() -> None:
+    assert ui.load_problems(_loaded_page()) == []
+
+
+def test_a_bad_status_a_violation_and_both_kinds_of_error_are_each_named() -> None:
+    page = _loaded_page(
+        status=502,
+        violations=[
+            {
+                "effectiveDirective": "script-src-elem",
+                "blockedURI": "inline",
+                "sourceFile": "/_appmux/",
+                "lineNumber": 3,
+                "target": "<script>",
+            }
+        ],
+        pageErrors=["boom"],
+        consoleErrors=[{"text": "bad", "url": "/_appmux/x.js"}],
+    )
+
+    problems = ui.load_problems(page)
+
+    assert len(problems) == 4
+    assert any("502" in problem for problem in problems)
+    assert any("script-src-elem" in problem and "inline" in problem for problem in problems)
+    assert any("boom" in problem for problem in problems)
+    assert any("bad" in problem for problem in problems)
+
+
+def test_a_page_whose_every_attempt_met_a_network_change_is_not_called_clean() -> None:
+    """The browser's machine changed network on each try: no verdict on the App, and not a pass."""
+    problems = ui.load_problems(_loaded_page(networkChanged=True, attempts=5))
+
+    assert len(problems) == 1
+    assert "network" in problems[0]
+    assert "5" in problems[0]

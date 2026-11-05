@@ -13,27 +13,38 @@ checks, from the outside, what the spec asks of the UI:
   browser sent no request to one;
 * **polling**: the launcher, the platform page and the dashboard ask their API again every few
   seconds (design 10.1: the page polls; TD-009), not once and not in a burst;
-* the isolation headers of the policy (``Cross-Origin-Opener-Policy``, ``nosniff``, no CORS header)
-  are on the pages and on an API answer, and an unknown path under the UI prefix is the 404 page
-  with a policy.
+* the isolation headers of the policy: ``Cross-Origin-Opener-Policy`` on every page, ``nosniff`` and
+  no CORS header on the pages and on an API answer; an unknown path under the UI prefix is the 404
+  page with a policy.
 
-It talks to the edge on the container's own port and plays the Databricks proxy by sending
-``X-Forwarded-Email`` itself, which only works from inside the container (or through a tunnel to its
-port). It does not run in the default gate: every test here is marked ``integration`` and skipped
-unless ``APPMUX_TEST_CONTAINER=1``; ``scripts/sync-deploy.sh`` puts the code on a container. Nothing
-here has run against one yet, so no claim about these tests passing exists. What can be checked
-without a container (the judging functions below) is checked by ``tests/unit/test_ui_script.py``.
+It runs in one of the two modes of ``ops_session.py``. The one that works is **remote**: from this
+machine, through the real Databricks proxy, as the owner of the Databricks CLI's token
+(``scripts/run-remote-tests.sh tests/integration/test_ui_on_container.py -s``; that script sets the
+variables below). The browser is on this machine, so the Chromium and the built export are too. The
+other mode plays the proxy with ``X-Forwarded-Email`` on the container's own port; a container has
+no Chromium, no ``node`` and no ``web/out``, so only the checks that need no browser can run there.
+Every test here is marked ``integration`` and skipped unless ``APPMUX_TEST_CONTAINER=1``. What can
+be checked without a deployed App (the judging functions below) is checked by
+``tests/unit/test_ui_script.py``.
+
+Result: 7 passed in 175 s on 2026-11-05 (Free Edition dev App, Chromium on the dev machine; see the
+spike log). Chromium cancels the requests of a page in flight with ``net::ERR_NETWORK_CHANGED``
+whenever the machine's network interfaces change. A page cut that way is tried again up to five
+times; if every try is cut, the test **fails** and says the page was never seen whole, because it is
+neither a pass nor a fault of the App. On a machine whose interfaces change all day (a Docker host
+with a restarting container) the run needs the network to be steady first; the passing run was made
+with a local shim that stops Chromium watching the interfaces, which is not part of the repository.
 
 Set-up the run needs (it fails loudly when one is missing, instead of passing on nothing):
 
-* ``APPMUX_TEST_BASE_URL``: where the edge listens, for example ``http://127.0.0.1:8000``;
-* ``APPMUX_TEST_ADMIN_EMAIL``: a platform admin;
-* ``APPMUX_TEST_FIXTURES_FOLDER``: a workspace folder starting with ``/Workspace/`` that holds a
-  copy of ``tests/fixtures/`` (an app is registered from ``light_fastapi`` so that the app pages
-  have an app to show; it is never started and is deleted afterwards);
+* ``APPMUX_TEST_BASE_URL``, ``APPMUX_TEST_USER_TOKEN``, ``APPMUX_TEST_FIXTURES_FOLDER`` and, in a
+  remote run, ``APPMUX_TEST_REMOTE=1``, as ``ops_session.load_target`` describes them; the token's
+  owner must be a platform admin. An app is registered from ``light_fastapi`` in the fixtures
+  folder so that the app pages have an app to show; it is never started and is deleted afterwards;
 * ``web/out`` built (``npm run build`` in ``web/``; set ``APPMUX_TEST_UI_EXPORT`` for another
   folder) and ``npm ci`` run in ``web/``, with Playwright's Chromium installed
-  (``npx playwright install chromium``), and ``node`` on the path.
+  (``npx playwright install chromium``), and ``node`` on the path. The export is only the list of
+  pages to open: what is judged is what the deployed App sends for each of them.
 """
 
 from __future__ import annotations
@@ -44,8 +55,9 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import warnings
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from itertools import pairwise
@@ -58,6 +70,11 @@ import pytest
 
 from appmux.edge.csp import scan_page
 
+# ops_session.py sits next to this file; pytest puts this folder on sys.path when it collects the
+# tests here, but the unit test of the judging functions loads this file by path and does not.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ops_session
+
 UI_PREFIX: Final = "/_appmux"
 API_PREFIX: Final = f"{UI_PREFIX}/api/v1"
 REQUEST_TIMEOUT_S: Final = 30.0
@@ -65,7 +82,7 @@ BROWSER_RUN_TIMEOUT_S: Final = 900.0
 SETTLE_SECONDS: Final = 3
 WATCH_SECONDS: Final = 21
 SLUG_SUFFIX_BYTES: Final = 3
-MEMORY_BUDGET_MB: Final = 256
+SAFE_METHODS: Final = frozenset({"GET", "HEAD", "OPTIONS"})
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 WEB_DIR: Final = REPO_ROOT / "web"
@@ -76,6 +93,11 @@ BROWSER_SCRIPT: Final = Path(__file__).resolve().with_name("ui_browser_check.mjs
 POLL_GAP_FLOOR_MS: Final = 1000
 POLL_GAP_CEILING_MS: Final = 15_000
 POLLS_NEEDED: Final = 3
+# One refresh can be several calls started in the same tick (the dashboard reads its window and the
+# one before it with Promise.all, a few ms apart). Calls this close to the first call of a refresh
+# are that refresh, not extra polls; the window is measured from the first call so that a loop
+# asking every few tens of ms is still a burst.
+SAME_REFRESH_WINDOW_MS: Final = 100
 
 # The pages that poll, by the directory of the export and the API path they ask for.
 POLLING_PAGES: Final = {
@@ -205,10 +227,11 @@ def other_origins(urls: Sequence[str], own_origin: str) -> list[str]:
 
 
 def poll_gaps_ms(page: Mapping[str, Any]) -> list[int]:
-    """Gaps, in ms, between the calls the page made to its API path, in the order they were made.
+    """Gaps, in ms, between the refreshes of the page's API path, in the order they were made.
 
     Only ``GET`` calls to the page's own ``apiPrefix`` count. A page that asks for the same path
-    with another query (the dashboard's window moves) is still one poll.
+    with another query (the dashboard's window moves) is still one poll, and the calls one refresh
+    starts together (``SAME_REFRESH_WINDOW_MS`` from its first call) are one refresh.
     """
     prefix = page["apiPrefix"]
     times = sorted(
@@ -216,7 +239,11 @@ def poll_gaps_ms(page: Mapping[str, Any]) -> list[int]:
         for request in page["requests"]
         if request["method"] == "GET" and urlsplit(request["url"]).path == prefix
     )
-    return [later - earlier for earlier, later in pairwise(times)]
+    refresh_starts: list[int] = []
+    for time_ms in times:
+        if not refresh_starts or time_ms - refresh_starts[-1] > SAME_REFRESH_WINDOW_MS:
+            refresh_starts.append(time_ms)
+    return [later - earlier for earlier, later in pairwise(refresh_starts)]
 
 
 def poll_problems(page: Mapping[str, Any]) -> list[str]:
@@ -240,10 +267,12 @@ def poll_problems(page: Mapping[str, Any]) -> list[str]:
 
 @dataclass(frozen=True, slots=True)
 class Target:
-    base_url: str
-    admin_email: str
-    fixtures_folder: str
+    session: ops_session.Target
     export_dir: Path
+
+    @property
+    def base_url(self) -> str:
+        return self.session.base_url
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,34 +282,32 @@ class PageUnderTest:
     api_prefix: str | None
 
 
-def _required(name: str) -> str:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        pytest.fail(f"{name} must be set for this test (see the module docstring)")
-    return value
-
-
 @pytest.fixture(scope="module")
 def target() -> Target:
-    folder = _required("APPMUX_TEST_FIXTURES_FOLDER").rstrip("/")
-    if not folder.startswith("/Workspace/"):
-        pytest.fail("APPMUX_TEST_FIXTURES_FOLDER must start with /Workspace/")
     export_dir = Path(os.environ.get("APPMUX_TEST_UI_EXPORT") or REPO_ROOT / "web" / "out")
     if not (export_dir / "index.html").is_file():
         pytest.fail(f"no UI export at {export_dir}; run `npm run build` in web/ first")
-    return Target(
-        base_url=_required("APPMUX_TEST_BASE_URL").rstrip("/"),
-        admin_email=_required("APPMUX_TEST_ADMIN_EMAIL").lower(),
-        fixtures_folder=folder,
-        export_dir=export_dir,
-    )
+    return Target(session=ops_session.load_target(), export_dir=export_dir)
+
+
+def _identify(session: ops_session.Target) -> Callable[[httpx.Request], None]:
+    """A hook that says who is calling on each request, so a renewed token is picked up."""
+
+    def add_identity(request: httpx.Request) -> None:
+        mutating = request.method not in SAFE_METHODS
+        request.headers.update(
+            ops_session.identity_headers(session, with_token=True, mutating=mutating)
+        )
+
+    return add_identity
 
 
 @pytest.fixture(scope="module")
 def client(target: Target) -> Iterator[httpx.Client]:
-    headers = {"X-Forwarded-Email": target.admin_email}
     with httpx.Client(
-        base_url=target.base_url, timeout=REQUEST_TIMEOUT_S, headers=headers
+        base_url=target.base_url,
+        timeout=REQUEST_TIMEOUT_S,
+        event_hooks={"request": [_identify(target.session)]},
     ) as session:
         yield session
 
@@ -289,23 +316,20 @@ def client(target: Target) -> Iterator[httpx.Client]:
 def app_slug(client: httpx.Client, target: Target) -> Iterator[str]:
     """An app for the app pages to show; registered, never started, deleted afterwards."""
     slug = f"ui-check-{secrets.token_hex(SLUG_SUFFIX_BYTES)}"
-    write_headers = {"Sec-Fetch-Site": "same-origin"}
     response = client.post(
         f"{API_PREFIX}/apps",
-        json={
-            "slug": slug,
-            "display_name": "UI check",
-            "source_path": f"{target.fixtures_folder}/light_fastapi",
-            "memory_budget_mb": MEMORY_BUDGET_MB,
-            "owner": target.admin_email,
-        },
-        headers=write_headers,
+        json=ops_session.register_body(
+            slug=slug,
+            name="UI check",
+            folder=f"{target.session.fixtures_folder}/light_fastapi",
+            owner=target.session.admin_email,
+        ),
     )
     assert response.status_code in {200, 201}, f"registering the app: {response.status_code}"
     try:
         yield slug
     finally:
-        deleted = client.delete(f"{API_PREFIX}/apps/{slug}", headers=write_headers)
+        deleted = client.delete(f"{API_PREFIX}/apps/{slug}", timeout=ops_session.DELETE_TIMEOUT_S)
         if deleted.status_code not in {204, 404}:
             warnings.warn(
                 f"could not delete the UI check app {slug} (status {deleted.status_code}); "
@@ -351,25 +375,15 @@ def documents(client: httpx.Client, pages: list[PageUnderTest]) -> dict[str, htt
     return answers
 
 
-@pytest.fixture(scope="module")
-def browser_report(target: Target, pages: list[PageUnderTest]) -> dict[str, Any]:
-    """What a real Chromium saw on every page (one run for all the browser checks)."""
-    if shutil.which("node") is None:
-        pytest.fail("node is needed for the browser checks; install Node 22.18 or newer")
-    if not (WEB_DIR / "node_modules" / "@playwright" / "test").is_dir():
-        pytest.fail("run `npm ci` in web/ first: the browser checks use its Playwright")
-    config = {
-        "webDir": str(WEB_DIR),
-        "baseUrl": target.base_url,
-        "email": target.admin_email,
-        "pages": [
-            {"name": page.name, "path": page.path, "apiPrefix": page.api_prefix} for page in pages
-        ],
-        "settleSeconds": SETTLE_SECONDS,
-        "watchSeconds": WATCH_SECONDS,
-    }
+def run_browser(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Run ``ui_browser_check.mjs`` and return its report.
+
+    The configuration holds the identity headers (in a remote run, the owner's bearer token), so it
+    goes to node on stdin: an argument would show in the process list of this machine.
+    """
     finished = subprocess.run(
-        ["node", str(BROWSER_SCRIPT), json.dumps(config)],
+        ["node", str(BROWSER_SCRIPT)],
+        input=json.dumps(config),
         capture_output=True,
         text=True,
         timeout=BROWSER_RUN_TIMEOUT_S,
@@ -382,6 +396,30 @@ def browser_report(target: Target, pages: list[PageUnderTest]) -> dict[str, Any]
         )
     report: dict[str, Any] = json.loads(finished.stdout)
     return report
+
+
+@pytest.fixture(scope="module")
+def browser_report(target: Target, pages: list[PageUnderTest]) -> dict[str, Any]:
+    """What a real Chromium saw on every page (one run for all the browser checks)."""
+    if shutil.which("node") is None:
+        pytest.fail("node is needed for the browser checks; install Node 22.18 or newer")
+    if not (WEB_DIR / "node_modules" / "@playwright" / "test").is_dir():
+        pytest.fail("run `npm ci` in web/ first: the browser checks use its Playwright")
+    return run_browser(
+        {
+            "webDir": str(WEB_DIR),
+            "baseUrl": target.base_url,
+            # A remote run sends the bearer, which the real proxy turns into the identity headers;
+            # inside the container only X-Forwarded-Email, which is all a page load needs.
+            "headers": ops_session.identity_headers(target.session),
+            "pages": [
+                {"name": page.name, "path": page.path, "apiPrefix": page.api_prefix}
+                for page in pages
+            ],
+            "settleSeconds": SETTLE_SECONDS,
+            "watchSeconds": WATCH_SECONDS,
+        }
+    )
 
 
 def _text(answer: httpx.Response) -> str:
@@ -405,14 +443,16 @@ def test_every_page_is_sent_with_a_policy_that_allows_exactly_its_inline_scripts
 
 
 @pytest.mark.integration
-def test_every_page_and_an_api_answer_carry_the_isolation_headers_and_no_cors_header(
+def test_every_page_carries_the_isolation_headers_and_no_answer_has_a_cors_header(
     client: httpx.Client, documents: dict[str, httpx.Response]
 ) -> None:
     api_answer = client.get(f"{API_PREFIX}/me")
     problems: list[str] = []
     for name, answer in {**documents, "api /me": api_answer}.items():
         headers = answer.headers
-        if headers.get("cross-origin-opener-policy") != "same-origin":
+        # The opener policy is about documents a window can open (FR-021 names the UI's pages); an
+        # API answer has no browsing context of its own, so only the pages are held to it.
+        if name != "api /me" and headers.get("cross-origin-opener-policy") != "same-origin":
             problems.append(f"{name}: Cross-Origin-Opener-Policy is not same-origin")
         if headers.get("x-content-type-options") != "nosniff":
             problems.append(f"{name}: X-Content-Type-Options is not nosniff")
@@ -460,25 +500,37 @@ def test_an_unknown_path_under_the_ui_prefix_is_the_404_page_with_a_policy(
     assert not policy_problems(policy, scan_page(answer.content).script_sources)
 
 
+def load_problems(page: Mapping[str, Any]) -> list[str]:
+    """What is wrong with one page's load, from the browser's report on it."""
+    name = page["name"]
+    if page["networkChanged"]:
+        # The browser's own machine reported a network change on every attempt, so the page was
+        # never seen whole. That says nothing about the App, and it is not a pass either.
+        return [
+            f"{name}: the machine running the browser reported a network change on each of "
+            f"{page['attempts']} attempts, so the page was never loaded whole; run it again on a "
+            "machine whose interfaces are steady"
+        ]
+    problems: list[str] = []
+    if page["status"] != 200:
+        problems.append(f"{name}: the document answered {page['status']}")
+    problems.extend(
+        f"{name}: CSP violation {v['effectiveDirective']} blocked {v['blockedURI']!r} "
+        f"at {v['sourceFile']}:{v['lineNumber']} on {v['target']}"
+        for v in page["violations"]
+    )
+    problems.extend(f"{name}: page error {error}" for error in page["pageErrors"])
+    problems.extend(
+        f"{name}: console error {error['text']} ({error['url']})" for error in page["consoleErrors"]
+    )
+    return problems
+
+
 @pytest.mark.integration
 def test_the_browser_loaded_every_page_without_a_csp_violation_or_an_error(
     browser_report: dict[str, Any],
 ) -> None:
-    problems: list[str] = []
-    for page in browser_report["pages"]:
-        name = page["name"]
-        if page["status"] != 200:
-            problems.append(f"{name}: the document answered {page['status']}")
-        problems.extend(
-            f"{name}: CSP violation {v['effectiveDirective']} blocked {v['blockedURI']!r} "
-            f"at {v['sourceFile']}:{v['lineNumber']} on {v['target']}"
-            for v in page["violations"]
-        )
-        problems.extend(f"{name}: page error {error}" for error in page["pageErrors"])
-        problems.extend(
-            f"{name}: console error {error['text']} ({error['url']})"
-            for error in page["consoleErrors"]
-        )
+    problems = [problem for page in browser_report["pages"] for problem in load_problems(page)]
 
     assert len(browser_report["pages"]) >= len(POLLING_PAGES)
     assert not problems, "\n".join(problems)
@@ -502,7 +554,11 @@ def test_the_launcher_the_platform_page_and_the_dashboard_poll_their_api_every_f
     browser_report: dict[str, Any],
 ) -> None:
     polling = [page for page in browser_report["pages"] if page["apiPrefix"] is not None]
-    problems = [problem for page in polling for problem in poll_problems(page)]
+    problems = [
+        problem
+        for page in polling
+        for problem in (load_problems(page) if page["networkChanged"] else poll_problems(page))
+    ]
 
     assert {page["apiPrefix"] for page in polling} == set(POLLING_PAGES.values())
     assert not problems, "\n".join(problems)
