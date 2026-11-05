@@ -5,7 +5,7 @@ import { useLayoutEffect } from "react";
 import type { RefObject } from "react";
 
 import type { LogEntry, LogStream } from "@/lib/app/logs";
-import { gapText, isScrolledToBottom, logLineTime } from "@/lib/app/logs";
+import { gapText, isScrolledToTop, logLineTime } from "@/lib/app/logs";
 import { formatAbsoluteTime } from "@/lib/format";
 
 /**
@@ -25,20 +25,22 @@ export interface LogLinesProps {
   id: string;
   /** "Output of Sales dashboard": the name of the scroll box. */
   label: string;
+  /** Newest first: the box shows them in this order. */
   entries: readonly LogEntry[];
   isWrapped: boolean;
-  /** Keeps the box scrolled to its last line as lines arrive. */
+  /** Keeps the box scrolled to its first line, the latest, as lines arrive. */
   isFollowing: boolean;
-  /** Called when the person scrolls away from the last line, so Follow turns off. */
-  onScrolledUp: () => void;
+  /** Called when the person scrolls down away from the latest line, so Follow turns off. */
+  onScrolledAway: () => void;
   /** The scroll box, so the panel can move focus into it ("Jump to latest"). */
   boxRef: RefObject<HTMLDivElement | null>;
 }
 
 /**
- * The lines of an app's output in a scroll box: time, stream and text in mono,
- * each as a text node (React escapes it; nothing in a line is ever markup). The
- * box takes the keyboard (Tab, then the arrow keys and Page Down scroll it).
+ * The lines of an app's output in a scroll box, the latest first: time, stream
+ * and text in mono, each as a text node (React escapes it; nothing in a line is
+ * ever markup). The box takes the keyboard (Tab, then the arrow keys and Page
+ * Down scroll it).
  */
 export function LogLines({
   id,
@@ -46,17 +48,17 @@ export function LogLines({
   entries,
   isWrapped,
   isFollowing,
-  onScrolledUp,
+  onScrolledAway,
   boxRef,
 }: LogLinesProps) {
-  const lastKey = entries.at(-1)?.key ?? "";
+  const firstKey = entries[0]?.key ?? "";
 
-  // Before paint, so a new line never flashes above the fold first.
+  // Before paint, so a new line never shows a scrolled-down box for a frame first.
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!isFollowing || box === null) return;
-    box.scrollTop = box.scrollHeight;
-  }, [boxRef, isFollowing, lastKey, entries.length, isWrapped]);
+    box.scrollTop = 0;
+  }, [boxRef, isFollowing, firstKey, entries.length, isWrapped]);
 
   return (
     <div
@@ -68,8 +70,8 @@ export function LogLines({
       aria-label={label}
       tabIndex={0}
       onScroll={(event) => {
-        if (isFollowing && !isScrolledToBottom(event.currentTarget)) {
-          onScrolledUp();
+        if (isFollowing && !isScrolledToTop(event.currentTarget)) {
+          onScrolledAway();
         }
       }}
       className="max-h-[min(28rem,70vh)] min-h-24 overflow-auto rounded-control border bg-card py-2 font-mono text-xs leading-5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"

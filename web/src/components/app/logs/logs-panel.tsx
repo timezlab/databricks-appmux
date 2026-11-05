@@ -13,15 +13,19 @@ import { RelativeTime } from "@/components/relative-time";
 import { Section } from "@/components/section";
 import { SkeletonLines } from "@/components/skeletons";
 import { StatusBadge } from "@/components/status-badge";
+import { Input } from "@/components/ui/input";
 import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   LOG_STREAM_FILTERS,
+  countLogLines,
   describeLastExit,
   filterLogEntries,
   logCopyText,
+  newestFirst,
 } from "@/lib/app/logs";
 import type { LogStreamFilter, LogView } from "@/lib/app/logs";
+import { formatCount, pluralize } from "@/lib/format";
 import { pollData } from "@/lib/poll/data";
 import { appStatePresentation } from "@/lib/status-presentation";
 import { AppSectionLink } from "../app-section-link";
@@ -39,23 +43,40 @@ function isStreamFilter(value: string): value is LogStreamFilter {
   return (LOG_STREAM_FILTERS as readonly string[]).includes(value);
 }
 
+/** What a search that matches nothing says: which words, and how to see lines again. */
+function noMatchText(filter: LogStreamFilter, search: string): string {
+  const words = search.trim();
+  const stream = filter === "all" ? "" : `${STREAM_FILTER_LABELS[filter]} `;
+  if (words === "") {
+    return `No ${stream}lines in the view. Choose All to see every line.`;
+  }
+  return `No ${stream}lines match "${words}". Change or clear the search to see more.`;
+}
+
+/** "1 line matches." / "3 lines match.": the sentence a screen reader hears when the words change. */
+function matchCountText(count: number): string {
+  return `${pluralize(count, "line")} ${count === 1 ? "matches" : "match"}.`;
+}
+
 export interface LogsPanelProps {
   slug: string;
   appName: string;
 }
 
 /**
- * The Logs section: the last lines of the app's output, polled every 2 s while
- * the tab is visible (nothing while it is hidden; the next poll catches up),
- * with Pause, Wrap, a stream filter, Follow and Copy. The lines come from the
- * server's ring (2000 lines across restarts); a new start of the app clears
- * the view, as the contract asks.
+ * The Logs section: the last lines of the app's output, the latest first, polled
+ * every 2 s while the tab is visible (nothing while it is hidden; the next poll
+ * catches up), with Pause, Wrap, a stream filter, a search, Follow and Copy.
+ * The lines come from the server's ring (2000 lines across restarts); a new
+ * start of the app clears the view, as the contract asks. Follow keeps the box
+ * at the top, where the latest line is.
  */
 export function LogsPanel({ slug, appName }: LogsPanelProps) {
   const [isPaused, setIsPaused] = useState(false);
   const [isWrapped, setIsWrapped] = useState(true);
   const [isFollowing, setIsFollowing] = useState(true);
   const [filter, setFilter] = useState<LogStreamFilter>("all");
+  const [search, setSearch] = useState("");
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const boxId = useId();
@@ -134,8 +155,18 @@ export function LogsPanel({ slug, appName }: LogsPanelProps) {
     );
   }
 
-  const visible = filterLogEntries(view.entries, filter);
+  const entries = view.entries;
+  const visible = newestFirst(filterLogEntries(entries, filter, search));
+  const shownLineCount = countLogLines(visible);
+  const hasSearch = search.trim() !== "";
   const label = `Output of ${appName}`;
+
+  function changeSearch(next: string): void {
+    setSearch(next);
+    // Said once per change of the words, not per poll: a screen reader would read every new line out.
+    const found = countLogLines(filterLogEntries(entries, filter, next));
+    setAnnouncement(next.trim() === "" ? null : matchCountText(found));
+  }
 
   return (
     <Section
@@ -159,6 +190,17 @@ export function LogsPanel({ slug, appName }: LogsPanelProps) {
         role="group"
         aria-label="Log view"
       >
+        <Input
+          type="search"
+          aria-label="Search the lines"
+          placeholder="Search the lines"
+          autoComplete="off"
+          value={search}
+          onChange={(event) => {
+            changeSearch(event.target.value);
+          }}
+          className="h-8 w-full text-sm sm:w-64"
+        />
         <Button size="small" onClick={togglePause}>
           {isPaused ? (
             <PlayIcon aria-hidden="true" />
@@ -206,6 +248,12 @@ export function LogsPanel({ slug, appName }: LogsPanelProps) {
           selectTargetId={boxId}
         />
       </div>
+      {hasSearch ? (
+        <p className="text-sm text-muted-foreground">
+          {formatCount(shownLineCount)} of{" "}
+          {pluralize(countLogLines(entries), "line")} match.
+        </p>
+      ) : null}
       {view.entries.length === 0 ? (
         <EmptyState title="Nothing printed yet">
           The app has written nothing to stdout or stderr since it started. New
@@ -220,14 +268,13 @@ export function LogsPanel({ slug, appName }: LogsPanelProps) {
             entries={visible}
             isWrapped={isWrapped}
             isFollowing={isFollowing}
-            onScrolledUp={() => {
+            onScrolledAway={() => {
               setIsFollowing(false);
             }}
           />
-          {visible.length === 0 ? (
+          {shownLineCount === 0 && (hasSearch || filter !== "all") ? (
             <p className="text-sm text-muted-foreground">
-              No {STREAM_FILTER_LABELS[filter]} lines in the view. Choose All to
-              see every line.
+              {noMatchText(filter, search)}
             </p>
           ) : null}
           {isFollowing ? null : (

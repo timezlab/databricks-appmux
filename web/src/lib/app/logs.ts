@@ -8,6 +8,10 @@
  * what it holds: lines of the same instance are appended (never twice), a new
  * instance clears the view first, and lines the server left out (`dropped`)
  * become one marker line, so a gap is never silent.
+ *
+ * The view keeps its entries oldest first, the order they arrive in; the page
+ * shows them newest first (`newestFirst`), so the line a person wants is at the
+ * top without scrolling.
  */
 import type { AppLogs } from "@/lib/api";
 import {
@@ -23,8 +27,8 @@ export const LOG_ENTRIES_KEPT_MAX = 2000;
 /** How often the page asks for new lines while the tab is visible and the view is not paused. */
 export const LOG_POLL_INTERVAL_MS = 2000;
 
-/** How close to the bottom (px) still counts as "at the latest line" for Follow. */
-const BOTTOM_SLACK_PX = 8;
+/** How close to the top (px) still counts as "at the latest line" for Follow: the newest line is shown first. */
+const TOP_SLACK_PX = 8;
 
 const MS_PER_SECOND = 1000;
 
@@ -102,15 +106,33 @@ export function mergeLogPage(view: LogView, page: AppLogs): LogView {
   };
 }
 
-/** The entries one stream shows; a gap marker is about every stream, so it stays. */
+/**
+ * The entries one stream shows whose text holds `query` (any case, blank space
+ * around it ignored, read as plain text and never as a pattern). A gap marker
+ * is about every stream and every search, so it stays.
+ */
 export function filterLogEntries(
   entries: readonly LogEntry[],
   filter: LogStreamFilter,
+  query = "",
 ): LogEntry[] {
-  if (filter === "all") return [...entries];
+  const needle = query.trim().toLowerCase();
   return entries.filter(
-    (entry) => entry.kind === "gap" || entry.stream === filter,
+    (entry) =>
+      entry.kind === "gap" ||
+      ((filter === "all" || entry.stream === filter) &&
+        (needle === "" || entry.text.toLowerCase().includes(needle))),
   );
+}
+
+/** How many of `entries` are lines of output; the gap markers are not. */
+export function countLogLines(entries: readonly LogEntry[]): number {
+  return entries.filter((entry) => entry.kind === "line").length;
+}
+
+/** The entries as the page shows them: the latest line first, the marker for the lines before them last. */
+export function newestFirst(entries: readonly LogEntry[]): LogEntry[] {
+  return entries.toReversed();
 }
 
 /**
@@ -153,11 +175,7 @@ export function describeLastExit(
   return `Exited with code ${String(lastExit.code)} after ${ranFor}`;
 }
 
-/** True when the scroll box shows its last line, give or take a few pixels. */
-export function isScrolledToBottom(box: {
-  scrollTop: number;
-  scrollHeight: number;
-  clientHeight: number;
-}): boolean {
-  return box.scrollHeight - box.scrollTop - box.clientHeight <= BOTTOM_SLACK_PX;
+/** True when the scroll box shows its first line, the latest one, give or take a few pixels. */
+export function isScrolledToTop(box: { scrollTop: number }): boolean {
+  return box.scrollTop <= TOP_SLACK_PX;
 }

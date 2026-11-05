@@ -7,11 +7,13 @@ import {
   LOG_ENTRIES_KEPT_MAX,
   describeLastExit,
   filterLogEntries,
+  countLogLines,
   gapText,
-  isScrolledToBottom,
+  isScrolledToTop,
   logCopyText,
   logLineTime,
   mergeLogPage,
+  newestFirst,
 } from "@/lib/app/logs";
 import type { LogEntry, LogView } from "@/lib/app/logs";
 import { readExample } from "../../../support/contract-examples";
@@ -164,6 +166,99 @@ describe("filterLogEntries", () => {
   });
 });
 
+describe("filterLogEntries with a search", () => {
+  const entries: LogEntry[] = mergeLogPage(
+    EMPTY_LOG_VIEW,
+    page({
+      lines: [
+        line(1, "stdout", "Listening on port 8000"),
+        line(2, "stderr", "ERROR: connection refused"),
+        line(3, "stdout", "connection pool ready"),
+        line(4, "appmux", "exited with code 1 after 2.3 s"),
+      ],
+      next_after: 4,
+      dropped: 2,
+    }),
+  ).entries;
+
+  function texts(found: readonly LogEntry[]): string[] {
+    return found.map((entry) => (entry.kind === "line" ? entry.text : "gap"));
+  }
+
+  it("keeps the lines whose text holds the words, whatever their case, and the marker", () => {
+    assert.deepEqual(texts(filterLogEntries(entries, "all", "CONNECTION")), [
+      "gap",
+      "ERROR: connection refused",
+      "connection pool ready",
+    ]);
+  });
+
+  it("ignores blank space around the words and treats a blank search as none", () => {
+    assert.deepEqual(texts(filterLogEntries(entries, "all", "  port 8000 ")), [
+      "gap",
+      "Listening on port 8000",
+    ]);
+    assert.equal(filterLogEntries(entries, "all", "   ").length, 5);
+  });
+
+  it("applies the stream and the search together", () => {
+    assert.deepEqual(texts(filterLogEntries(entries, "stdout", "connection")), [
+      "gap",
+      "connection pool ready",
+    ]);
+  });
+
+  it("matches text, not the stream's name or the time", () => {
+    assert.deepEqual(texts(filterLogEntries(entries, "all", "stderr")), [
+      "gap",
+    ]);
+    assert.deepEqual(texts(filterLogEntries(entries, "all", "09:14")), ["gap"]);
+  });
+
+  it("reads the search as plain text, never as a pattern", () => {
+    assert.deepEqual(texts(filterLogEntries(entries, "all", ".*")), ["gap"]);
+  });
+});
+
+describe("countLogLines", () => {
+  it("counts the lines and leaves the markers out", () => {
+    const view = mergeLogPage(
+      EMPTY_LOG_VIEW,
+      page({
+        lines: [line(1), line(2)],
+        next_after: 2,
+        dropped: 5,
+      }),
+    );
+    assert.equal(view.entries.length, 3);
+    assert.equal(countLogLines(view.entries), 2);
+  });
+});
+
+describe("newestFirst", () => {
+  it("puts the latest line first and the marker for the lines before them last", () => {
+    const view = mergeLogPage(
+      EMPTY_LOG_VIEW,
+      page({ lines: [line(1), line(2), line(3)], next_after: 3, dropped: 4 }),
+    );
+    assert.deepEqual(seqs({ ...view, entries: newestFirst(view.entries) }), [
+      3,
+      2,
+      1,
+      "gap:4",
+    ]);
+  });
+
+  it("leaves the entries it was given as they were", () => {
+    const view = mergeLogPage(
+      EMPTY_LOG_VIEW,
+      page({ lines: [line(1), line(2)], next_after: 2 }),
+    );
+    newestFirst(view.entries);
+    assert.deepEqual(seqs(view), [1, 2]);
+  });
+});
+
 describe("gapText", () => {
   // The server dropped lines before the ones on screen; the page never had them.
   it("says how many earlier lines are not shown, in the singular for one", () => {
@@ -225,34 +320,14 @@ describe("describeLastExit", () => {
   });
 });
 
-describe("isScrolledToBottom", () => {
-  it("is true at the bottom and within a few pixels of it", () => {
-    assert.equal(
-      isScrolledToBottom({
-        scrollTop: 600,
-        scrollHeight: 1000,
-        clientHeight: 400,
-      }),
-      true,
-    );
-    assert.equal(
-      isScrolledToBottom({
-        scrollTop: 596,
-        scrollHeight: 1000,
-        clientHeight: 400,
-      }),
-      true,
-    );
+describe("isScrolledToTop", () => {
+  // The newest line is first, so "at the latest line" is the top of the box.
+  it("is true at the top and within a few pixels of it", () => {
+    assert.equal(isScrolledToTop({ scrollTop: 0 }), true);
+    assert.equal(isScrolledToTop({ scrollTop: 4 }), true);
   });
 
-  it("is false once the person scrolled up", () => {
-    assert.equal(
-      isScrolledToBottom({
-        scrollTop: 300,
-        scrollHeight: 1000,
-        clientHeight: 400,
-      }),
-      false,
-    );
+  it("is false once the person scrolled down to older lines", () => {
+    assert.equal(isScrolledToTop({ scrollTop: 300 }), false);
   });
 });

@@ -67,7 +67,7 @@ function logBox(): HTMLElement {
 
 function shownTexts(): string[] {
   return within(logBox())
-    .getAllByRole("listitem")
+    .queryAllByRole("listitem")
     .map((item) => item.textContent);
 }
 
@@ -87,10 +87,11 @@ describe("LogsPanel", () => {
     setup(() => jsonResponse(200, readExample("AppLogs")));
     expect(screen.getByRole("status")).toHaveTextContent("Loading the logs");
     await advance(0);
+    // The latest line is first.
     expect(shownTexts()).toEqual([
-      "09:14:00appmuxstarted",
-      "09:14:01stderrTraceback (most recent call last):",
       "09:14:01appmuxexited with code 1 after 2.3 s",
+      "09:14:01stderrTraceback (most recent call last):",
+      "09:14:00appmuxstarted",
     ]);
     expect(calls[0]?.searchParams.get("after")).toBe("0");
   });
@@ -111,9 +112,10 @@ describe("LogsPanel", () => {
     await advance(0);
     await advance(LOG_POLL_INTERVAL_MS);
     expect(calls[1]?.searchParams.get("after")).toBe("1");
+    // A line that arrives later goes above the ones before it.
     expect(shownTexts().map((text) => text.slice(14))).toEqual([
-      "booting",
       "listening",
+      "booting",
     ]);
   });
 
@@ -147,7 +149,11 @@ describe("LogsPanel", () => {
       ),
     );
     await advance(0);
-    expect(shownTexts()[0]).toBe("8 earlier lines are not shown");
+    // The lines before the first one shown are below it, at the end of the list.
+    expect(shownTexts()).toEqual([
+      "09:14:03stdoutlate",
+      "8 earlier lines are not shown",
+    ]);
   });
 
   it("stops asking while paused and asks at once on Resume", async () => {
@@ -177,12 +183,27 @@ describe("LogsPanel", () => {
     ]);
   });
 
-  it("turns Follow off when the person scrolls up, and Jump to latest turns it on", async () => {
+  it("says the chosen stream has no lines in the view, and how to see the rest", async () => {
+    setup(() =>
+      jsonResponse(
+        200,
+        logs({ lines: [line(1, "stdout", "booting")], next_after: 1 }),
+      ),
+    );
+    await advance(0);
+    click(screen.getByRole("radio", { name: "stderr" }));
+    expect(shownTexts()).toEqual([]);
+    expect(
+      screen.getByText(
+        "No stderr lines in the view. Choose All to see every line.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("turns Follow off when the person scrolls down to older lines, and Jump to latest turns it on", async () => {
     setup(() => jsonResponse(200, readExample("AppLogs")));
     await advance(0);
     const box = logBox();
-    Object.defineProperty(box, "scrollHeight", { value: 1000 });
-    Object.defineProperty(box, "clientHeight", { value: 400 });
     box.scrollTop = 100;
     box.dispatchEvent(new Event("scroll"));
     await advance(0);
@@ -197,7 +218,111 @@ describe("LogsPanel", () => {
       "true",
     );
     expect(box).toHaveFocus();
-    expect(box.scrollTop).toBe(1000);
+    // The latest line is at the top of the box.
+    expect(box.scrollTop).toBe(0);
+  });
+
+  describe("search", () => {
+    function searchBox(): HTMLElement {
+      return screen.getByRole("searchbox", { name: "Search the lines" });
+    }
+
+    function search(text: string): void {
+      act(() => {
+        fireEvent.change(searchBox(), { target: { value: text } });
+      });
+    }
+
+    it("shows only the lines whose text holds the words, whatever their case", async () => {
+      setup(() => jsonResponse(200, readExample("AppLogs")));
+      await advance(0);
+      search("TRACEBACK");
+      expect(shownTexts()).toEqual([
+        "09:14:01stderrTraceback (most recent call last):",
+      ]);
+      expect(screen.getByText("1 of 3 lines match.")).toBeInTheDocument();
+    });
+
+    it("shows every line again when the search is cleared", async () => {
+      setup(() => jsonResponse(200, readExample("AppLogs")));
+      await advance(0);
+      search("traceback");
+      search("");
+      expect(shownTexts()).toHaveLength(3);
+      expect(screen.queryByText(/lines match\./)).not.toBeInTheDocument();
+    });
+
+    it("works together with the chosen stream", async () => {
+      setup(() => jsonResponse(200, readExample("AppLogs")));
+      await advance(0);
+      click(screen.getByRole("radio", { name: "appmux" }));
+      search("exited");
+      expect(shownTexts()).toEqual([
+        "09:14:01appmuxexited with code 1 after 2.3 s",
+      ]);
+    });
+
+    it("says no line matches, with the words, and how to see the rest", async () => {
+      setup(() => jsonResponse(200, readExample("AppLogs")));
+      await advance(0);
+      search("segfault");
+      expect(shownTexts()).toEqual([]);
+      expect(
+        screen.getByText(
+          /No lines match "segfault"\. Change or clear the search/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps searching as new lines arrive, newest first", async () => {
+      setup(
+        () =>
+          jsonResponse(
+            200,
+            logs({
+              lines: [
+                line(1, "stdout", "request ok"),
+                line(2, "stdout", "request failed"),
+              ],
+              next_after: 2,
+            }),
+          ),
+        () =>
+          jsonResponse(
+            200,
+            logs({
+              lines: [
+                line(3, "stdout", "heartbeat"),
+                line(4, "stdout", "request failed again"),
+              ],
+              next_after: 4,
+            }),
+          ),
+      );
+      await advance(0);
+      search("failed");
+      await advance(LOG_POLL_INTERVAL_MS);
+      expect(shownTexts().map((text) => text.slice(14))).toEqual([
+        "request failed again",
+        "request failed",
+      ]);
+    });
+
+    it("reads the words as text, never as a pattern", async () => {
+      setup(() => jsonResponse(200, readExample("AppLogs")));
+      await advance(0);
+      search(".*");
+      expect(shownTexts()).toEqual([]);
+    });
+
+    it("tells a screen reader how many lines match when the words change", async () => {
+      setup(() => jsonResponse(200, readExample("AppLogs")));
+      await advance(0);
+      search("exited");
+      expect(
+        screen.getAllByRole("status").map((status) => status.textContent),
+      ).toContain("1 line matches.");
+    });
   });
 
   it("draws a line's text as text, never as markup", async () => {
