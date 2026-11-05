@@ -1,8 +1,8 @@
 # Let a service principal hold an app grant
 
-**Status:** proposed — built and covered by tests on 2026-11-03 (T188); a call by another App's
-service principal through the Apps proxy with this grant has not been measured yet, and the owner
-has not reviewed the choice. Extends [ADR 0010](0010-mirror-databricks-permissions-and-give-platform-admins-implicit-access.md),
+**Status:** proposed — built and covered by tests on 2026-11-03 (T188) and measured through the
+real Apps proxy on 2026-11-04 on the Free Edition workspace (see [Measured](#measured-on-2026-11-04));
+the owner has not reviewed the choice. Extends [ADR 0010](0010-mirror-databricks-permissions-and-give-platform-admins-implicit-access.md),
 whose text is not changed.
 **Date:** 2026-11-03
 **Deciders:** Liam Lee
@@ -58,3 +58,37 @@ to the whole workspace.
   SP from the workspace directory is part of `GET /principals` (T187).
 - To verify on the dev App: apply 0003, grant a real SP, and call a child through the proxy with
   that SP's token (expect `200`), then with another SP (expect `404`).
+
+## Measured on 2026-11-04
+
+Free Edition workspace only. The caller was a throwaway service principal that is not an App (the
+Apps proxy treats an App's service principal the same way), with a token of its own, calling the
+`light_fastapi` fixture child through the dev App's address. The test is
+`tests/integration/test_service_principal_grant.py`; the dev App's direct permission list was
+saved first, changed only by adding `CAN_USE` for the principal, and put back, and a comparison
+afterwards found it identical to the saved list.
+
+| Step | Result |
+|---|---|
+| no `CAN_USE` on appmux | the **Apps proxy** refuses the call before appmux sees it |
+| `CAN_USE` on appmux, no grant on the child | the proxy let the principal in 8 s after the permission was given; appmux answers `404`, the same as for an unknown app |
+| a `service_principal` grant naming a *different* application id | still `404` |
+| a grant naming this principal | `200`, in under a second (the test prints whole seconds: `0`); the child saw the application id in `X-Forwarded-Email` and no `X-Forwarded-Access-Token`, as the context above says |
+| the grant removed | `404` again, in under a second |
+| `CAN_USE` on appmux taken back | the proxy kept admitting the principal for **59 to 61 minutes** (every probe returned `200`, once `502` while the App restarted), then refused it; restarting the App did not shorten the wait |
+
+What this settles and what it does not:
+
+- The grant does what the Decision says: one SP in, every other identity out, and appmux's own
+  grant takes effect within a second in both directions. This is the control an admin should reach for to stop an
+  SP quickly.
+- The Apps proxy's `CAN USE` on appmux took 8 s to take effect but is **not** quick to revoke on this platform. Taking it back
+  leaves the SP able to reach appmux (and then any child that still has a grant for it, or an
+  `everyone` grant) for about an hour. Remove the `service_principal` grant first, then the proxy
+  permission; do not rely on the second to cut a caller off. For comparison, a secret-scope `READ`
+  taken back flapped between allowed and refused for about 280 seconds
+  ([spike log](../../specs/001-appmux-v1/spikes/README.md#service-principal-grant-through-the-apps-proxy-2026-11-04)).
+- One workspace, one day, one principal. The revoke time was inferred from the order of the calls
+  (the platform reports none), so read "59 to 61 minutes" as the width of the probe interval, not
+  as a platform guarantee. A paid workspace may differ and was not used.
+- The status stays `proposed`: the measurement does not replace the owner's review.

@@ -101,7 +101,11 @@ letting an SP caller in with it.
 Since [ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md) (proposed,
 2026-11-03) a narrower grant exists: `{"type": "service_principal", "name": "<the SP's application
 ID, lower case>", "permission": "CAN_USE"}` admits that one SP and nobody else. It is in the code
-and its tests; a call through the Apps proxy with it has **not been measured yet** (below).
+and its tests, and a call through the Apps proxy with it was measured on 2026-11-04 (one SP in, a
+different application id still `404`, removal closes the child within a second;
+[ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md#measured-on-2026-11-04)).
+Taking back the SP's `CAN USE` on appmux is slow: the proxy kept admitting it for about an hour, so
+remove the grant first.
 
 ## Who the target sees when the caller is an App
 
@@ -190,7 +194,8 @@ Not measured yet:
 
 - **A `service_principal` grant** ([ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md))
   in place of `everyone` on the hub. The run above used `everyone`, which admits every identity the
-  proxy accepts.
+  proxy accepts. The grant itself was measured separately, with a throwaway SP, on the same day
+  (ADR 0020, "Measured").
 - Several people at once: only two accounts exist on Free Edition.
 
 ## Not measured
@@ -198,8 +203,9 @@ Not measured yet:
 - The 300 s cut of the Apps proxy for a call that lasts that long (measured in spike 8 for a plain
   stream, not for MCP or A2A), and whether a stream that sends nothing for a while survives.
 - A `group` grant admitting an SP, and the identity of an SP in appmux's audit and metrics.
-- A `service_principal` grant (ADR 0020) admitting an SP's call through the Apps proxy (the call was
-  measured without a grant, `404`, and with an `everyone` grant, success).
+- A `service_principal` grant (ADR 0020) held by an *App's* service principal: it was measured
+  with a throwaway SP that is not an App, which the proxy treats alike but which is not the same
+  object.
 - Load: the cost of the extra hop through appmux, and what the free model's limit does to several
   agents sharing the workspace.
 - Streamable HTTP with a session id or a server-sent stream from the MCP server (the example is
