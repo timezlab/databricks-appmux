@@ -17,12 +17,15 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Final
 
+import http_load
 import pytest
 from http_load import (
     HEAD_END,
@@ -117,6 +120,58 @@ async def test_a_paced_run_sends_exactly_the_requests_that_fall_due_and_reports_
     assert report.latency_ms is not None and report.latency_ms.p95 >= report.latency_ms.p50 >= 0
     assert report.per_second > 0 and report.cpu_seconds >= 0
     assert report.edge_cpu_seconds is None
+
+
+class OffsetClock:
+    """A monotonic clock that first reads ``first_reading_s`` exactly, then runs at real speed."""
+
+    def __init__(self, first_reading_s: float) -> None:
+        self._first_reading_s = first_reading_s
+        self._origin_s: float | None = None
+
+    def monotonic(self) -> float:
+        now_s = time.monotonic()
+        if self._origin_s is None:
+            self._origin_s = now_s
+        return self._first_reading_s + (now_s - self._origin_s)
+
+
+@pytest.mark.parametrize(
+    ("connections", "rate_per_s", "duration_s", "first_reading_s"),
+    [
+        (2, 40.0, 0.5, 260408.69576863752),
+        (1, 50.0, 0.5, 60424.58465240832),
+    ],
+)
+async def test_the_requests_that_fall_due_do_not_depend_on_what_the_clock_reads(
+    monkeypatch: pytest.MonkeyPatch,
+    connections: int,
+    rate_per_s: float,
+    duration_s: float,
+    first_reading_s: float,
+) -> None:
+    # A monotonic clock reads the machine's uptime, so the same run starts at a different number on
+    # every machine. At these readings the schedule once rounded the request that falls due exactly
+    # at the end of the run into the run: GitHub's runner sent 201 requests where 200 fell due.
+    monkeypatch.setattr(
+        http_load,
+        "time",
+        SimpleNamespace(
+            monotonic=OffsetClock(first_reading_s).monotonic, process_time=time.process_time
+        ),
+    )
+    async with serve() as server:
+        report = await run_load(
+            host=HOST,
+            port=server.port,
+            path=PATH,
+            email=EMAIL,
+            connections=connections,
+            rate_per_s=rate_per_s,
+            duration_s=duration_s,
+        )
+
+    assert report.requests == round(rate_per_s * duration_s) == len(server.heads)
 
 
 async def test_the_request_names_the_person_and_nothing_secret() -> None:

@@ -154,14 +154,25 @@ async def _worker(
     host: str,
     port: int,
     request: bytes,
-    deadline: float,
     tally: _Tally,
     *,
     tls: ssl.SSLContext | None,
-    interval_s: float,
-    first_due: float,
+    run_started: float,
+    rate_per_s: float,
+    duration_s: float,
+    first_request: int,
+    request_step: int,
 ) -> None:
-    due = first_due
+    """Send requests ``first_request``, ``first_request + request_step``, ... of the run.
+
+    Request number ``k`` falls due ``k / rate_per_s`` seconds after the run started, and it belongs
+    to the run when that is under ``duration_s``. Both are seconds since the start, not readings of
+    the monotonic clock: that clock reads the machine's uptime, and a sum or a running total of
+    uptime and interval rounds differently at different readings, which let the request due exactly
+    at the end of the run in on one machine and keep it out on another (GitHub's runner sent 201
+    where 200 fell due).
+    """
+    request_number = first_request
     try:
         reader, writer = await asyncio.open_connection(host, port, ssl=tls)
     except OSError as exc:
@@ -169,17 +180,17 @@ async def _worker(
         tally.interrupted += 1
         return
     try:
-        while due < deadline:
-            wait_s = due - time.monotonic()
+        while (due_after_s := request_number / rate_per_s) < duration_s:
+            fell_due = run_started + due_after_s  # latency counts from when the request fell due
+            wait_s = fell_due - time.monotonic()
             if wait_s > 0:
                 await asyncio.sleep(wait_s)
-            started = due  # latency counts from when the request fell due
-            due += interval_s
+            request_number += request_step
             writer.write(request)
             head, _ = await _read_response(reader)
             if not head.startswith(b"HTTP/1.1 200"):
                 tally.failure_kinds.append("status " + head[9:12].decode(errors="replace"))
-            tally.latencies_s.append(time.monotonic() - started)
+            tally.latencies_s.append(time.monotonic() - fell_due)
     except (OSError, asyncio.IncompleteReadError, UnframedResponse, ValueError) as exc:
         # ValueError: a chunk size that is not hexadecimal. Either way the connection is unusable.
         tally.failure_kinds.append(type(exc).__name__)
@@ -240,7 +251,6 @@ async def run_load(
     if connections < 1 or rate_per_s <= 0 or duration_s <= 0:
         raise ValueError("connections, rate and duration must all be positive")
     request = _request_bytes(host, port, path, email, bearer_token, secure=tls is not None)
-    interval_s = connections / rate_per_s
     tally = _Tally()
     edge_cpu_before = process_cpu_seconds(edge_pid) if edge_pid is not None else None
     started = time.monotonic()
@@ -250,11 +260,13 @@ async def run_load(
                 host,
                 port,
                 request,
-                started + duration_s,
                 tally,
                 tls=tls,
-                interval_s=interval_s,
-                first_due=started + interval_s * index / connections,
+                run_started=started,
+                rate_per_s=rate_per_s,
+                duration_s=duration_s,
+                first_request=index,
+                request_step=connections,
             )
             for index in range(connections)
         )
