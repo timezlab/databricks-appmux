@@ -1699,11 +1699,11 @@ neighbour's p95 was 247 ms idle and 278 ms beside the hostile children, over 21 
 
 | Test file (tests) | Task | Why |
 |---|---|---|
-| `test_edge_capacity` (1) | T086 | needs the container: 500 requests a second without the proxy, and the edge's pid to read its CPU |
+| `test_edge_capacity` (1) | T086 | needs the container: 500 requests a second without the proxy, and the edge's pid to read its CPU. It ran on 2026-11-05: see [Container runs inside the dev App](#container-runs-inside-the-dev-app-2026-11-05) |
 | `test_offline_install` (4), `test_open_modes` (3), `test_resources_container` (4), `test_sc004_walkthrough` (1), `test_ui_on_container` (7) | T137, T155, T129, T167, T177 | written against the edge's own port: they play the proxy with `X-Forwarded-Email` and do not use `ops_session`, so through the real proxy they get `302` or fail on `APPMUX_TEST_BASE_URL` having no port; most also need apps or variables registered first (fixture app slugs, a warehouse, a secret, a group, a second person's token) |
 | `test_requests_walkthrough` (4) | T148 | skipped: acts as two other people |
 | `test_credential_modes` (5) | T147 | did not run at first: the throwaway service principal, OAuth secret and scratch secret scopes it needs were refused by the session's permission check and not retried. It ran later the same day, after the owner authorised creating them: see [Credential modes from the dev machine](#credential-modes-from-the-dev-machine-2026-11-04) |
-| no test file yet | T070, T162, T180 | `test_self_check_fail_closed.py`, `test_capacity.py` and `test_failure_table.py` do not exist; SC-002's weakening runs, SC-003 and the failure table have never been run |
+| no test file yet | T070, T162, T180 | `test_self_check_fail_closed.py`, `test_capacity.py` and `test_failure_table.py` did not exist on 2026-11-04. They were written and run on 2026-11-05: see [Container runs inside the dev App](#container-runs-inside-the-dev-app-2026-11-05) |
 
 ### Gates on the same head
 
@@ -1818,3 +1818,194 @@ hour, so the test waited it out instead.
   "anonymous" is its own placeholder for a missing header. appmux forwards the header as the
   proxy gave it, so the proxy did not send it. Why the second account's call had it was not
   isolated ([reference](../../../docs/reference/mcp-and-a2a.md#the-same-check-from-a-browser)).
+
+## Service principal grant through the Apps proxy (2026-11-04)
+
+ADR 0020's `service_principal` grant, measured through the real Apps proxy on the Free Edition
+workspace with a throwaway service principal that is not an App (`appmux-test-own-sp`, created for
+the credential-modes run). The owner asked for the measurement and for `CAN USE` on `appmux` to be
+given to that one principal and taken back carefully. The paid workspace was not used.
+
+### What ran
+
+`tests/integration/test_service_principal_grant.py` (six tests) through `scripts/run-remote-tests.sh`.
+Before the first change the dev App's direct permission list (4 entries) was saved; the only change
+was adding `CAN_USE` for the principal, and the test puts the list back with `set-permissions` and
+compares it entry by entry. After the run, `measure/acl-snapshot.py compare` found the list
+identical to the saved one.
+
+| Test | Result |
+|---|---|
+| no `CAN_USE` on appmux: refused by the proxy | passed |
+| `CAN_USE` given: reaches appmux; a child with no grant is `404`, identical to an unknown app | passed; the proxy let the principal in 8 s after the permission |
+| a grant for a different application id does not admit | passed (watched 12 s) |
+| a grant for this principal opens the child; the child sees the application id in `X-Forwarded-Email` and no access token | passed; opened in under a second |
+| removing the grant closes the child | passed; closed in under a second |
+| `CAN_USE` taken back: the proxy refuses the principal again | **failed at the first limit (600 s)**, then measured separately (below) |
+
+### How long the proxy kept admitting the principal after the revoke
+
+The sixth test's limit of 600 s was a guess. Two probes then called the child with the principal's
+token every 65 s and every 126 s:
+
+* every answer was `200` for at least 52 minutes after the revoke, except one `502` while the dev
+  App was being restarted (the restart was for the container run, not an attempt to clear the
+  permission) at about 53 minutes;
+* the first refusal (`302`, the sign-in redirect the proxy gives a caller it does not admit) came
+  between 59 and 61 minutes after the revoke, and every later probe, up to 2 900 s further, was
+  `302`;
+* the revoke time itself was not reported by the platform; it was taken as the time of the
+  `set-permissions` call, so the width of the interval is the probe spacing (about 2 minutes).
+
+For contrast, a secret-scope `READ` taken back (credential-modes run, same day) flapped between
+allowed and refused for about 280 s before it stayed refused. Two permissions, two lags.
+
+### What changed in the test
+
+The sixth test used to fail on a bound the evidence did not support. It now has a bound of 90
+minutes (`REVOKE_SETTLES_WITHIN_S`), prints the seconds it measured, and is **opt-in**
+(`APPMUX_TEST_WAIT_FOR_REVOKE=1`) because it holds a run for an hour. Without the variable it
+still takes the permission back and checks the list, then skips the wait. It was not rerun with the
+wait on: the measurement above comes from the probes. The first five tests are unchanged.
+
+### What this does not show
+
+One principal that is not an App, one workspace, one day. A deployed App's service principal, a
+group of service principals, and a paid workspace were not tried. The ADR stays `proposed`.
+
+
+## Container runs inside the dev App (2026-11-05)
+
+Free Edition workspace only; the paid workspace was not used. Until this day every test that needs
+a Databricks container had been written but never run on one, because the Apps proxy sits in front
+of the service when a test calls it from outside (see
+[Remote integration run](#remote-integration-run-from-the-dev-machine-2026-11-04)). These runs put
+pytest **inside** the dev App's container, where a test can play the proxy by sending
+`X-Forwarded-Email` itself.
+
+### How it ran
+
+`scripts/run-container-tests.sh <test file>` deploys the code with an overlay that adds the chosen
+test file, starts pytest as a one-off process next to the service, reads the App log until the
+closing line `APPMUX-CONTAINER-TESTS-DONE run=<id> exit=<n>`, and then deploys the normal code
+again. Twelve invocations that day; nine produced a pytest result, and every one of those nine
+ended with the restore succeeding. The other three produced none: one stopped after the deploy
+while waiting for the closing line, one was killed while waiting (exit 137), and one ended with
+the restore failing (exit 4; the normal deploy was then run by hand). Why the closing line did not
+come is not established; the platform may have stopped the App's compute for fair usage (the dev
+App's neighbour `console-solo` was found stopped with that message the same day), and it did not
+happen in the nine. The runner was changed along the way: bounded log reads, a stop after ten
+unreadable reads that prints the App's state, and a restore that removes the overlay files
+(`tests/unit/test_run_container_tests.py`).
+
+### Results
+
+| Test file (tests) | Task | Result |
+|---|---|---|
+| `test_self_check_fail_closed` (4) | T070 | **passed**, see below |
+| `test_self_check_container` (2) | — | passed; `self_check` ran 13 checks in 6.8 s and 6.9 s |
+| `test_edge_capacity` (1) | T086 | **passed**, see below |
+| `test_capacity` (3) | T162 | **passed**, see below |
+| `test_requests_walkthrough` (4) | T148 | passed (4) |
+| `test_failure_table` (2) | T180 | row 19 passed; **row 20 failed** (the product, see TD-030) |
+
+### SC-002: a weakened sandbox fails closed (T070)
+
+The control run, with nothing left out, failed no check and the gate let the request for an app
+through. Leaving one layer out failed the check that layer guards, and the gate answered `503` for
+the app, named the check on the status page, and still let `/_appmux/` through:
+
+| Layer left out | Checks that failed |
+|---|---|
+| `/proc` overmount | `platform_files` |
+| capability drop | `capabilities` |
+| pump filter | `loopback_and_container_ip`, `metadata_address` |
+
+### SC-001: the edge at 500 requests a second (T086)
+
+15 000 requests in 30 s at 500 a second over 10 connections, to one sandboxed `light_fastapi` through
+the edge: **0 failed requests**. Latency p50 1.77 ms, p95 3.98 ms, p99 44.35 ms, max 122.97 ms. The
+edge process used 18.7 s of CPU in the 30 s (**62.3% of one core**); the load generator used 2.4 s.
+The test asserts no failures and at least 95% of the rate, and sets no limit on p95 or CPU: whether
+62% of a core is "room to spare" for [ADR 0014](../../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md)
+is the owner's judgement and is not made here. One workload (an empty `GET`), one container, one run.
+
+### SC-003: ten apps and an eleventh that is refused (T162)
+
+Ten apps in four kinds, started and loaded at 30 requests a second each, beside five apps that were
+already running:
+
+| Kind | Apps | Budget | Start | App RSS idle | Sandbox RSS loaded | CPU idle / loaded (of one core) | p95 loaded |
+|---|---|---|---|---|---|---|---|
+| `light_fastapi` | 4 | 256 MB | 3.2–5.0 s | 45.6–45.8 MB | 106.5–106.8 MB | 0.1–0.2% / 1.4–1.5% | 2.7–3.3 ms |
+| `memory_fastapi` | 2 | 512 MB | 2.0–2.5 s | 110.1–110.2 MB | 171.0–171.2 MB | 0.2% / 2.0% | 3.1–3.3 ms |
+| `streamlit_app` | 2 | 512 MB | 2.5–2.9 s | 51.9–52.3 MB | 113.1–113.4 MB | 0.1% / 2.0% | 3.0–3.6 ms |
+| `node_app` | 2 | 768 MB | 2.1–2.5 s | 125.0–125.5 MB | 194.5–195.3 MB | 0.1% / 1.5% | 2.5–2.6 ms |
+
+* **Per-sandbox overhead** (the sandbox's process tree minus the app's own RSS): 60.7–61.1 MB for
+  every app, whatever its kind. Admission control assumes 13 MB
+  (`OVERHEAD_PER_CHILD_MB` in `src/appmux/reconciler/admission.py`, whose comment says this test
+  replaces it with the real figure). It is **not changed here**: see the next list.
+* **The slot with ten apps loaded**: ten sandboxes 1 385 MB RSS in total; everything appmux runs
+  2 151 MB RSS; the container reported 1 905 MB in use; the edge held 138 MB and used 1.8% of a core
+  idle and 36.9% loaded. The ledger read limit 8 192 MB, reserve 1 024 MB, committed 6 992 MB,
+  free 176 MB.
+* **The eleventh app**: with the reserve raised so that 100 MB stayed free, an app needing 269 MB
+  was refused, its release `failed` with `not enough memory: needs 269 MB, 100 MB free`.
+* **Estimate, not a measurement**: 100 apps at the mean loaded size of these ten would hold about
+  13 990 MB RSS, against a limit of 8 192 MB. Linear, and only for the case where all 100 run at
+  once; the ledger decides how many may.
+* **Reading the overhead gap** (inference): the ledger counts budgets, and these apps used far less
+  than their budgets, so the 13 MB did no harm here. If every running app used its whole budget,
+  each would also cost about 48 MB more than the ledger counts: 480 MB at ten apps, which the 1 024 MB
+  reserve covers; at about twenty-two it would not. Changing the constant moves admission, the
+  budget floor and the tests that pin them, so it waits for the owner.
+
+### Failure table rows 19 and 20 (T180)
+
+* **Row 19, a child allocating without end**: stopped at 288 MB held under a 512 MB address-space
+  limit (a 256 MB budget), by `MemoryError`, not by a watchdog. The RSS watchdog is not started by
+  the service at all ([TD-029](../../../docs/tech-debt.md#td-029-the-rss-watchdog-is-written-and-tested-but-the-service-never-starts-it)),
+  so a hog that spreads over several processes is still unmeasured.
+* **Row 20, `slirp4netns` killed**: 90 s later the child was still `running` in the same sandbox
+  with no network helper, and the supervisor had noticed nothing. The design says this is a crash of
+  that child. **The test fails and was left failing**:
+  [TD-030](../../../docs/tech-debt.md#td-030-a-child-whose-slirp4netns-dies-keeps-running-with-no-way-out)
+  is now confirmed on a real container, not only read from the code.
+
+### Request walkthrough (T148)
+
+Four tests passed: a request approved into an app owned by the requester, stopped with no release;
+an OBO request; a taken slug at approval; and the rename of a running app (restart under the new
+prefix, old URL `404`). One observation without a cause: deleting the **running, renamed** app took
+33.0 s, while deleting the stopped ones took 0.1 s each, and the stop grace is 10 s. The test's
+cleanup now allows 180 s for a delete and carries on when one times out.
+
+### What was wrong with the tests, not the product
+
+Each of these showed up as a failure on the first container run and is fixed:
+
+* In a container a test plays the proxy, and the proxy adds the person's access token only when the
+  test sends one. Registering an app, deleting one and changing a platform setting need that token
+  (`403 user_token_missing` without it), and the shared session did not send it
+  (`ops_session.py`, `test_capacity.py`, `test_requests_walkthrough.py`). From outside the container
+  the real proxy always adds the token, which is why the remote run could not show this.
+* `test_self_check_fail_closed` expected only the app path to reach the application in the control
+  run; the harness also asks for the admin path, and with the self-check passing both get in.
+* The first capacity run was refused with `not enough memory`: five apps left over from 2026-11-04
+  held 538 MB of the ledger. They were deleted by exact slug and the run was repeated.
+* A delete that timed out aborted the walkthrough's cleanup and left three apps behind; they were
+  deleted by exact slug and the cleanup is now best-effort.
+
+### What did not run
+
+| Test file (tests) | Task | What it needs |
+|---|---|---|
+| `test_open_modes` (3) | T155 | the dev App's own OBO delegation changed for the run, which is a change to the App's configuration the owner has not been asked about |
+| `test_offline_install` (4) | T137 | the platform setting `package_mode` set to `wheelhouse` for the run (a setting of the whole slot) |
+| `test_resources_container` (4) | T129 | a scratch secret, a SQL warehouse and a second person's token |
+| `test_sc004_walkthrough` (1) | T167 | a Databricks group, a secret and a warehouse to attach |
+| `test_ui_on_container` (7) | T177 | a Chromium inside the container, and the built `web/out` in the overlay |
+
+`test_failure_table` rows other than 19 and 20 are covered elsewhere (its docstring lists where).
+Not run is not passed: none of these files has a result.
