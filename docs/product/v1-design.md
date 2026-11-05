@@ -328,18 +328,18 @@ Once running, an app is judged by crashes ([5.6](#56-crash-restart-and-shutdown)
 
 ### 5.7 Memory and admission control
 
-Each app has a memory budget set by the platform admin: a new app starts with the platform default (`default_memory_budget_mb`, 512 MB unless changed, 256 to 16,384 MB like any budget a person types; an app saved with a smaller one, down to 64 MB, keeps it), the platform admin can change the default, change one app's budget, or give a directly registered app another budget, and an app admin can ask for more with a `settings` request ([9.4](#94-requests-to-a-platform-admin)). Changing the default does not touch apps that already exist. At startup appmux reads the container's memory limit. It refuses to start or update an app when the running budgets, the update overlap, appmux's reserve and per-child overhead (pump ≈ 10 MB, slirp 2–3 MB, measured) would exceed it. Worked example, the 8 GiB container measured on Free Edition:
+Each app has a memory budget set by the platform admin: a new app starts with the platform default (`default_memory_budget_mb`, 512 MB unless changed, 256 to 16,384 MB like any budget a person types; an app saved with a smaller one, down to 64 MB, keeps it), the platform admin can change the default, change one app's budget, or give a directly registered app another budget, and an app admin can ask for more with a `settings` request ([9.4](#94-requests-to-a-platform-admin)). Changing the default does not touch apps that already exist. At startup appmux reads the container's memory limit. It refuses to start or update an app when the running budgets, the update overlap, appmux's reserve and per-child overhead (64 MB: the 61.1 MB that SC-003 measured per sandbox, rounded up) would exceed it. Worked example, the 8 GiB container measured on Free Edition:
 
 ```
 limit                    8192 MB
 appmux reserve          -1024 MB   (platform setting memory_reserve_mb)
 available                7168 MB
-10 apps × (512 + 13)     5250 MB   → fits, 1918 MB free   (13 MB = pump 10 + slirp 3)
-update of `sales` next to its running release: +525 MB → 5775 MB → allowed
-a new `ml` app, budget 2048: +2061 MB → 7836 MB > 7168 MB → refused: "needs 2061 MB, 1393 MB free"
+10 apps × (512 + 64)     5760 MB   → fits, 1408 MB free   (64 MB = measured sandbox overhead, rounded up)
+update of `sales` next to its running release: +576 MB → 6336 MB → allowed
+a new `ml` app, budget 2048: +2112 MB → 8448 MB > 7168 MB → refused: "needs 2112 MB, 832 MB free"
 ```
 
-A best-effort RSS watchdog stops only the offending app (cgroup and `oom_score_adj` writes are denied, so there is no hard cap); `RLIMIT_AS` is set from the budget with a headroom factor. Known gap: a fast allocator can still push the container into an out-of-memory kill. Spike 7 measured ten idle stand-in sandboxes by PSS: the pump 5.6 MB, slirp 0.3 MB and the stand-in's in-sandbox Python process 15.9 MB (21.8 MB each); SC-003 measures the real per-child overhead.
+A best-effort RSS watchdog stops only the offending app (cgroup and `oom_score_adj` writes are denied, so there is no hard cap); `RLIMIT_AS` is set from the budget with a headroom factor. Known gap: a fast allocator can still push the container into an out-of-memory kill. Spike 7 measured ten idle stand-in sandboxes by PSS: the pump 5.6 MB, slirp 0.3 MB and the stand-in's in-sandbox Python process 15.9 MB (21.8 MB each). SC-003 then measured the real sandbox on a container (2026-11-05): 60.7 to 61.1 MB each, the sandbox's process tree minus the app's own RSS, so admission counts 64 MB ([TD-032](../tech-debt.md#td-032-admission-assumes-13-mb-of-sandbox-overhead-and-the-measured-figure-is-61-mb)).
 
 ## 6. Isolation and network
 
@@ -873,7 +873,7 @@ Reading them back (`GET /metrics`, `GET /metrics/breakdown`; [contract](../../sp
 | Locking would exceed `max_locked_releases` | none | refused: `app 'sales' already has 3 locked releases; unlock one first` | unlock one, or a platform admin raises the cap |
 | A requirement the app environment cannot satisfy has no wheel in the wheel sources; or the app environment no longer provides a pin it used to | none | the Update fails, or the release is `failed` before it starts, listing every requirement: `no wheel for 'foo==2.0' (the environment has foo 1.0)` | add the wheels and press Update |
 | The appmux SP cannot read a referenced secret | none | release `failed` before it starts: `cannot read secret 'sales-secrets/openai-api-key': ask the scope's manager to give the appmux service principal READ on scope 'sales-secrets'` | the scope's manager grants `READ`; press Activate |
-| Update does not fit the memory budget | none | refused: `needs 2061 MB, 1393 MB free` | stop another app or raise the slot's compute |
+| Update does not fit the memory budget | none | refused: `needs 2112 MB, 832 MB free` | stop another app or raise the slot's compute |
 | Source or wheel folder unreadable, or the presser's token expires during Update | none | the Update fails and nothing changes: the presser lacks read access or the folder is empty (the API answers an empty listing or a 404 to a caller with no access, spike 15), or `session expired during the snapshot; press Update again` | the folder owner grants read; press Update again |
 | Snapshot digest does not match at start | none | release `failed`: `snapshot sha256 mismatch` | press Update to take a fresh snapshot |
 | A person's group lookup fails | that person only | cached groups for up to an hour; with none, group grants do not match (logged) | restore the Databricks call |

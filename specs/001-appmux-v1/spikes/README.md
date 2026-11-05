@@ -1970,6 +1970,10 @@ already running:
   each would also cost about 48 MB more than the ledger counts: 480 MB at ten apps, which the 1 024 MB
   reserve covers; at about twenty-two it would not. Changing the constant moves admission, the
   budget floor and the tests that pin them, so it waits for the owner.
+* **Follow-up, 2026-11-05:** the owner asked for the fix, and `OVERHEAD_PER_CHILD_MB` is now 64
+  (61.1 MB rounded up to the next multiple of 16 MB). The paragraphs above stay as the record of
+  what the run found and what admission assumed at the time; see
+  [TD-032](../../../docs/tech-debt.md#td-032-admission-assumes-13-mb-of-sandbox-overhead-and-the-measured-figure-is-61-mb).
 
 ### Failure table rows 19 and 20 (T180)
 

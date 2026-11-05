@@ -111,8 +111,8 @@
   "memory": {
     "limit_mb": 8192,
     "reserve_mb": 1024,
-    "committed_mb": 5775,
-    "free_mb": 1393
+    "committed_mb": 6336,
+    "free_mb": 832
   },
   "apps": [
     {

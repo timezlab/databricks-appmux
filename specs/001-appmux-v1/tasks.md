@@ -380,7 +380,7 @@
 
 ### Tests for User Story 10 (write first)
 
-- [X] T157 [P] [US10] Write `tests/unit/test_admission.py` using the worked example of [design §5.7](../../docs/product/v1-design.md#57-memory-and-admission-control): 8192 MB limit, 1024 MB reserve, 10 apps of 512 + 13 MB fit with 1918 MB free, an update beside its running release adds 525 MB and is allowed, an app of 2048 MB is refused with `needs 2061 MB, 1393 MB free`; the second copy of a swap counts for at most `health_deadline_s`; the running release is untouched on refusal (FR-050).
+- [X] T157 [P] [US10] Write `tests/unit/test_admission.py` using the worked example of [design §5.7](../../docs/product/v1-design.md#57-memory-and-admission-control): 8192 MB limit, 1024 MB reserve, 10 apps of 512 + 64 MB fit with 1408 MB free, an update beside its running release adds 576 MB and is allowed, an app of 2048 MB is refused with `needs 2112 MB, 832 MB free` (the 64 MB is the measured sandbox overhead, TD-032; the first draft used 13 MB); the second copy of a swap counts for at most `health_deadline_s`; the running release is untouched on refusal (FR-050).
 - [X] T158 [P] [US10] Write `tests/unit/test_rss_watchdog.py`: a child over its budget (with headroom) is stopped and no other app is; `RLIMIT_AS` is set from the budget with the headroom factor.
 
 ### Fixtures for User Story 10

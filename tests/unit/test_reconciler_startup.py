@@ -13,6 +13,7 @@ import pytest
 from reconciler_fakes import FakeProbe
 from reconciler_world import World, answer_after, socket_of
 
+from appmux.reconciler.admission import OVERHEAD_PER_CHILD_MB
 from appmux.reconciler.build import BuildFailed
 from appmux.registry.errors import RegistryUnavailable
 from appmux.registry.models import Release
@@ -151,7 +152,8 @@ async def test_an_app_whose_build_fails_does_not_stop_the_others() -> None:
 
 
 async def test_when_the_apps_do_not_all_fit_the_rest_fail_with_the_memory_they_needed() -> None:
-    world = World(memory_limit_mb=300)
+    one_child_mb = 256 + OVERHEAD_PER_CHILD_MB  # a 256 MB budget and the sandbox overhead
+    world = World(memory_limit_mb=one_child_mb + 31)
     for slug in ("alpha", "beta"):
         world.app(slug, target_release_no=1, memory_budget_mb=256)
         world.release(1, "active", slug)
@@ -161,7 +163,9 @@ async def test_when_the_apps_do_not_all_fit_the_rest_fail_with_the_memory_they_n
     statuses = sorted((world.status(1, "alpha"), world.status(1, "beta")))
     assert statuses == ["active", "failed"]
     failed = "alpha" if world.status(1, "alpha") == "failed" else "beta"
-    assert world.row(1, failed).status_reason == "not enough memory: needs 269 MB, 31 MB free"
+    assert world.row(1, failed).status_reason == (
+        f"not enough memory: needs {one_child_mb} MB, 31 MB free"
+    )
     assert len(world.routes.routes()) == 1
 
 

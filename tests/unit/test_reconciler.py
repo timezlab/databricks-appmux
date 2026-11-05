@@ -11,10 +11,13 @@ import pytest
 from reconciler_fakes import FakeProbe
 from reconciler_world import World, answer_after, socket_of
 
-from appmux.reconciler.admission import MemoryLedger
+from appmux.reconciler.admission import OVERHEAD_PER_CHILD_MB, MemoryLedger
 from appmux.reconciler.build import BuildFailed
 from appmux.reconciler.child_env import EnvironmentRefused, ResourcesMissing
 from appmux.reconciler.swap import DRAIN_S
+
+# What one 256 MB child commits: its budget plus the sandbox overhead admission adds.
+ONE_CHILD_MB = 256 + OVERHEAD_PER_CHILD_MB
 
 pytestmark = pytest.mark.anyio
 
@@ -321,7 +324,7 @@ async def test_the_memory_that_does_not_fit_fails_the_release_with_the_numbers()
     await world.run()
 
     assert world.status(1) == "failed"
-    assert world.row(1).status_reason == "not enough memory: needs 269 MB, 200 MB free"
+    assert world.row(1).status_reason == f"not enough memory: needs {ONE_CHILD_MB} MB, 200 MB free"
     assert world.launcher.started == []
 
 
@@ -433,15 +436,15 @@ async def test_a_new_release_whose_build_fails_leaves_the_old_one_and_its_route_
 async def test_a_release_that_does_not_fit_beside_the_old_one_fails_and_the_old_one_serves() -> (
     None
 ):
-    # Room for one 256 MB child (269 MB with its overhead) but not for two at the same time.
-    world = await serving_release_one(memory_limit_mb=400, memory_budget_mb=256)
+    # Room for one 256 MB child (with its overhead) and 131 MB more, but not for two at once.
+    world = await serving_release_one(memory_limit_mb=ONE_CHILD_MB + 131, memory_budget_mb=256)
     world.release(2)
     await world.target(2)
 
     await world.wake()
 
     assert world.status(2) == "failed"
-    assert world.row(2).status_reason == "not enough memory: needs 269 MB, 131 MB free"
+    assert world.row(2).status_reason == f"not enough memory: needs {ONE_CHILD_MB} MB, 131 MB free"
     assert world.status(1) == "active"
     assert world.route_of() == 1
 
@@ -461,7 +464,7 @@ async def test_the_memory_books_count_what_runs_with_its_overhead() -> None:
     world = await serving_release_one(memory_limit_mb=1000, memory_budget_mb=256)
 
     assert world.reconciler.memory_ledger() == MemoryLedger(
-        limit_mb=1000, reserve_mb=0, committed_mb=269
+        limit_mb=1000, reserve_mb=0, committed_mb=ONE_CHILD_MB
     )
 
 

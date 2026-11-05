@@ -29,9 +29,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-# Measured in design 5.7: the egress pump (10 MB) plus slirp4netns (3 MB) that every child has,
-# on top of its budget. SC-003 replaces this with the real per-child figure.
-OVERHEAD_PER_CHILD_MB: Final = 13
+# What a sandbox costs on top of its app's budget. The capacity run (SC-003, T162, Free Edition
+# container, 2026-11-05) measured 60.7 to 61.1 MB per sandbox, the same for all four kinds of
+# fixture (the sandbox's process tree minus the app's own RSS), so this is that figure rounded up
+# to the next multiple of 16 MB. Design 5.7 first assumed 13 MB (the pump 10 MB and slirp 3 MB of
+# spike 7); the measured figure is about five times that, and the run did not itemise which
+# processes make up the rest. A new measurement above this value needs it raised (TD-032).
+OVERHEAD_PER_CHILD_MB: Final = 64
 
 _BYTES_PER_MB: Final = 1024 * 1024
 _BYTES_PER_KB: Final = 1024

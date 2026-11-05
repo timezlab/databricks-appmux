@@ -5,8 +5,8 @@ clock), so nothing here touches the registry or the machine, except the limit re
 tested against fake cgroup and ``/proc/meminfo`` files.
 
 The worked example of design 5.7: an 8192 MB limit, a 1024 MB reserve, so 7168 MB available;
-ten apps of 512 MB plus 13 MB of pump and slirp each commit 5250 MB (1918 MB free); an update of
-``sales`` next to its running release commits 525 MB more (5775 MB, 1393 MB free).
+ten apps of 512 MB plus 64 MB of sandbox overhead each commit 5760 MB (1408 MB free); an update of
+``sales`` next to its running release commits 576 MB more (6336 MB, 832 MB free).
 """
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ RESERVE_MB = 1024
 AVAILABLE_MB = LIMIT_MB - RESERVE_MB
 APP_BUDGET_MB = 512
 HEALTH_DEADLINE_S = 60
+# test_capacity.py on a container, 2026-11-05: 60.7 to 61.1 MB per sandbox (TD-032).
+MEASURED_SANDBOX_OVERHEAD_MB = 61.1
 NOW_S = 1000.0  # a reading of the monotonic clock; only differences matter
 REASON_SHAPE = re.compile(r"needs \d+ MB, \d+ MB free")
 
@@ -75,13 +77,14 @@ def admit(
 # ---- the worked example of design 5.7 -----------------------------------------------------------
 
 
-def test_ten_apps_of_512_commit_5250_and_leave_1918_free() -> None:
+def test_ten_apps_of_512_commit_5760_and_leave_1408_free() -> None:
     books = ledger(ten_apps())
 
-    assert OVERHEAD_PER_CHILD_MB == 13  # design 5.7: the pump 10 MB and slirp 3 MB
+    # Admission must never count less per sandbox than the capacity run measured.
+    assert OVERHEAD_PER_CHILD_MB >= MEASURED_SANDBOX_OVERHEAD_MB
     assert (books.limit_mb, books.reserve_mb) == (LIMIT_MB, RESERVE_MB)
-    assert books.committed_mb == 5250
-    assert books.free_mb == 1918
+    assert books.committed_mb == 5760
+    assert books.free_mb == 1408
 
 
 def test_apps_are_admitted_one_by_one_until_the_ten_are_running() -> None:
@@ -92,44 +95,43 @@ def test_apps_are_admitted_one_by_one_until_the_ten_are_running() -> None:
         running.append(RunningApp(slug=f"app{number}", budget_mb=APP_BUDGET_MB))
 
 
-def test_an_update_beside_its_running_release_adds_525_and_is_allowed() -> None:
+def test_an_update_beside_its_running_release_adds_576_and_is_allowed() -> None:
     sales_update = admit(ten_apps(), APP_BUDGET_MB)
 
     assert sales_update.admitted
-    assert sales_update.needed_mb == 525
+    assert sales_update.needed_mb == 576
     assert sales_update.reason is None
     books = ledger(with_sales_update_in_flight(started_at_s=NOW_S))
-    assert books.committed_mb == 5775
-    assert books.free_mb == 1393
+    assert books.committed_mb == 6336
+    assert books.free_mb == 832
 
 
 def test_a_2048_mb_app_is_refused_naming_what_it_needs_and_what_is_free() -> None:
-    # Free is 7168 - 5775 = 1393, the figure the PlatformView contract example carries for the
-    # same books. Design 5.7 printed 1643 until 2026-10-31, which no reading of its numbers gives.
+    # Free is 7168 - 6336 = 832, the figure of design 5.7's worked example.
     decision = admit(with_sales_update_in_flight(started_at_s=NOW_S), 2048)
 
     assert not decision.admitted
-    assert decision.needed_mb == 2061
-    assert decision.free_mb == 1393
-    assert decision.reason == "needs 2061 MB, 1393 MB free"
+    assert decision.needed_mb == 2112
+    assert decision.free_mb == 832
+    assert decision.reason == "needs 2112 MB, 832 MB free"
 
 
 def test_the_same_app_beside_the_ten_steady_apps_is_refused_with_their_free_memory() -> None:
     decision = admit(ten_apps(), 2048)
 
     assert not decision.admitted
-    assert decision.reason == "needs 2061 MB, 1918 MB free"
+    assert decision.reason == "needs 2112 MB, 1408 MB free"
 
 
 def test_an_app_that_needs_exactly_the_free_memory_fits_and_one_megabyte_more_does_not() -> None:
-    free_after_ten = 1918
+    free_after_ten = 1408
 
     fits = admit(ten_apps(), free_after_ten - OVERHEAD_PER_CHILD_MB)
     refused = admit(ten_apps(), free_after_ten - OVERHEAD_PER_CHILD_MB + 1)
 
     assert fits.admitted
     assert not refused.admitted
-    assert refused.reason == "needs 1919 MB, 1918 MB free"
+    assert refused.reason == "needs 1409 MB, 1408 MB free"
 
 
 def test_a_refusal_changes_nothing_in_the_books() -> None:
@@ -158,9 +160,9 @@ def test_an_over_committed_slot_reports_zero_free_in_the_reason_and_the_debt_in_
         now_s=NOW_S,
     )
 
-    assert books.free_mb == 5500 - 1024 - 5250 < 0
+    assert books.free_mb == 5500 - 1024 - 5760 < 0
     assert not decision.admitted
-    assert decision.reason == "needs 77 MB, 0 MB free"
+    assert decision.reason == "needs 128 MB, 0 MB free"
     assert REASON_SHAPE.fullmatch(decision.reason)
 
 
@@ -170,8 +172,8 @@ def test_an_over_committed_slot_reports_zero_free_in_the_reason_and_the_debt_in_
 def test_the_second_copy_counts_until_its_health_deadline_and_not_after() -> None:
     started_at_s = NOW_S
     running = with_sales_update_in_flight(started_at_s)
-    swap_committed = 5775
-    steady_committed = 5250
+    swap_committed = 6336
+    steady_committed = 5760
 
     just_before = ledger(running, now_s=started_at_s + HEALTH_DEADLINE_S - 0.5)
     at_deadline = ledger(running, now_s=started_at_s + HEALTH_DEADLINE_S)
@@ -213,7 +215,9 @@ def test_a_second_copy_with_a_new_budget_counts_its_own_budget() -> None:
         second_copy=SecondCopy(budget_mb=256, started_at_s=NOW_S, health_deadline_s=60),
     )
 
-    assert ledger((app,)).committed_mb == (128 + 13) + (256 + 13)
+    assert ledger((app,)).committed_mb == (128 + OVERHEAD_PER_CHILD_MB) + (
+        256 + OVERHEAD_PER_CHILD_MB
+    )
 
 
 # ---- reading the container's memory limit -------------------------------------------------------
