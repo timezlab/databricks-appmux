@@ -57,6 +57,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from appmux.sandbox.pump import (
     ATTACHED_SIGNAL,
     PUMP_INTERFACE,
+    SLIRP_BINARY_NAME,
     VETH_MTU,
     FramePump,
     NetworkAttachError,
@@ -734,6 +735,7 @@ class Supervisor:
         self._handoff_timeout_s = handoff_timeout_s
         self._exec_timeout_s = exec_timeout_s
         self._process: subprocess.Popen[bytes] | None = None
+        self._slirp: subprocess.Popen[bytes] | None = None
         self._requests: queue.SimpleQueue[_Request] = queue.SimpleQueue()
 
     # -- requests (safe from a signal handler) --
@@ -813,6 +815,7 @@ class Supervisor:
             )
         finally:
             slirp_end.close()  # slirp4netns holds its own copy
+        self._slirp = slirp
         cleanup.callback(self._stop_slirp, slirp)
         pump = FramePump(
             self._port_factory(packet_socket),
@@ -938,12 +941,31 @@ class Supervisor:
                 reason = f"wall-clock limit of {limit_s:g} s exceeded"
                 self._kill_sandbox()
                 break
+            if helper_failure := self._helper_failure():
+                # Design 11, "Child's pump or slirp dies": without a helper the child has no egress.
+                # It is that child's crash, so end it now and let the reconciler restart it with
+                # backoff; waiting for the grace period would only keep a child that cannot reach
+                # anything running.
+                reason = helper_failure
+                self._kill_sandbox()
+                break
             try:
                 process.wait(timeout=POLL_INTERVAL_S)
                 break
             except subprocess.TimeoutExpired:
                 continue
         return SandboxExit.from_returncode(process.wait(), reason=reason)  # already ended
+
+    def _helper_failure(self) -> str:
+        """Why the child's network is gone (``slirp4netns`` or the frame pump ended), or ``""``."""
+        slirp = self._slirp
+        if slirp is not None and (returncode := slirp.poll()) is not None:
+            how = SandboxExit.from_returncode(returncode).describe()
+            return f"{SLIRP_BINARY_NAME} {how}, so the child has no network"
+        pump = self.pump
+        if pump is not None and pump.has_stopped():
+            return "the frame pump stopped, so the child has no network"
+        return ""
 
     def _drain_requests(self) -> Iterator[_Request]:
         while True:

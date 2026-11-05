@@ -851,6 +851,10 @@ class FramePump:
         with contextlib.suppress(OSError):  # already shut down or closed by slirp's exit
             self._slirp.shutdown(socket.SHUT_RDWR)
 
+    def has_stopped(self) -> bool:
+        """``True`` once either direction has ended; each end calls ``stop()``, so both follow."""
+        return any(not thread.is_alive() for thread in self._threads)
+
     def wait(self, *, timeout_s: float) -> bool:
         """Wait for both threads to end; ``True`` if they did."""
         deadline = time.monotonic() + timeout_s

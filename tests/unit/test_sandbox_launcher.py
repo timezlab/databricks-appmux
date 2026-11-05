@@ -655,6 +655,8 @@ FAKE_SLIRP = textwrap.dedent(
     #!{python}
     import os, sys, time
     ready_fd = int(next(a for a in sys.argv[1:] if a.startswith("--ready-fd=")).split("=")[1])
+    with open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "slirp.pid"), "w") as f:
+        f.write(str(os.getpid()))
     os.write(ready_fd, b"1")
     time.sleep(60)
     """
@@ -995,6 +997,42 @@ def test_the_wall_clock_limit_ends_a_sandbox_that_runs_too_long(tmp_path: Path) 
     exited = run.wait_for("exited")
 
     assert "wall-clock limit" in exited["reason"]
+    assert exited["signal"] == signal.SIGKILL
+    assert run.finish() == 0
+    assert wait_until_gone(stage1_report(tmp_path)["pid"])
+
+
+def test_a_slirp4netns_that_dies_ends_the_sandbox_as_that_childs_crash(tmp_path: Path) -> None:
+    # TD-030, design 11 "Child's pump or slirp dies": the child has no egress and is treated as
+    # crashed, so the reconciler restarts it with backoff. Before the fix the sandbox kept running.
+    run = make_supervisor(tmp_path)
+    run.start()
+    run.wait_for("started")
+    slirp_pid_file = tmp_path / "bin" / "slirp.pid"
+    poll_until(slirp_pid_file.exists, what="the fake slirp4netns")
+    os.kill(int(slirp_pid_file.read_text()), signal.SIGKILL)
+
+    exited = run.wait_for("exited")
+
+    assert "slirp4netns" in exited["reason"]
+    assert exited["signal"] == signal.SIGKILL  # the sandbox was killed, not asked to leave
+    assert run.finish() == 0
+    assert wait_until_gone(stage1_report(tmp_path)["pid"])
+
+
+def test_a_frame_pump_that_ends_ends_the_sandbox_as_that_childs_crash(tmp_path: Path) -> None:
+    # The pump ends itself when either direction fails (FramePump._child_to_slirp and
+    # _slirp_to_child both call stop() in their finally); calling stop() is the same event.
+    run = make_supervisor(tmp_path)
+    run.start()
+    run.wait_for("started")
+    pump = run.supervisor.pump
+    assert pump is not None
+    pump.stop()
+
+    exited = run.wait_for("exited")
+
+    assert "frame pump" in exited["reason"]
     assert exited["signal"] == signal.SIGKILL
     assert run.finish() == 0
     assert wait_until_gone(stage1_report(tmp_path)["pid"])
