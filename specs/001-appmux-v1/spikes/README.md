@@ -1918,6 +1918,7 @@ Three more followed for T129, T155 and T137 (a run with `test_open_modes` and `t
 | `test_open_modes` (3) | T155 | **passed** (3) on the second invocation, see below |
 | `test_offline_install` (4) | T137 | **passed** (4) on the third invocation, see below |
 | `test_ui_on_container` (7) | T177 | **passed** (7), from the dev machine through the real proxy, see below |
+| `test_run_dir_cap` (2) | T060 | **passed** (2) on the first invocation, from the dev machine through the real proxy, see below |
 
 ### SC-002: a weakened sandbox fails closed (T070)
 
@@ -2094,6 +2095,26 @@ What the first runs found, all in the **test**:
 What this does not show: Chromium only (no Firefox or WebKit), the pages of the export as it was
 built that day, one workspace. The test does not run the pages of an app's own UI, which belong to the
 child.
+
+### The run directory's cap (T060)
+
+Free Edition only; two scratch apps of the `disk_filler` fixture were registered on the dev App and
+deleted at the end. The run was `scripts/run-remote-tests.sh tests/integration/test_run_dir_cap.py`
+from the dev machine (350 s, most of it waiting for per-minute figures), against the code of
+`55269a5`.
+
+* The cap holds. `disk_filler` wrote into `/run/appmux` until the filesystem refused: 67 108 864
+  bytes, exactly 64 MiB, in 0.018 s, refused with `ENOSPC`; `statvfs` read a 64 MiB filesystem; the
+  app answered `200` afterwards. (Spike 7's host-backed directory took 1 GiB in 1.5 s.)
+* The pages are memory, in the container and not in the child. With the 64 MiB kept in the file, the
+  `_platform` row's `mem_used_mb` peak went from 1 021 to 1 089 MiB (+68) in the next whole minutes,
+  and the child's `rss_mb_max` from 72 to 73 MiB. The test asserts that answer (the container grows
+  by at least half of what was written; the child's figure by at most 16 MiB), so a platform change
+  that moves it fails the test. One run; the container's figure includes whatever else ran in it.
+* Not run: the size watchdog stopping a shared-service-principal child that overfills its
+  host-backed directory (that directory has carried the child's token file, T147), and the other
+  four `tmpfs` mounts of a sandbox. What this means for the memory budget is in
+  [TD-004](../../../docs/tech-debt.md#td-004-a-childs-run-directory-size-cap-is-unproven).
 
 ### What was wrong with the tests, not the product
 

@@ -8,19 +8,24 @@ sandbox. That only works if nothing outside the sandbox needs a path in it, so t
 listening socket is bound by the launcher before the sandbox starts and inherited by the relay
 (``relay.bind_relay_socket``) instead of living in the run directory.
 
-What is NOT proven, and why TD-004 stays open:
+Measured in a container (dev App, 2026-11-05, ``tests/integration/test_run_dir_cap.py``, T060):
 
-* a ``tmpfs`` of this kind inside the unprivileged mount namespace, combined with the inherited
-  socket, has been neither built nor run on a container; ``rootfs.plan_rootfs`` emits it and the
-  first container run of the canary has to show the cap (a write past ``RUN_DIR_SIZE_MB`` fails);
-* whether ``tmpfs`` pages count against the child's memory budget or the container's limit is not
-  measured (the trigger recorded in TD-004).
+* the ``tmpfs`` inside the unprivileged mount namespace, with the inherited socket, holds its cap:
+  a writer was refused with ``ENOSPC`` at exactly ``RUN_DIR_SIZE_MB`` and the child went on
+  answering;
+* its pages are memory, and they are counted in the container and not in the child's resident
+  figure (the container's rose by 68 MiB for 64 MiB written, the child's by 1 MiB), so neither the
+  memory watchdog nor ``RLIMIT_AS`` sees them. That is why TD-004 stays open.
 
-The fallback for either failure is the second layer here: the launcher is given a host directory
-(``SandboxSpec.host_run_dir``), binds it read-write, and :func:`watch_run_dir` measures it and
-stops the child that passes ``RUN_DIR_LIMIT_BYTES``. Like the memory watchdog it polls, so a fast
-writer gets some way past the limit between two readings: bounded by ``WATCH_INTERVAL_S`` times
-the write rate, not prevented. That residue is the other half of TD-004.
+Not run in a container: :func:`watch_run_dir` below stopping a child that overfills a host-backed
+directory (the directory itself has carried a shared-service-principal child's token file).
+
+The second layer here is the fallback should the ``tmpfs`` fail, and the way of a child that must
+keep files the host reads: the launcher is given a host directory (``SandboxSpec.host_run_dir``),
+binds it read-write, and :func:`watch_run_dir` measures it and stops the child that passes
+``RUN_DIR_LIMIT_BYTES``. Like the memory watchdog it polls, so a fast writer gets some way past
+the limit between two readings: bounded by ``WATCH_INTERVAL_S`` times the write rate, not
+prevented. That residue is the other half of TD-004.
 """
 
 from __future__ import annotations

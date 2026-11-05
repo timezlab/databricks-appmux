@@ -1,0 +1,3 @@
+# Hostile fixture: run it only inside an appmux sandbox. It writes up to 256 MiB into the child's
+# run directory (the ceiling is fixed in app.py).
+command: ["python", "app.py"]
