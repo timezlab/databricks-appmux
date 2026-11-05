@@ -9,8 +9,9 @@ names of the request headers it got (never a value of a credential).
 This test talks HTTP to the edge on the container's own port and plays the Databricks proxy by
 sending the identity headers itself, which only works from inside the container. It does not run in
 the default gate: every test here is marked ``integration`` and skipped unless
-``APPMUX_TEST_CONTAINER=1``; ``scripts/sync-deploy.sh`` is the way to put the code on a container.
-Nothing here has been run against one yet.
+``APPMUX_TEST_CONTAINER=1``; ``scripts/run-container-tests.sh`` puts the code and this test on the
+dev App's container and runs it there. It passed there on 2026-11-05 (Free Edition only; see
+``specs/001-appmux-v1/spikes/README.md``).
 
 Set-up the run needs (it fails loudly when one is missing, instead of passing on nothing):
 
@@ -19,15 +20,21 @@ Set-up the run needs (it fails loudly when one is missing, instead of passing on
 * ``APPMUX_TEST_ADMIN_EMAIL``: a platform admin who is not the app's owner and holds no grant on
   it.
 
-The token the test sends is a made-up value: appmux only passes it on, and the fixture only reports
-that a header of that name arrived.
+The token the test sends is the admin's own, from ``APPMUX_TEST_USER_TOKEN`` (the container runner
+provides it): appmux looks the caller's groups up with it, and a made-up value makes that lookup
+fail, which refuses Open as a user on purpose (FR-023: "named by no grant" cannot be shown while the
+groups are unknown). The fixture reports only that a header of that name arrived, never its value.
+
+The children come up after the App starts, so the first test waits for the route to answer instead
+of reading a 503 for a child that is still starting.
 """
 
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 import httpx
@@ -35,10 +42,11 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
-FAKE_TOKEN: Final = "tok-test-open-mode"  # noqa: S105 - a placeholder, never a real credential
 COOKIE_NAME: Final = "__Host-appmux_open"
 USER_ACCESS_HEADER: Final = "x-forwarded-access-token"
 REQUEST_TIMEOUT_S: Final = 30.0
+CHILD_READY_TIMEOUT_S: Final = 300.0  # the children start one after another when the App starts
+POLL_INTERVAL_S: Final = 3.0
 API: Final = "/_appmux/api/v1"
 
 
@@ -47,6 +55,7 @@ class Target:
     base_url: str
     app: str
     admin_email: str
+    user_token: str = field(repr=False)  # a credential: never in a message or a repr
 
 
 def _required(name: str) -> str:
@@ -62,6 +71,7 @@ def target() -> Target:
         base_url=_required("APPMUX_TEST_BASE_URL").rstrip("/"),
         app=_required("APPMUX_TEST_OBO_APP"),
         admin_email=_required("APPMUX_TEST_ADMIN_EMAIL").strip().lower(),
+        user_token=_required("APPMUX_TEST_USER_TOKEN"),
     )
 
 
@@ -71,8 +81,36 @@ def client(target: Target) -> Iterator[httpx.Client]:
         yield session
 
 
+@pytest.fixture(scope="module", autouse=True)
+def child_answers(target: Target) -> None:
+    """Wait until the child's route answers: it is still starting when the App has just started."""
+    deadline = time.monotonic() + CHILD_READY_TIMEOUT_S
+    last = "no answer"
+    with httpx.Client(base_url=target.base_url, timeout=REQUEST_TIMEOUT_S) as session:
+        while time.monotonic() < deadline:
+            try:
+                response = session.get(
+                    f"/{target.app}/headers",
+                    headers={"X-Forwarded-Email": target.admin_email},
+                )
+            except httpx.HTTPError as exc:
+                last = type(exc).__name__
+            else:
+                if response.status_code == 200:
+                    return
+                last = str(response.status_code)
+            time.sleep(POLL_INTERVAL_S)
+    pytest.fail(
+        f"the route of {target.app} did not answer 200 within {CHILD_READY_TIMEOUT_S:g} s "
+        f"(last: {last}); is the app active and running?"
+    )
+
+
 def _identity(target: Target) -> dict[str, str]:
-    return {"X-Forwarded-Email": target.admin_email, "X-Forwarded-Access-Token": FAKE_TOKEN}
+    return {
+        "X-Forwarded-Email": target.admin_email,
+        "X-Forwarded-Access-Token": target.user_token,
+    }
 
 
 def _choose(
@@ -82,6 +120,14 @@ def _choose(
     if cookie is not None:
         headers["Cookie"] = cookie
     return client.post(f"{API}/apps/{target.app}/open-mode", json={"mode": mode}, headers=headers)
+
+
+def _code(response: httpx.Response) -> str:
+    """The error ``code`` of an API answer, or nothing: enough to tell a refusal from a fault."""
+    try:
+        return str(response.json().get("code", ""))
+    except ValueError:
+        return ""
 
 
 def _cookie_pair(response: httpx.Response) -> str:
@@ -139,7 +185,7 @@ def test_open_as_a_user_passes_the_token_until_the_admin_switches_back(
     rows_before = _view_as_user_rows(client, target)
 
     chosen = _choose(client, target, "as_user")
-    assert chosen.status_code == 204
+    assert chosen.status_code == 204, f"open-mode answered {chosen.status_code} {_code(chosen)}"
     cookie = _cookie_pair(chosen)
 
     as_user = _child_headers(client, target, cookie=cookie)
