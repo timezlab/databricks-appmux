@@ -1203,6 +1203,8 @@ FAKE_SUPERVISOR = textwrap.dedent(
         sys.exit(1)
     if mode == "dies":
         sys.exit(9)
+    if mode == "slow-start":
+        time.sleep(0.8)  # the real supervisor imports its modules before it installs handlers
     signal.signal(signal.SIGTERM, signal.SIG_IGN if mode == "ignores-sigterm" else stop)
     signal.signal(signal.SIGHUP, lambda *_: (scratch / "hup").write_text("1"))
     signal.signal(
@@ -1307,6 +1309,40 @@ async def test_signals_reach_the_supervisor_for_reload_and_stats(
 
         assert (tmp_path / "hup").exists()
         assert stats is not None and stats["dropped_total"] == 5
+    finally:
+        await handle.stop(grace_s=1)
+
+
+async def test_stats_are_not_asked_of_a_supervisor_that_has_not_started_yet(
+    tmp_path: Path, supervisor_command: list[str]
+) -> None:
+    # Until it installs its handlers a signal kills the supervisor (SIGUSR1 ends it with status
+    # -10), and the metrics sampler asks every child that is still coming up.
+    handle = await start_sandbox(
+        make_spec(tmp_path, environment={"FAKE_MODE": "slow-start"}),
+        supervisor_command=supervisor_command,
+    )
+    try:
+        assert await handle.read_stats(timeout_s=0.2) is None
+
+        await handle.wait_started(timeout_s=WAIT_S)
+    finally:
+        await handle.stop(grace_s=1)
+
+
+async def test_a_reload_asked_before_the_supervisor_started_is_delivered_when_it_starts(
+    tmp_path: Path, supervisor_command: list[str]
+) -> None:
+    handle = await start_sandbox(
+        make_spec(tmp_path, environment={"FAKE_MODE": "slow-start"}),
+        supervisor_command=supervisor_command,
+    )
+    try:
+        assert handle.reload_rules() is True
+
+        await handle.wait_started(timeout_s=WAIT_S)
+
+        poll_until(lambda: (tmp_path / "hup").exists(), what="the reload after the start")
     finally:
         await handle.stop(grace_s=1)
 

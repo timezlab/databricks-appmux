@@ -1066,6 +1066,7 @@ class SandboxHandle:
         self._spec = spec
         self.sandbox_pid: int | None = None
         self._started = False
+        self._reload_pending = False
         self._failure: str | None = None
         self._exit: SandboxExit | None = None
         self._returncode = 0
@@ -1098,6 +1099,9 @@ class SandboxHandle:
             self._started = True
             self.sandbox_pid = event.sandbox_pid
             self._settled.set()
+            if self._reload_pending:
+                self._reload_pending = False
+                self._signal_supervisor(signal.SIGHUP)
         elif event.event == "failed":
             self._failure = event.reason
             self._settled.set()
@@ -1140,11 +1144,29 @@ class SandboxHandle:
         return True
 
     def reload_rules(self) -> bool:
-        """Tell the supervisor to re-read the rules file; ``False`` if it is no longer running."""
+        """Tell the supervisor to re-read the rules file; ``False`` if it is no longer running.
+
+        Before the supervisor reports it started its signal handlers may not exist yet, and a
+        ``SIGHUP`` then ends it (status -1). The request is kept and sent when it reports the
+        start, which is also after the rules it read at its own start.
+        """
+        if not self._started:
+            if self._process.returncode is not None:
+                return False
+            self._reload_pending = True
+            return True
         return self._signal_supervisor(signal.SIGHUP)
 
     async def read_stats(self, *, timeout_s: float) -> PumpStats | None:
-        """Ask the supervisor for its pump counters; ``None`` if none arrived in time."""
+        """Ask the supervisor for its pump counters; ``None`` if none arrived in time.
+
+        A supervisor that has not reported its start may not have its handlers yet, and a
+        ``SIGUSR1`` then ends it (status -10, the failure "ended ... before the sandbox started").
+        The metrics sampler asks every child that is still coming up, so this answers ``None``
+        for one instead of signalling it.
+        """
+        if not self._started:
+            return None
         path = stats_path_for(self._spec)
         before = _file_identity(path)
         if not self._signal_supervisor(signal.SIGUSR1):
