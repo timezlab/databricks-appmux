@@ -18,9 +18,9 @@ The scenario, in order, on the ``appyaml_missing_resource`` fixture (two ``value
 This test talks HTTP to the edge on the container's own port and plays the Databricks proxy by
 sending the identity headers itself, which only works from inside the container. It does not run in
 the default gate: every test here is marked ``integration`` and skipped unless
-``APPMUX_TEST_CONTAINER=1``; ``scripts/sync-deploy.sh`` is the way to put the code on a container.
-Nothing here has been run against one yet, and its assumptions about the container (the status the
-edge answers for a child with no route, how long a start takes) are guesses until it has been.
+``APPMUX_TEST_CONTAINER=1``; ``scripts/run-container-tests.sh`` puts the code and this test on the
+dev App's container and runs it there. It passed there on 2026-11-05 (Free Edition only; see
+``specs/001-appmux-v1/spikes/README.md``).
 
 Set-up the run needs (it fails loudly when one is missing, instead of passing on nothing). Use the
 Free Edition scratch workspace only, a scratch secret scope and a disposable secret:

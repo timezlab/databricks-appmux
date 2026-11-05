@@ -18,11 +18,12 @@ really imported (its ``GET /report``):
 This test talks HTTP to the edge on the container's own port and plays the Databricks proxy by
 sending the identity headers itself, which only works from inside the container. It does not run in
 the default gate: every test here is marked ``integration`` and skipped unless
-``APPMUX_TEST_CONTAINER=1``; ``scripts/sync-deploy.sh`` is the way to put the code on a container.
-**Nothing here has been run against a container yet.** It can pass only once the service assembly
-gives the release builder a package step (the overlay is built in the ``building`` state by
-``reconciler/build.py``) and Update records the release's wheel list; until then the wheel-list
-assertions fail by design.
+``APPMUX_TEST_CONTAINER=1``; ``scripts/run-container-tests.sh`` puts the code and this test on the
+dev App's container and runs it there. It passed there on 2026-11-05 with the platform setting
+``package_mode`` at ``wheelhouse`` (Free Edition only; see
+``specs/001-appmux-v1/spikes/README.md``).
+The fixtures' ``requirements.txt`` files travel in the runner's overlay because the test compares
+their pinned hashes with the release's wheel list.
 
 Set-up the run needs (a missing one fails the run loudly instead of passing on nothing):
 

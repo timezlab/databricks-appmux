@@ -1700,7 +1700,7 @@ neighbour's p95 was 247 ms idle and 278 ms beside the hostile children, over 21 
 | Test file (tests) | Task | Why |
 |---|---|---|
 | `test_edge_capacity` (1) | T086 | needs the container: 500 requests a second without the proxy, and the edge's pid to read its CPU. It ran on 2026-11-05: see [Container runs inside the dev App](#container-runs-inside-the-dev-app-2026-11-05) |
-| `test_offline_install` (4), `test_open_modes` (3), `test_resources_container` (4), `test_sc004_walkthrough` (1), `test_ui_on_container` (7) | T137, T155, T129, T167, T177 | written against the edge's own port: they play the proxy with `X-Forwarded-Email` and do not use `ops_session`, so through the real proxy they get `302` or fail on `APPMUX_TEST_BASE_URL` having no port; most also need apps or variables registered first (fixture app slugs, a warehouse, a secret, a group, a second person's token) |
+| `test_offline_install` (4), `test_open_modes` (3), `test_resources_container` (4), `test_sc004_walkthrough` (1), `test_ui_on_container` (7) | T137, T155, T129, T167, T177 | written against the edge's own port: they play the proxy with `X-Forwarded-Email` and do not use `ops_session`, so through the real proxy they get `302` or fail on `APPMUX_TEST_BASE_URL` having no port; most also need apps or variables registered first (fixture app slugs, a warehouse, a secret, a group, a second person's token). All five ran on 2026-11-05: see [Container runs inside the dev App](#container-runs-inside-the-dev-app-2026-11-05) |
 | `test_requests_walkthrough` (4) | T148 | skipped: acts as two other people |
 | `test_credential_modes` (5) | T147 | did not run at first: the throwaway service principal, OAuth secret and scratch secret scopes it needs were refused by the session's permission check and not retried. It ran later the same day, after the owner authorised creating them: see [Credential modes from the dev machine](#credential-modes-from-the-dev-machine-2026-11-04) |
 | no test file yet | T070, T162, T180 | `test_self_check_fail_closed.py`, `test_capacity.py` and `test_failure_table.py` did not exist on 2026-11-04. They were written and run on 2026-11-05: see [Container runs inside the dev App](#container-runs-inside-the-dev-app-2026-11-05) |
@@ -1901,6 +1901,8 @@ unreadable reads that prints the App's state, and a restore that removes the ove
 Six more invocations followed after the supervisor fix (the row 20 re-run and the five SC-004 ones
 below); each produced a pytest result and each ended with the restore succeeding.
 
+Three more followed for T129, T155 and T137 (a run with `test_open_modes` and `test_resources_container`, then one with `test_open_modes` and `test_offline_install`, then `test_offline_install` alone); each produced a pytest result and each ended with the restore succeeding. T177 does not run inside the container; it ran from the dev machine, see its own section.
+
 ### Results
 
 | Test file (tests) | Task | Result |
@@ -1912,6 +1914,10 @@ below); each produced a pytest result and each ended with the restore succeeding
 | `test_requests_walkthrough` (4) | T148 | passed (4) |
 | `test_failure_table` (2) | T180 | row 19 passed; row 20 **failed** (the product, TD-030), then **passed** after the supervisor fix, see below |
 | `test_sc004_walkthrough` (1) | T167 | **passed** on the fifth invocation, see below |
+| `test_resources_container` (4) | T129 | **passed** (4), see below |
+| `test_open_modes` (3) | T155 | **passed** (3) on the second invocation, see below |
+| `test_offline_install` (4) | T137 | **passed** (4) on the third invocation, see below |
+| `test_ui_on_container` (7) | T177 | **passed** (7), from the dev machine through the real proxy, see below |
 
 ### SC-002: a weakened sandbox fails closed (T070)
 
@@ -2022,6 +2028,69 @@ prefix, old URL `404`). One observation without a cause: deleting the **running,
 33.0 s, while deleting the stopped ones took 0.1 s each, and the stop grace is 10 s. The test's
 cleanup now allows 180 s for a delete and carries on when one times out.
 
+### Resources, open modes and offline install (T129, T155, T137)
+
+Free Edition only; the scratch apps were registered by name on the dev App and deleted at the end.
+
+* `test_resources_container` (T129): 4 passed on the first invocation, with a scratch secret scope,
+  a SQL warehouse and the CLI token's owner as the person. Only its docstring changed.
+* `test_open_modes` (T155): 3 failed on the first invocation and 3 passed on the second. The
+  failures were in the test (see the list below). The scratch app was owned by someone else and
+  delegated OBO, so the dev App's own delegation was not touched.
+* `test_offline_install` (T137): the second invocation passed one of four tests and failed three;
+  the third passed all four (`package_mode` `wheelhouse`, four scratch apps). One failure was the
+  runner (the fixtures' `requirements.txt` was not in the overlay) and one was a defect in the
+  product, below. No platform setting was changed: `wheelhouse` is the default.
+
+**A product defect: a signal killed the supervisor before it was ready.** A `release` of
+`newer_wheel` failed with `the sandbox supervisor ended with status -10 before the sandbox
+started`. `SandboxHandle` (`sandbox/launcher.py`) sent `SIGUSR1` (the metrics sampler reads the pump's
+counters with it) and `SIGHUP` (reload the egress rules) to a supervisor that had not yet reported
+`started`; before that it has not installed its handlers, and the default action of both signals ends
+the process (status -10 and -1). The sampler asks every child that is coming up, so any release that
+was starting during a sample could hit it. Why it first showed on this run is not established. The fix: `read_stats` answers `None` and `reload_rules` keeps the
+request until the supervisor reports `started`, two tests first
+(`tests/unit/test_sandbox_launcher.py`). The race depends on timing, so one pass after the fix is
+not proof of its absence; the unit tests are what pins the signalling rule. Run C passed 4 of 4
+after it.
+
+### UI pages through the real proxy (T177)
+
+`7 passed in 174.60 s`, from the dev machine through the Apps proxy with
+`scripts/run-remote-tests.sh tests/integration/test_ui_on_container.py -s` (Free Edition only; the
+browser is the dev machine's own Chromium driven by `ui_browser_check.mjs`, and it sends the token's
+owner's bearer token on same-origin requests only, because from outside the proxy adds the person's
+identity itself). The seven tests: every page's CSP allows exactly the inline scripts it has; the
+isolation headers (COOP on pages, `nosniff`, no CORS header) are present; no page names another origin
+to fetch and every asset it names is served; an unknown path under the UI prefix is the 404 page with
+a policy; the browser loaded every page with no CSP violation, page error or console error; the
+browser sent no request to another origin; and the launcher, the platform page and the dashboard poll
+their API every few seconds (at least three refreshes, each 1 to 15 s apart).
+
+What the first runs found, all in the **test**:
+
+* COOP was asserted on API answers too. The spec asks for it on the UI (FR-021, design 7.3), and the
+  API conventions pin only `Cache-Control: no-store` and `nosniff`. COOP is now asserted on pages.
+* The dashboard polled "3 ms apart": one refresh reads its window and the window before it with
+  `Promise.all` (`web/src/components/dashboard/metrics-panel.tsx`), so every refresh is two
+  `/metrics` calls started together. Calls within 100 ms of the first call of a refresh now count as
+  one poll (`SAME_REFRESH_WINDOW_MS`; the window runs from the first call so a loop asking every few
+  tens of ms is still a burst). The example of a burst in the unit test moved from 50 ms to 300 ms
+  for that reason.
+* Chromium cancels requests in flight with `net::ERR_NETWORK_CHANGED` whenever the machine's network
+  interfaces change. The dev machine is a Docker host where another project's container restarts
+  all day and creates and deletes interfaces, so 3 pages failed to load whole on the first
+  run and 5 of 18 on the second even after retries. This is not a fault of the page or the proxy.
+  The test now retries a page whose load was cut that way up to five times and, if it is cut every
+  time, reports **no verdict** for the page and does not pass it. The passing run was made with a
+  local, uncommitted `LD_PRELOAD` shim that refuses Chromium's `NETLINK_ROUTE` socket so it assumes a
+  steady network. A reader who repeats the run on a quiet machine needs no shim; one on a machine like
+  that one needs it or a fix of the churn.
+
+What this does not show: Chromium only (no Firefox or WebKit), the pages of the export as it was
+built that day, one workspace. The test does not run the pages of an app's own UI, which belong to the
+child.
+
 ### What was wrong with the tests, not the product
 
 Each of these showed up as a failure on the first container run and is fixed:
@@ -2037,21 +2106,27 @@ Each of these showed up as a failure on the first container run and is fixed:
   held 538 MB of the ledger. They were deleted by exact slug and the run was repeated.
 * A delete that timed out aborted the walkthrough's cleanup and left three apps behind; they were
   deleted by exact slug and the cleanup is now best-effort.
+* `test_open_modes` asked the child straight after the restart and got `503` (the child was still
+  starting); it now waits for a `200` first. It also sent a made-up user token, which appmux's group
+  lookup rightly refused (`GROUPS_UNKNOWN`, `403`); it now uses the CLI token's owner's real token.
+* The runner's overlay left out the fixtures' `requirements.txt` files, which
+  `test_offline_install` compares with what a release recorded (`scripts/container_test_run.py`;
+  the overlay still carries none of the fixtures' code).
 * The SC-004 script sent the admin's token only on some calls (see the table above); it now sends it
   on every call made as the admin, and never as anybody else (`tests/unit/test_sc004_script.py`
   pins both). Its clean-up now waits 180 s for a delete and reports a timeout as a warning.
 
 ### What did not run
 
-| Test file (tests) | Task | What it needs |
-|---|---|---|
-| `test_open_modes` (3) | T155 | the dev App's own OBO delegation changed for the run, which is a change to the App's configuration the owner has not been asked about |
-| `test_offline_install` (4) | T137 | the platform setting `package_mode` set to `wheelhouse` for the run (a setting of the whole slot) |
-| `test_resources_container` (4) | T129 | a scratch secret, a SQL warehouse and a second person's token |
-| `test_ui_on_container` (7) | T177 | a Chromium inside the container, and the built `web/out` in the overlay |
+Every container-only test file has now run at least once, so no file waits on a missing set-up. What
+the runs still do not show:
 
-`test_failure_table` rows other than 19 and 20 are covered elsewhere (its docstring lists where).
-Not run is not passed: none of these files has a result.
+* The dev App's own OBO delegation was never changed (the open-modes test uses a scratch app), and the
+  offline-install test used the default `package_mode` `wheelhouse`, so the other package modes have
+  no container result.
+* `test_failure_table` rows other than 19 and 20 are covered elsewhere (its docstring lists where).
+* Everything above is the Free Edition workspace on one day; the company's paid workspace was not
+  used.
 
 ### Clean-up
 
