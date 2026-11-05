@@ -1,6 +1,6 @@
 # Quickstart: proving appmux v1
 
-How each success criterion of the [spec](spec.md) is checked once the code exists. The code is written in waves and [ARCHITECTURE.md](../../ARCHITECTURE.md) marks what exists; a check whose code does not exist yet cannot run. Commands marked *planned* are created by the tasks; the order follows [research D15](research.md#d15-order-of-proof).
+How each success criterion of the [spec](spec.md) is checked. The code was written in waves and [ARCHITECTURE.md](../../ARCHITECTURE.md) marks what exists; the order follows [research D15](research.md#d15-order-of-proof). The results of the first complete run, on the Free Edition workspace only, are in [the spike log](spikes/README.md#plan-checks-the-quickstart-run-2026-11-05).
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ uv run mypy src
 uv run pytest tests/unit tests/contract tests/load
 ```
 
-*Planned.* Expected: formatting and lint clean, no type errors, all unit and contract tests pass. The unit set covers `authz` as a table (every row of [design 9.2](../../docs/product/v1-design.md#92-who-may-do-what)), `routing`, `rewrite`, the egress rule engine, the `app.yaml` parser, the reconciler state table, the module-boundary test and the baseline-migration check.
+Expected: formatting and lint clean, no type errors, all unit and contract tests pass. The unit set covers `authz` as a table (every row of [design 9.2](../../docs/product/v1-design.md#92-who-may-do-what)), `routing`, `rewrite`, the egress rule engine, the `app.yaml` parser, the reconciler state table, the module-boundary test and the baseline-migration check.
 
 ## 2. Deploy and self_check (Databricks container)
 
@@ -30,11 +30,11 @@ scripts/run-remote-tests.sh   # the container scenarios below, from this machine
 scripts/run-container-tests.sh  # the ones that need to run inside the App (capacity, /proc); restarts the App
 ```
 
-Expected: from the first seconds of the start `/` answers `200` "starting" and every other path `503` (the startup gate, [design 5.6](../../docs/product/v1-design.md#56-crash-restart-and-shutdown)); the app is not restarted by the platform while `self_check` runs; then the platform page shows `self_check` **ok** with every check of [design 6.4](../../docs/product/v1-design.md#64-self-check-failures-and-gaps) listed; no child exists yet.
+Expected: once the process is up, and until the registry is loaded and the start-up steps (the content store, `self_check`, the children) have run, `/` answers `200` "starting" and every other path `503` (the startup gate, [design 5.6](../../docs/product/v1-design.md#56-crash-restart-and-shutdown)); before the process is up the Apps proxy answers its own `502` page, which appmux does not control (on 2026-11-05 that lasted about 77 s and the gate was visible for about 10 s, [log](spikes/README.md#the-startup-gate-during-a-deploy)); the app is not restarted by the platform while `self_check` runs; then the platform page shows `self_check` **ok** with every check of [design 6.4](../../docs/product/v1-design.md#64-self-check-failures-and-gaps) listed; no child exists yet.
 
 ## 3. Capacity of the real edge (first integration scenario)
 
-`tests/load` *planned*: 500 requests a second over 10 connections, paced, against a fast fixture app registered through the API. Expected: p95 and error rate reported, CPU of the edge process reported. If the edge cannot hold the rate with room to spare, stop and revisit [ADR 0014](../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md) before building further.
+`tests/integration/test_edge_capacity.py`, run inside the App with `scripts/run-container-tests.sh` (the load generator and the edge's pid must share the container): 500 requests a second over 10 connections, paced, against a fast fixture app registered through the API. Expected: p95 and error rate reported, CPU of the edge process reported. If the edge cannot hold the rate with room to spare, stop and revisit [ADR 0014](../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md) before building further.
 
 ## 4. The four success criteria
 
@@ -47,8 +47,8 @@ Expected: from the first seconds of the start `/` answers `200` "starting" and e
 
 ## 5. Hostile fixtures
 
-`tests/fixtures` *planned*: the environment snooper, package-environment writer (must get `EROFS`), localhost/container-IP/metadata scanner, start-up crash, crash loop, always-500 health check, slow start, memory hog, fork bomb, and a secret-and-registry snooper. Each is registered through the normal path and must be contained without affecting a neighbour under load.
+`tests/fixtures`: the environment snooper, package-environment writer (must get `EROFS`), localhost/container-IP/metadata scanner, start-up crash, crash loop, always-500 health check, slow start, memory hog, fork bomb, and a secret-and-registry snooper. Each is registered through the normal path and must be contained without affecting a neighbour under load.
 
 ## Not covered here
 
-Measurements not yet made (paid workspace, the real edge's capacity, memory hog, fairness inside the pinned CPU) are listed in [TD-003](../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort) and [TD-005](../../docs/tech-debt.md#td-005-platform-measurements-come-from-free-edition-only).
+Measurements not yet made (the paid workspace, a 100-app run instead of an estimate, fairness inside the pinned CPU, a fast allocator between two watchdog readings) are listed in [TD-003](../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort) and [TD-005](../../docs/tech-debt.md#td-005-platform-measurements-come-from-free-edition-only).

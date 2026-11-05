@@ -2025,7 +2025,8 @@ already running:
 * **Row 19, a child allocating without end**: stopped at 288 MB held under a 512 MB address-space
   limit (a 256 MB budget), by `MemoryError`, not by a watchdog. The RSS watchdog is not started by
   the service at all ([TD-029](../../../docs/tech-debt.md#td-029-the-rss-watchdog-is-written-and-tested-but-the-service-never-starts-it)),
-  so a hog that spreads over several processes is still unmeasured.
+  so a hog that spreads over several processes was still unmeasured at this point; it was measured
+  after the watchdog was wired in, the same day (TD-029).
 * **Row 20, `slirp4netns` killed**: 90 s later the child was still `running` in the same sandbox
   with no network helper, and the supervisor had noticed nothing. The design says this is a crash of
   that child. **The test failed and was left failing**:
@@ -2208,3 +2209,76 @@ secret scopes (`appmux-t-own-sp`, `appmux-t-foreign`) made for the credential-mo
 service-principal-grant runs were deleted, and the workspace was listed again: no scope and no such
 principal left. Before that, the dev App's own permission list was compared with the one saved before
 the grant run: 4 entries, identical. The dev App runs the normal code.
+
+## Plan checks: the quickstart run (2026-11-05)
+
+Free Edition workspace only, one container, one day; the company's paid workspace was not used.
+This is [quickstart.md](../quickstart.md) read step by step against what ran (T181), with the
+SC-001 numbers that `ARCHITECTURE.md` points to (T110). Two things were run for this heading: the
+local checks again on the head `c2f143e`, and the startup gate, which no earlier run had observed
+on a container. Every other row links to the run that produced its figure; nothing was run twice
+to fill a row. The rows therefore come from different invocations and different heads of `src/`
+(2026-11-04 for the hostile fixtures and the remote `self_check`; 2026-11-05 for the rest, with the
+supervisor fix, the watchdog wiring and the overhead constant landing between runs), and the
+quickstart was **not** run once, in order, on a single head. A figure from an earlier head may have
+moved; the only way to know is that one in-order run.
+
+| Quickstart step | Result (Free Edition only) | Where |
+|---|---|---|
+| 1 Local checks | `ruff format --check` (404 files) and `ruff check` clean; `mypy src` clean (129 files); `pytest tests/unit tests/contract tests/load`: **7 997 passed**, 1 warning, 130 s. UI: typecheck, lint and format clean; 2 886 unit and component tests; build ok; 63 export tests; 810 end-to-end tests | this section, T176 |
+| 2 Deploy | `scripts/sync-deploy.sh` ended `SUCCEEDED` after 20 of 60 checks; the startup gate was seen answering, see below | [below](#the-startup-gate-during-a-deploy) |
+| 2 `self_check` | all 13 checks `ok`: 6.8 s and 6.9 s inside the App, 7.2 s and 7.4 s from the dev machine | [T068](#container-runs-from-the-dev-machine-2026-10-31), [container runs](#results) |
+| 3 Capacity of the real edge | 15 000 requests in 30 s at 500 a second: 0 failed, p95 3.98 ms, 62.3 % of one core | [T086](#sc-001-the-edge-at-500-requests-a-second-t086) |
+| SC-001 No disruption | 145 000 requests at 500 a second across a 60 s control and six operations: **0 failed in every one**, the failed-health release included. Worst slice p95 during: 25.8 ms (egress edit) to 346 ms (failed health); **1 877 ms for three heavy builds at once** (median slice 970 ms, edge at 86 % of a core), against 104 ms for the control's own worst slice | [T108](#sc-001-no-disruption-under-operations-t108), [TD-003](../../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort) |
+| SC-002 Fail-closed isolation | healthy sandbox: nothing failed. Each layer left out failed the check it guards (`platform_files`, `capabilities`, `loopback_and_container_ip` with `metadata_address`); the gate answered `503` for the app and named the check | [T070](#sc-002-a-weakened-sandbox-fails-closed-t070) |
+| SC-003 Capacity | ten apps in four kinds started and loaded; sandbox overhead 60.7–61.1 MB each; the eleventh refused with `not enough memory: needs 269 MB, 100 MB free`; 100 apps is an estimate, not a measurement | [T162](#sc-003-ten-apps-and-an-eleventh-that-is-refused-t162), [TD-032](../../../docs/tech-debt.md#td-032-admission-assumes-13-mb-of-sandbox-overhead-and-the-measured-figure-is-61-mb) |
+| SC-004 No hand-edited database | the ten-step walkthrough passed through the admin API, no SQL typed (fifth invocation; the first four failed in the test, not the product) | [T167](#sc-004-the-scripted-walkthrough-t167) |
+| 5 Hostile fixtures | `env_snooper`, `pkg_env_writer`, `fork_bomb` and `network_scanner` contained, neighbour p95 247 ms idle and 278 ms beside them (6 of 6); `startup_crash`, `always_500`, `slow_start` and `crash_loop` through hosting, rollback and the failure table; `memory_hog` stopped at 288 MB under a 512 MB limit (row 19) and `memory_hog_workers` by the RSS watchdog at 491 MB against 384 MB; `disk_filler` against the run directory's cap; `secret_registry_snooper` in the credential-modes run | [T069](#what-else-passed-in-run-1), [T180](#failure-table-rows-19-and-20-t180), [T060](#the-run-directorys-cap-t060), [credential modes](#what-the-snooper-children-reported) |
+
+### The startup gate during a deploy
+
+[Quickstart step 2](../quickstart.md#2-deploy-and-self_check-databricks-container) expects `/` to
+answer `200` "starting" and every other path `503` while the service starts. Until this run that
+was contract-tested against the gate in process (`tests/contract/test_startup_gate.py`) and never
+seen on a container.
+
+How: `scripts/sync-deploy.sh` redeployed the same code to the dev App while a read-only script (kept
+in the session's scratch folder, not committed) fetched `/` and `/_appmux/api/v1/me` through the Apps
+proxy every 2 s with the CLI's token and logged each change in the pair of answers. The script
+labelled a body by the words it held; no body, header or address was kept.
+
+| Seconds into the poll | `/` | `/_appmux/api/v1/me` | Who answered |
+|---|---|---|---|
+| 2.1 | 200 | 200 | appmux, open (before the deploy restarted anything) |
+| 200.9 | 502 | 502 | the Apps proxy's "not available" page (labelled by its words) |
+| 277.5 | **200**, body says "starting" | **503**, body says "starting" | appmux's startup gate |
+| 287.9 | 200 | 200 | appmux, open |
+
+What it shows:
+
+* The expected answers held for the two paths polled: `200` on `/` and `503` on the API path while
+  the service starts, then both `200`.
+* "From the first seconds of the start" holds for the process, not for the restart as a whole: the
+  proxy answered `502` for about 77 s (give or take the 2 s step) before appmux could answer at all,
+  and the gate was visible for about 10 s. appmux does not control the first of those.
+* No `502` came between the `starting` answer and the open one, so the platform did not restart the
+  App in that window. The poll was stopped as soon as the gate opened, so the log says nothing about
+  the minutes after it.
+
+What it does not show: the `Retry-After` header, the other paths and methods (the contract test
+covers them), and a `blocked` phase on a container beyond what the SC-002 run recorded. One deploy,
+one poll.
+
+### What the quickstart still leaves open
+
+* The paid workspace was not used, so every figure above is Free Edition's quota and platform.
+* The 100-app figure is a linear estimate from ten apps.
+* A fast allocator that reaches the container's memory limit between two one-second readings of
+  the RSS watchdog is not measured; a hog over four processes was stopped by the watchdog at 491 MB
+  against its limit of 384 MB ([TD-029](../../../docs/tech-debt.md#td-029-the-rss-watchdog-is-written-and-tested-but-the-service-never-starts-it),
+  [TD-003](../../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort)).
+* Fairness among children that share the pinned CPU, and pinning without `nice`, were not measured
+  (TD-003).
+* Whether 62 % to 86 % of one core is "room to spare" for
+  [ADR 0014](../../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md) is the
+  owner's judgement; the revisit trigger written there did not fire.
