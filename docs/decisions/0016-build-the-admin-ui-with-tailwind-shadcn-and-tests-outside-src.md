@@ -114,6 +114,20 @@ any `eval`.
 - Cost: each page loads 295 to 307 KB of JavaScript gzipped (1.0 to 1.1 MB raw); the dashboard loads 399 KB gzipped, about 90 to 105 KB more than the other pages, which is Recharts.
 - Not covered: only the first load of each page (no poll cycle, click, form or navigation), only Chromium, no real edge, no container ([TD-011](../tech-debt.md)).
 
+## Verification (2026-11-05)
+
+Closes the first "Not covered" items above (T176, T177):
+
+- `npm run test:e2e` now passes 810 tests on a fresh export: each
+  page at 1280 and 390 px, light and dark, with no CSP violation, console error, overflow or squeeze.
+- The same export, served by the real edge in the Free Edition dev App and opened in Chromium through the
+  Apps proxy, loaded under the real `csp.py` policy (no `unsafe-inline`, no `unsafe-eval`) with no
+  `securitypolicyviolation`, no cross-origin request, working polling and the isolation headers
+  (`tests/integration/test_ui_on_container.py`, 7 passed). That is the "built export loads in a real browser
+  under the reference CSP" item above, now on the real edge and not only a stand-in.
+- Still not covered: a browser session's own token reaching the folder browser and the resource pickers
+  (the checks used the CLI token's owner).
+
 ## Revisit if
 
 The browser smoke test finds a CSP violation in Recharts or a Radix-based

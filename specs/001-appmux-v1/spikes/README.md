@@ -1903,6 +1903,12 @@ below); each produced a pytest result and each ended with the restore succeeding
 
 Three more followed for T129, T155 and T137 (a run with `test_open_modes` and `test_resources_container`, then one with `test_open_modes` and `test_offline_install`, then `test_offline_install` alone); each produced a pytest result and each ended with the restore succeeding. T177 does not run inside the container; it ran from the dev machine, see its own section.
 
+Two more followed for T108 (`test_zero_downtime` at the full 500 requests a second, five
+minutes of pytest each). The first got a pytest result with 7 passed and 1 failed: the egress edit
+was refused with `403 registry_role_missing` before it ran, because the test did not send the
+admin's token (a fault of the test, see the list at the end); the second passed 8. Each ended with
+the restore succeeding.
+
 ### Results
 
 | Test file (tests) | Task | Result |
@@ -1919,6 +1925,7 @@ Three more followed for T129, T155 and T137 (a run with `test_open_modes` and `t
 | `test_offline_install` (4) | T137 | **passed** (4) on the third invocation, see below |
 | `test_ui_on_container` (7) | T177 | **passed** (7), from the dev machine through the real proxy, see below |
 | `test_run_dir_cap` (2) | T060 | **passed** (2) on the first invocation, from the dev machine through the real proxy, see below |
+| `test_zero_downtime` (8) | T108 | **passed** (8) on the second invocation, see below |
 
 ### SC-002: a weakened sandbox fails closed (T070)
 
@@ -1940,6 +1947,43 @@ edge process used 18.7 s of CPU in the 30 s (**62.3% of one core**); the load ge
 The test asserts no failures and at least 95% of the rate, and sets no limit on p95 or CPU: whether
 62% of a core is "room to spare" for [ADR 0014](../../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md)
 is the owner's judgement and is not made here. One workload (an empty `GET`), one container, one run.
+
+### SC-001: no disruption under operations (T108)
+
+`test_zero_downtime` inside the dev App, 2026-11-05 (Free Edition only): app A (`light_fastapi`, an
+empty `GET`) under 500 requests a second over 10 connections, in 5 s slices. A control run of 60 s
+does nothing; then each of six operations is run with 10 s of load before it and the load going on
+while it runs and settles. **145 000 requests were sent in all and none failed**, in the control or
+in any operation. Edge CPU was read from the edge process. The p95 figures are the worst and the
+median of the 5 s slices; the test asserts that no operation raised, that requests were answered and
+that failures do not pass the control's, and sets no limit on p95.
+
+| Operation (took) | Failed requests before / during | Worst slice p95, before → during | Median slice p95 during | Edge CPU during |
+|---|---|---|---|---|
+| control, nothing (60 s) | 0 / 0 | 10.1 → 103.9 ms | 3.7 ms | 40.8 s in 60.0 s (68 % of a core) |
+| register B (0.2 s) | 0 / 0 | 3.7 → 38.4 ms | 21.3 ms | 6.8 s in 10.0 s |
+| update B (4.2 s) | 0 / 0 | 47.5 → 216.6 ms | 110.1 ms | 7.9 s in 10.0 s |
+| update A with a good release (12.9 s) | 0 / 0 | 28.2 → 180.5 ms | 4.9 ms | 36.7 s in 50.4 s (73 %) |
+| update A with a release that fails its health check (63.5 s) | 0 / 0 | 36.0 → 346.3 ms | 27.3 ms | 53.3 s in 70.1 s (76 %) |
+| a heavy build in parallel (6.1 s; three Updates of `wheels_only`) | 0 / 0 | 15.8 → **1 877.3 ms** | 970.1 ms | 10.2 s in 11.8 s (86 %) |
+| an egress rule edit (0.3 s) | 0 / 0 | 7.4 → 25.8 ms | 18.9 ms | 7.6 s in 10.0 s |
+
+What it shows, and what it does not:
+
+* The criterion as the task states it (no more failed requests than the control) holds for every
+  operation, the failed-health one included: A kept serving while its new release failed.
+* The heavy build is the one operation that costs latency you can see: the median slice p95 went
+  from 3.7 ms (control) to 970 ms and the worst to 1.9 s, with the edge using 86 % of a core. Three
+  builds installing wheels at once share the container's quota of about 2 CPUs with the edge. The
+  first invocation, whose egress edit was refused, measured the same five operations again with no
+  failed request and a worst slice p95 of 2 137 ms for the heavy build, so this is not one bad run.
+  Whether that is "room to spare" for [ADR 0014](../../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md)
+  is the owner's judgement; no figure for it is written down. The CPU that builds may take is
+  [TD-003](../../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort).
+* The control's own worst slice (104 ms against a median of 3.7 ms) shows how much one slice of this
+  container moves with nothing happening, so a single slice of 40 to 350 ms is within that.
+* One workload, one container, two invocations of the same code, the platform's quota as measured
+  on Free Edition. The company's paid workspace was not used.
 
 ### SC-003: ten apps and an eleventh that is refused (T162)
 
@@ -2140,6 +2184,10 @@ Each of these showed up as a failure on the first container run and is fixed:
 * The SC-004 script sent the admin's token only on some calls (see the table above); it now sends it
   on every call made as the admin, and never as anybody else (`tests/unit/test_sc004_script.py`
   pins both). Its clean-up now waits 180 s for a delete and reports a timeout as a warning.
+* The egress edit of `test_zero_downtime` sent no token, so the first full-rate invocation got
+  `403 registry_role_missing` (a rule list is written under the admin's own database role) and the
+  operation never ran; the other five had passed in the same invocation. The step now sends the
+  admin's token and the second invocation passed all eight.
 
 ### What did not run
 

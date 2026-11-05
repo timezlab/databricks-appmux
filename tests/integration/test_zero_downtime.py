@@ -36,10 +36,12 @@ App's real proxy with the bearer token, so the latencies include the proxy and t
 remote run sets ``APPMUX_TEST_RATE_PER_S`` well below 500: that run is not evidence for SC-001. It
 does not run in the default gate: every test that needs appmux is marked
 ``integration`` and skipped unless ``APPMUX_TEST_CONTAINER=1``; ``scripts/sync-deploy.sh`` puts the
-code on a container. It has run only as a reduced remote run on the Free Edition dev App
-(2026-11-01, 20 requests a second, spikes README), so no claim that SC-001 holds exists. Update,
-the swap and the egress edit must all be mounted for the run to get past its set-up; a step whose
-route is missing fails with the status it got.
+code on a container. It has run inside the Free Edition dev App at the full 500 requests a second
+(2026-11-05: 8 passed, no failed request in the control or in any of the six operations; the first
+invocation of that day was refused at the egress edit by this file's missing token, see
+``edit_egress_of_a``), and as reduced remote runs at 20 requests a second (2026-11-01, 2026-11-04);
+the figures are in the spikes README. Update, the swap and the egress edit must all be mounted for
+the run to get past its set-up; a step whose route is missing fails with the status it got.
 
 Set-up the run needs (it fails loudly when one is missing, instead of passing on nothing):
 
@@ -247,8 +249,15 @@ class Scenario:
     def edit_egress_of_a(self) -> None:
         session = self.session
         version = session.app(self.a)["version"]
+        # A rule list is written under the platform admin's own database role, so the call carries
+        # the admin's token. Inside the container the test plays the proxy and sends the token only
+        # when asked: without it the first full-rate run got 403 registry_role_missing (2026-11-05),
+        # while a remote run never showed it because the real proxy always adds the token.
         session.call(
-            "PUT", f"/apps/{self.a}/egress", json=egress_body(version=version, rules=[EGRESS_RULE])
+            "PUT",
+            f"/apps/{self.a}/egress",
+            json=egress_body(version=version, rules=[EGRESS_RULE]),
+            with_token=True,
         )
         rules = session.app(self.a)["egress"]
         assert [rule["cidr"] for rule in rules] == [EGRESS_RULE["cidr"]]

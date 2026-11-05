@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from [`specs/001-appmux-v1/spec.md`](spec.md)
 
-**Status**: [tasks.md](tasks.md) generated 2026-10-30; ready for `/speckit-implement` when the owner asks. Owner decisions in this plan: spec question 5 answered (a) on 2026-10-30, so [ADR 0004](../../docs/decisions/0004-keep-decisions-in-a-nine-table-lakebase-registry-with-split-writers.md) is `accepted`. Assumptions A1–A5 were confirmed as written on 2026-10-30.
+**Status**: [tasks.md](tasks.md) generated 2026-10-30; implementation started on 2026-10-30 at the owner's request (`/speckit-implement`) and runs in waves — `tasks.md` is ticked only for work whose tests pass, and its open items are the record of what is not done. Owner decisions in this plan: spec question 5 answered (a) on 2026-10-30, so [ADR 0004](../../docs/decisions/0004-keep-decisions-in-a-nine-table-lakebase-registry-with-split-writers.md) is `accepted`. Assumptions A1–A5 were confirmed as written on 2026-10-30.
 
 ## Summary
 
@@ -154,4 +154,4 @@ No constitution violations. The plan adds no module, service or dependency beyon
 |---|---|---|
 | 0 | [research.md](research.md) | written |
 | 1 | [data-model.md](data-model.md), [contracts/](contracts/), [quickstart.md](quickstart.md) | written |
-| 2 | [tasks.md](tasks.md) | written by `/speckit-tasks` on 2026-10-30 |
+| 2 | [tasks.md](tasks.md) | written by `/speckit-tasks` on 2026-10-30; ticked as the waves land |

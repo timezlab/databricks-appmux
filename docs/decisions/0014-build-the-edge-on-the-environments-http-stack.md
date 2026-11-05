@@ -70,6 +70,23 @@ Postgres driver, which the environment lacks; spike 1 logged in with
 - No dependency is added to appmux's requirements without a check of the
   base-layer cost and a hashed wheel.
 
+## Measured (2026-11-05)
+
+The real edge ran at SC-001's rate inside the Free Edition dev App's container
+([spike log](../../specs/001-appmux-v1/spikes/README.md#sc-001-the-edge-at-500-requests-a-second-t086)),
+which is the first "Must now be true" item above:
+
+- 15 000 requests in 30 s at 500 a second over 10 connections to one sandboxed child: 0 failed,
+  p95 3.98 ms, the edge process used 62 % of one core (T086).
+- 145 000 requests at the same rate across a control run and six operations (register, update,
+  swap, a failed-health release, three builds at once, an egress edit): 0 failed; the edge used
+  68 % of a core in the control and up to 86 % while three builds ran, when p95 rose to 1.9 s
+  ([SC-001 table](../../specs/001-appmux-v1/spikes/README.md#sc-001-no-disruption-under-operations-t108), T108).
+
+The revisit trigger below is not met. One workload (an empty `GET`), one container, Free Edition
+only; whether 62 to 86 % of a core is room to spare is the owner's judgement, and no figure for it
+is written here.
+
 ## Revisit if
 
 The first load run of the real edge misses SC-001 by more than a tuning change

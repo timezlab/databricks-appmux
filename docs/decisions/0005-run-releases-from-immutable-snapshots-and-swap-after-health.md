@@ -111,3 +111,11 @@ larger files.
 - The folder's ACL gives `CAN_MANAGE` to the SP and to the `admins` group, so any
   workspace admin can read every snapshot and wheel. The "Must now be true"
   list is unchanged.
+
+**SC-001 and a failed release, 2026-11-05 (pass; [log](../../specs/001-appmux-v1/spikes/README.md#sc-001-no-disruption-under-operations-t108)).**
+The first "Must now be true" item was measured in the Free Edition dev App's container with app A
+under 500 requests a second: updating A with a good release (the swap), and with a release that
+fails its health check, caused no failed request (0 in 30 000 and 0 in 40 000, the control also 0).
+The failed release stayed `failed` and A kept serving on its active release. Free Edition only,
+one container, one workload; "Revisit if" is not triggered. The consequences and the list above are
+unchanged.
