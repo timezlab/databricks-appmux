@@ -1,6 +1,6 @@
 # appmux v1 — data model (Lakebase)
 
-**Status:** design approved; names are final for v1. **Nothing described here is implemented**; [ARCHITECTURE.md](../../ARCHITECTURE.md) marks what exists. **Date:** 2026-10-30.
+**Status:** design approved; names are final for v1. **This is the design, not a status report:** the tables are created by the baseline migration, and [ARCHITECTURE.md](../../ARCHITECTURE.md) marks what else exists. **Date:** 2026-10-30 (status line updated 2026-11-05).
 
 This document is the detailed design of every table appmux keeps in its Lakebase database (the **registry**). [The v1 design](v1-design.md) says what appmux does; this says what it remembers and why. The [plan](../../specs/001-appmux-v1/data-model.md) adopts these table and column names as the baseline migration; a later change to one is a new migration, not an edit of the baseline. Every example uses made-up names (`example.com` emails, an app called `sales`) and shortened ids and hashes.
 

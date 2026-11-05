@@ -87,6 +87,28 @@ succeeds at any forbidden action, no route opens ([design §6.2–6.4](../produc
 - `slirp4netns` is fetched at install with a checksum and never committed (its
   licence is believed to be GPL-2.0; spike 9).
 
+## Measured (2026-11-05)
+
+On the Free Edition dev App, in the quickstart run
+([spike log](../../specs/001-appmux-v1/spikes/README.md#plan-checks-the-quickstart-run-2026-11-05)),
+for these "Must now be true" items:
+
+- No route opens while `self_check()` has failed: with each of three layers left out in turn
+  (the `/proc` overmount, the capability drop, the pump filter) the check that guards it failed and
+  the app's route answered `503` naming the check; the healthy control failed nothing.
+- The environments are read-only: all 13 checks passed on a healthy sandbox, the read-only
+  environment and the inherited-descriptor checks among them, and the package-environment writer
+  fixture got `EROFS` in its two attempts.
+- The hostile fixtures stayed inside: the environment snooper could read neither pid 1 nor
+  `runtime.cfg` (`ENOENT`) and saw 0 pids, the fork bomb was refused with `EAGAIN` after 247 of 256 forks, the scanner got
+  timeouts for the metadata address, and a denied destination timed out under both a saved and a
+  live-reloaded rule.
+
+Not measured on a container: that the pump drops frames it cannot parse, that the editor refuses an
+`allow` over the protected ranges (unit and contract tests only), and the sandbox adapter's
+launcher being the only way a child starts (the module-boundary test). One container, Free
+Edition only.
+
 ## Revisit if
 
 `self_check()` fails on a healthy deploy because the platform removed user

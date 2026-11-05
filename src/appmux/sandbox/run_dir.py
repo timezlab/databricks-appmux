@@ -10,12 +10,15 @@ listening socket is bound by the launcher before the sandbox starts and inherite
 
 Measured in a container (dev App, 2026-11-05, ``tests/integration/test_run_dir_cap.py``, T060):
 
-* the ``tmpfs`` inside the unprivileged mount namespace, with the inherited socket, holds its cap:
-  a writer was refused with ``ENOSPC`` at exactly ``RUN_DIR_SIZE_MB`` and the child went on
-  answering;
-* its pages are memory, and they are counted in the container and not in the child's resident
-  figure (the container's rose by 68 MiB for 64 MiB written, the child's by 1 MiB), so neither the
-  memory watchdog nor ``RLIMIT_AS`` sees them. That is why TD-004 stays open.
+* the ``tmpfs`` inside the unprivileged mount namespace, with the inherited socket, holds its cap
+  *in bytes*: a writer was refused with ``ENOSPC`` at exactly ``RUN_DIR_SIZE_MB`` and the child
+  went on answering. The mount sets no ``nr_inodes``, so the number of files is not capped, and
+  the test never created any (TD-004);
+* its pages are memory, and in one run they were counted in the container and not in the child's
+  resident figure (the container's rose by 68 MiB for 64 MiB written, the child's by 1 MiB), so
+  the memory watchdog, which reads that figure, does not see them. ``RLIMIT_AS`` bounds a
+  process's address space and file pages it has not mapped are not in it; that is how the kernel
+  defines it, and it was not measured here. That is why TD-004 stays open.
 
 Not run in a container: :func:`watch_run_dir` below stopping a child that overfills a host-backed
 directory (the directory itself has carried a shared-service-principal child's token file).

@@ -279,8 +279,21 @@ def capacity() -> Iterator[CapacityRun]:
         try:
             yield _run(session, target, edge_pid, original_reserve_mb)
         finally:
-            _put_reserve(session, original_reserve_mb)
-            session.delete_created_apps()
+            _restore_reserve_and_delete_apps(session, original_reserve_mb)
+
+
+def _restore_reserve_and_delete_apps(session: AdminSession, original_reserve_mb: int) -> None:
+    """Put the reserve back, then delete the ten apps, whether or not the PUT worked.
+
+    The apps go in a ``finally``: an expired token fails the PUT, and ten running apps would
+    otherwise keep 5 GB of the slot. What this cannot cover is the run being killed (or the App
+    restarted by ``run-container-tests.sh``) before it gets here: the lowered reserve then stays,
+    and the ``reserve_lowered_for_the_run`` line of the output names the value to put back.
+    """
+    try:
+        _put_reserve(session, original_reserve_mb)
+    finally:
+        session.delete_created_apps()
 
 
 def _reserve_that_leaves_room_for_ten(ledger: dict[str, int], current_reserve_mb: int) -> int:

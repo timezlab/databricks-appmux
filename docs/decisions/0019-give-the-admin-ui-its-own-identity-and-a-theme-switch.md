@@ -121,6 +121,15 @@ attribute in prerendered HTML.
 - `e2e/theme.spec.ts` keeps proving each choice on each OS scheme, the reload,
   the attribute at DOMContentLoaded and the blocked-script case.
 
+## Seen on the dev App (2026-11-05)
+
+The admin UI on the Free Edition dev App was driven in Chromium through the real Apps proxy, signed in
+as the CLI token's owner (a platform admin): the theme switch in dark, light and system, the choice
+surviving a reload, and both themes at 390 px, with no CSP violation, page error or console error
+([spike log, T205](../../specs/001-appmux-v1/spikes/README.md#the-admin-ui-by-hand-through-the-real-proxy-t205)).
+The status stays `proposed`: the owner has not reviewed the result, and the two choices named
+under "Revisit if" (the wordmark glyph and the default theme) are still the owner's.
+
 ## Revisit if
 
 The owner picks a wordmark glyph; the owner wants Light or Dark as the default,

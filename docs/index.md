@@ -14,8 +14,8 @@ Navigation only — content lives in the linked documents.
 ## Product
 
 - [product/DESIGN.md](product/DESIGN.md) — standing product direction: problem, product, goals, non-goals, and which ADR settles each early question.
-- [product/v1-design.md](product/v1-design.md) — what appmux v1 is and how it behaves: architecture, lifecycle, isolation, routing, credentials, registry, roles, failure modes, threat model. Planned, not implemented.
-- [product/v1-data-model.md](product/v1-data-model.md) — the nine Lakebase system tables for v1: business view, every table with columns, example rows and DDL, who writes what, walkthroughs, retention. Planned, not implemented.
+- [product/v1-design.md](product/v1-design.md) — what appmux v1 is and how it behaves: architecture, lifecycle, isolation, routing, credentials, registry, roles, failure modes, threat model. The design the code follows; [ARCHITECTURE.md](../ARCHITECTURE.md) marks what exists.
+- [product/v1-data-model.md](product/v1-data-model.md) — the nine Lakebase system tables for v1: business view, every table with columns, example rows and DDL, who writes what, walkthroughs, retention. The design the code follows; [ARCHITECTURE.md](../ARCHITECTURE.md) marks what exists.
 - [product/v1-design-brief.md](product/v1-design-brief.md) — decision record of the 2026-10-29 and 2026-10-30 brainstorm: constraints, alternatives that lost, success criteria, spikes that gate the plan.
 
 ## Decisions (ADRs — append-only)

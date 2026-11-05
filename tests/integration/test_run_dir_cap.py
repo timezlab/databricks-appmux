@@ -156,6 +156,9 @@ def test_the_pages_of_the_run_directory_show_in_the_container_and_not_in_the_chi
         f"wrote {written_mb} MiB: the container went from {container_before} to "
         f"{container_after} MiB, the child's own figure from {child_before} to {child_after} MiB"
     )
+    # Peak against peak on a container others use: growth of that size from other work (a build, a
+    # demo app) would pass too, so the printed figures are the evidence and this pins the direction.
+    # The second assertion pins TD-004's gap and fails the day the pages count in the child.
     assert container_after - container_before >= written_mb * CONTAINER_SHARE_OF_WRITE, (
         f"the container grew by {container_after - container_before} MiB for {written_mb} MiB of "
         "tmpfs pages"

@@ -1,6 +1,6 @@
 # appmux v1 — product and system design
 
-**Status:** design approved; the [plan](../../specs/001-appmux-v1/plan.md) fixes the stack and layout. **Nothing described here is implemented**; [ARCHITECTURE.md](../../ARCHITECTURE.md) marks what exists. **Date:** 2026-10-30.
+**Status:** design approved; the [plan](../../specs/001-appmux-v1/plan.md) fixes the stack and layout. **This is the design, not a status report:** most of it is implemented and the rest is partly built or unseen on a container, and [ARCHITECTURE.md](../../ARCHITECTURE.md) marks which. **Date:** 2026-10-30 (status line updated 2026-11-05).
 
 This is the single description of what appmux v1 is and how it behaves. The reasoning behind it — constraints, alternatives that lost, success criteria, unresolved spikes — is in the [design brief](v1-design-brief.md), the input to `/speckit-specify`. Platform facts are in [reference/databricks-apps-platform.md](../reference/databricks-apps-platform.md) and [reference/databricks-free-edition.md](../reference/databricks-free-edition.md). Every table, with columns, sample rows and writer, is in the [data model](v1-data-model.md). Table, column, header and file names below are final for v1; the [plan](../../specs/001-appmux-v1/plan.md) adopts them. Every example uses made-up names (`example.com` emails, an app called `sales`).
 

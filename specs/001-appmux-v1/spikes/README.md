@@ -2213,27 +2213,81 @@ the grant run: 4 entries, identical. The dev App runs the normal code.
 ## Plan checks: the quickstart run (2026-11-05)
 
 Free Edition workspace only, one container, one day; the company's paid workspace was not used.
-This is [quickstart.md](../quickstart.md) read step by step against what ran (T181), with the
-SC-001 numbers that `ARCHITECTURE.md` points to (T110). Two things were run for this heading: the
-local checks again on the head `c2f143e`, and the startup gate, which no earlier run had observed
-on a container. Every other row links to the run that produced its figure; nothing was run twice
-to fill a row. The rows therefore come from different invocations and different heads of `src/`
-(2026-11-04 for the hostile fixtures and the remote `self_check`; 2026-11-05 for the rest, with the
-supervisor fix, the watchdog wiring and the overhead constant landing between runs), and the
-quickstart was **not** run once, in order, on a single head. A figure from an earlier head may have
-moved; the only way to know is that one in-order run.
+This is [quickstart.md](../quickstart.md) run once, in order, on one head (T181): `4733026`. Its
+`src/`, `web/`, `scripts/` and lock files are those of `c2f143e` (the commits after it change docs
+and `tests/integration/test_capacity.py` only), so a figure below was not measured on an older
+build than the one that is deployed. The order and what each part was:
+
+1. **Local checks** on the head: `ruff format --check` and `ruff check`, `mypy src`, the Python
+   tests, then the seven UI checks.
+2. **Deploy and `self_check`, capacity of the real edge, SC-001, SC-002, SC-003, SC-004:** one
+   invocation of `scripts/run-container-tests.sh` with the six container files in quickstart order.
+   It put the tests over the code on the dev App (one restart: every hosted app was down for the
+   minutes a start takes), ran them inside the container, and put the normal code back
+   (`SUCCEEDED`). **19 passed in 532.55 s, runner exit 0**, and because every test passed the runner
+   printed the whole output, which is where the figures below come from.
+3. **Hostile fixtures,** from the dev machine through the Apps proxy as the CLI token's owner, in
+   three invocations of `scripts/run-remote-tests.sh`, and one more container run for the test
+   that kills `slirp4netns`; see [hostile fixtures on this head](#hostile-fixtures-on-this-head).
+
+The invocation before it, on the head `30c7157` the same afternoon, ended `16 passed, 3 errors`: the
+three SC-003 tests failed in setup with `not enough memory: needs 832 MB, 192 MB free`. That was the
+test's precondition, not the product; see [the ledger needed room](#sc-003-on-this-head-the-ledger-needed-room).
+Its output was not kept (a failing runner prints only the tail), which is why the whole set was run
+again.
 
 | Quickstart step | Result (Free Edition only) | Where |
 |---|---|---|
-| 1 Local checks | `ruff format --check` (404 files) and `ruff check` clean; `mypy src` clean (129 files); `pytest tests/unit tests/contract tests/load`: **7 997 passed**, 1 warning, 130 s. UI: typecheck, lint and format clean; 2 886 unit and component tests; build ok; 63 export tests; 810 end-to-end tests | this section, T176 |
-| 2 Deploy | `scripts/sync-deploy.sh` ended `SUCCEEDED` after 20 of 60 checks; the startup gate was seen answering, see below | [below](#the-startup-gate-during-a-deploy) |
-| 2 `self_check` | all 13 checks `ok`: 6.8 s and 6.9 s inside the App, 7.2 s and 7.4 s from the dev machine | [T068](#container-runs-from-the-dev-machine-2026-10-31), [container runs](#results) |
-| 3 Capacity of the real edge | 15 000 requests in 30 s at 500 a second: 0 failed, p95 3.98 ms, 62.3 % of one core | [T086](#sc-001-the-edge-at-500-requests-a-second-t086) |
-| SC-001 No disruption | 145 000 requests at 500 a second across a 60 s control and six operations: **0 failed in every one**, the failed-health release included. Worst slice p95 during: 25.8 ms (egress edit) to 346 ms (failed health); **1 877 ms for three heavy builds at once** (median slice 970 ms, edge at 86 % of a core), against 104 ms for the control's own worst slice | [T108](#sc-001-no-disruption-under-operations-t108), [TD-003](../../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort) |
-| SC-002 Fail-closed isolation | healthy sandbox: nothing failed. Each layer left out failed the check it guards (`platform_files`, `capabilities`, `loopback_and_container_ip` with `metadata_address`); the gate answered `503` for the app and named the check | [T070](#sc-002-a-weakened-sandbox-fails-closed-t070) |
-| SC-003 Capacity | ten apps in four kinds started and loaded; sandbox overhead 60.7–61.1 MB each; the eleventh refused with `not enough memory: needs 269 MB, 100 MB free`; 100 apps is an estimate, not a measurement | [T162](#sc-003-ten-apps-and-an-eleventh-that-is-refused-t162), [TD-032](../../../docs/tech-debt.md#td-032-admission-assumes-13-mb-of-sandbox-overhead-and-the-measured-figure-is-61-mb) |
-| SC-004 No hand-edited database | the ten-step walkthrough passed through the admin API, no SQL typed (fifth invocation; the first four failed in the test, not the product) | [T167](#sc-004-the-scripted-walkthrough-t167) |
-| 5 Hostile fixtures | `env_snooper`, `pkg_env_writer`, `fork_bomb` and `network_scanner` contained, neighbour p95 247 ms idle and 278 ms beside them (6 of 6); `startup_crash`, `always_500`, `slow_start` and `crash_loop` through hosting, rollback and the failure table; `memory_hog` stopped at 288 MB under a 512 MB limit (row 19) and `memory_hog_workers` by the RSS watchdog at 491 MB against 384 MB; `disk_filler` against the run directory's cap; `secret_registry_snooper` in the credential-modes run | [T069](#what-else-passed-in-run-1), [T180](#failure-table-rows-19-and-20-t180), [T060](#the-run-directorys-cap-t060), [credential modes](#what-the-snooper-children-reported) |
+| 1 Local checks | `ruff format --check` (404 files) and `ruff check` clean; `mypy src` clean (129 files); `pytest tests/unit tests/contract tests/load`: **7 997 passed**, 1 warning, 132 s. UI: typecheck, lint and format clean; 2 886 unit and component tests (158 files); build ok; 63 export tests; 810 end-to-end tests (5.5 min) | this section |
+| 2 Deploy | the runner's overlay deploy and its restore both ended `SUCCEEDED` (the restore after 21 of 60 checks); the startup gate was seen answering during a `sync-deploy.sh` earlier the same day, see below | [below](#the-startup-gate-during-a-deploy) |
+| 2 `self_check` | all 13 checks `ok`: 7.0 s and 6.9 s inside the App (the two tests of `test_self_check_container.py`) | [T068](#container-runs-from-the-dev-machine-2026-10-31), [container runs](#results) |
+| 3 Capacity of the real edge | 15 000 requests in 30.2 s at 496.9 a second: 0 failed; p50 1.97 ms, **p95 247 ms**, p99 411 ms, max 595 ms; the edge used 74.9 % of one core. [T086](#sc-001-the-edge-at-500-requests-a-second-t086) measured p95 3.98 ms and 62.3 % with the same test; see [the edge at 500 a second, twice](#the-edge-at-500-a-second-twice) | this section |
+| SC-001 No disruption | 145 000 requests at 500 a second across a 60 s control and six operations: **0 failed in every one**. Worst slice p95 during: control 44.5 ms, register B 27.9, update B 223, good release of A 511, failed-health release of A 364, **heavy build 2 240 ms** (median slice 1 144 ms, edge at 85 % of a core), egress edit 9.6 | [T108](#sc-001-no-disruption-under-operations-t108), [TD-003](../../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort) |
+| SC-002 Fail-closed isolation | control (healthy sandbox): no check failed. Each layer left out failed the check it guards: `platform_files`, `capabilities`, `loopback_and_container_ip` with `metadata_address`; the test also asserts the app's route answers `503` with the check named | [T070](#sc-002-a-weakened-sandbox-fails-closed-t070) |
+| SC-003 Capacity | ten apps in four kinds started in 1.7–5.6 s each and were loaded; sandbox overhead 60.8–61.2 MB each; the eleventh refused with `not enough memory: needs 320 MB, 100 MB free`; 100 apps is an estimate, not a measurement | [below](#sc-003-on-this-head-the-ledger-needed-room), [T162](#sc-003-ten-apps-and-an-eleventh-that-is-refused-t162), [TD-032](../../../docs/tech-debt.md#td-032-admission-assumes-13-mb-of-sandbox-overhead-and-the-measured-figure-is-61-mb) |
+| SC-004 No hand-edited database | the ten-step walkthrough passed through the admin API, no SQL typed (it passed in this invocation and in the one before it) | [T167](#sc-004-the-scripted-walkthrough-t167) |
+| 5 Hostile fixtures | **31 tests passed** in four runs, none skipped: the environment snooper, the package-environment writer (`EROFS`), the fork bomb (247 of 256 forks, then `EAGAIN` after 0.3 s), the network scanner and the metadata address, a deny rule and its live reload, a start-up crash, a crash loop with a rollback, an always-500 health check, slow starts, a memory hog stopped by `MemoryError` at 224 MB and, over several processes, at 632 MB against a limit of 384 MB, a 64 MiB run directory refused with `ENOSPC`, a child whose `slirp4netns` is killed, and the secret-and-registry snooper in both credential modes. Neighbour p95 237 ms idle, 248 ms beside the hostile children | [below](#hostile-fixtures-on-this-head) |
+
+### Hostile fixtures on this head
+
+Each fixture is registered through the normal path and has to be contained without touching a
+neighbour. Free Edition only; the figures that come through the Apps proxy include that path.
+
+| Run | Where | Result |
+|---|---|---|
+| `test_hostile_fixtures.py` | dev machine, through the proxy | 7 passed in 219 s |
+| `test_host_a_child.py` (10), `test_crash_and_rollback.py` (2), `test_failure_table.py` (2), `test_run_dir_cap.py` (2) | dev machine, through the proxy | 16 passed, 8 errors, 825 s; the errors are set-up errors, below |
+| the `slirp4netns` kill (`test_failure_table.py`) | inside the dev App, `run-container-tests.sh` | 1 passed in 10.68 s, runner exit 0; the child was reported as killed by SIGKILL and restarted, and the neighbour went on answering |
+| `test_credential_modes.py` | dev machine, with two throwaway secret scopes and a throwaway service principal | 7 passed in 5 276 s (88 min, of which the token-expiry test is about 71) |
+
+The 8 errors of the second run were not product failures: all eight ended in *setup*. One was the
+`slirp4netns` test, which needs `APPMUX_TEST_EDGE_PID` and so can only run inside the container (the
+third row ran it there). Seven were the credential-mode tests, which need the throwaway scopes and
+service principal that `APPMUX_TEST_OWN_SP_*` and the registry variables name (the fourth row ran
+them with those). Nothing was counted as passed that did not run.
+
+What the figures say, one line each:
+
+* **Environment snooper:** `/proc` readable, pid 1 `ENOENT`, `runtime.cfg` `ENOENT`, 0 other pids visible.
+* **Package-environment writer:** both attempts `EROFS`.
+* **Fork bomb:** refused with `EAGAIN` after 247 of 256 forks (the platform's per-child process limit), in 0.319 s, and the child itself stayed running.
+* **Network scanner:** the metadata address timed out; a deny rule removed the destination it named
+  (before `1.1.1.1:443`, after nothing), and so did the same rule pushed to a running pump (19 drops
+  counted, by rule: `app:1` 2, `global:2` 4).
+* **Memory:** an allocation past the budget stopped at 224 MB with `MemoryError` and the neighbour kept
+  answering; workers holding 600 MB between them were stopped by the watchdog when it read 632 MB,
+  over a limit of 384 MB (256 MB budget plus 64 MB for the sandbox; [TD-029](../../../docs/tech-debt.md#td-029-the-rss-watchdog-is-written-and-tested-but-the-service-never-starts-it)).
+* **Run directory:** 67 108 864 bytes written in 0.021 s, then `ENOSPC`; the container's memory rose by about
+  as much and the child's own figure did not ([TD-004](../../../docs/tech-debt.md#td-004-a-childs-run-directory-size-cap-is-unproven)). Only bytes were tested, not files.
+* **Failed releases:** a child that exits at start, one that answers 500 and one that binds its port
+  after the deadline each failed the release and kept the route closed; one that binds within the
+  deadline became active; a crash loop ended `crashed` with only its own route at 503; a rollback to
+  release 3 of 5 ran from the stored snapshot.
+* **Secret-and-registry snooper:** in both credential modes the test passes only when nothing succeeds
+  beyond the one attempt the design accepts for a shared-service-principal child; a shared-SP child kept
+  calling the API across a token expiry.
+* **Neighbour latency:** with the fork bomb and the scanner running beside it, every answer was `200`
+  and p95 was 248 ms against 237 ms idle, read from the dev machine through the proxy, so the two numbers say how the neighbour changed and the 240 ms says how far the proxy is.
 
 ### The startup gate during a deploy
 
@@ -2269,16 +2323,121 @@ What it does not show: the `Retry-After` header, the other paths and methods (th
 covers them), and a `blocked` phase on a container beyond what the SC-002 run recorded. One deploy,
 one poll.
 
+### SC-003 on this head: the ledger needed room
+
+`test_capacity.py` registers ten apps and expects the ledger to admit all of them. Since
+`OVERHEAD_PER_CHILD_MB` became 64 ([TD-032](../../../docs/tech-debt.md#td-032-admission-assumes-13-mb-of-sandbox-overhead-and-the-measured-figure-is-61-mb)),
+the ten cost 5 248 MB of the ledger (4 x 320, 2 x 576, 2 x 576, 2 x 832). The dev App was hosting
+six other apps that held 2 560 MB, and the default reserve is 1 024 MB, so 4 608 MB were free: the
+last node app was refused (`needs 832 MB, 192 MB free`) and the three tests errored in setup. The
+ledger did what it is for; the test had assumed room the dev App no longer has.
+
+The test now reads the ledger first, lowers `memory_reserve_mb` by the shortfall (plus the 100 MB it
+leaves free after the ten), prints that it did so, and puts the original value back when the module
+ends. In this run it went from 1 024 MB to 284 MB. If even a reserve of 1 MB could not make room it
+fails with the numbers instead of dropping an app that was already there.
+
+A fresh review of the branch found two weaknesses in that clean-up, both now handled and tested in
+`tests/unit/test_capacity_reserve.py`: if putting the reserve back failed (an expired token), the
+ten apps were not deleted, and they are now deleted either way; and the arithmetic of the shortfall
+had no test of its own. What stays: a run killed before it gets to the clean-up leaves the reserve
+lowered, and the `reserve_lowered_for_the_run` line of its output names the value to put back.
+
+Ten apps in four kinds, started and loaded at 30 requests a second each, beside six running apps:
+
+| Kind | Apps | Budget | Start | App RSS idle | Sandbox RSS loaded | CPU idle / loaded (of one core) | p95 loaded |
+|---|---|---|---|---|---|---|---|
+| `light_fastapi` | 4 | 256 MB | 3.7–5.6 s | 45.5–45.7 MB | 106.4–106.7 MB | 0.3–0.4% / 2.1–2.2% | 3.8–6.0 ms |
+| `memory_fastapi` | 2 | 512 MB | 2.4–3.0 s | 110.0–110.5 MB | 170.9–171.3 MB | 0.3–0.4% / 2.8–3.0% | 5.0–6.6 ms |
+| `streamlit_app` | 2 | 512 MB | 1.7–3.1 s | 52.2–52.3 MB | 113.6–113.7 MB | 0.2% / 2.7–2.8% | 5.0–5.5 ms |
+| `node_app` | 2 | 768 MB | 2.1–2.6 s | 122.9–124.5 MB | 192.8–194.3 MB | 0.2–0.3% / 2.1–2.2% | 4.6–4.7 ms |
+
+* **Per-sandbox overhead:** 60.8–61.2 MB for every app, the same as in T162, against the 64 MB
+  admission now charges.
+* **The slot with ten apps loaded:** ten sandboxes 1 383 MB RSS in total; everything appmux runs
+  2 159 MB RSS (a sum of RSS, so shared pages count more than once); the container reported 1 956 MB
+  in use; the edge held 149 MB and used 6.2% of a core idle and 44.7% loaded. The ledger read limit
+  8 192 MB, reserve 284 MB, committed 7 808 MB, free 100 MB.
+* **The eleventh app:** its release `failed` with `not enough memory: needs 320 MB, 100 MB free`,
+  its route stayed closed and the ten kept answering (the test asserts all three).
+* **Estimate, not a measurement:** 100 apps at the mean loaded size of these ten would hold about
+  13 977 MB RSS against 8 192 MB; linear, and only for the case where all 100 run at once.
+* **Against T162:** the sandbox figures agree to within a few MB and the p95 is 1 to 4 ms higher.
+  CPU is higher on every line (idle 0.2–0.4% against 0.1–0.2%, the edge 6.2% idle against 1.8%),
+  which fits a container still busy after its restart; that is a reading of the numbers, not
+  something this run tested.
+
+### The edge at 500 a second, twice
+
+`test_edge_capacity.py` (500 requests a second over 10 connections for 30 s, one `light_fastapi`
+through the edge) has now run in two invocations. Both served the whole load with no failed request.
+
+| | T086 | the in-order run |
+|---|---|---|
+| Requests, failed | 15 000, 0 | 15 000, 0 |
+| p50 / p95 / p99 / max | 1.77 / 3.98 / 44.35 / 122.97 ms | 1.97 / **247.49** / 410.72 / 595.2 ms |
+| Edge CPU | 62.3% of one core | 74.9% of one core |
+
+The medians agree and the tail does not. About six minutes later in the same container the SC-001
+control put the same load on the same kind of app and read a median 5 s-slice p95 of 5.2 ms and a
+worst of 44.5 ms, so the edge can serve the rate with a p95 of a few milliseconds. The in-order run
+read its 247 ms in the first minutes after the App's restart, when the six other apps were also
+starting; that is a candidate, not a finding, because nothing here sampled the container during those
+minutes. The test asserts the rate and no failures and sets no limit on p95, so it passed both times.
+Whether the edge has "room to spare" under [ADR 0014](../../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md)
+stays the owner's judgement; this is a second figure for it, not an answer.
+
+### The admin UI by hand through the real proxy (T205)
+
+Free Edition only, 2026-11-05. Chromium (Playwright) was driven from the dev machine against the
+deployed dev App through the Apps proxy, signed in as the CLI token's owner, who is a platform
+admin. Two scripted passes covered the eleven points of the owner's feedback on the overhaul, in
+the light and the dark theme and at a mobile width (390 px), and the screenshots were read. Across
+both passes: **0 CSP violations, 0 page errors, 0
+console errors.** The screenshots stay outside the repository because they show e-mail addresses.
+
+| Point | What was checked | Result |
+|---|---|---|
+| 1 Principal picker | the combobox suggests principals as it is typed in | ok |
+| 2 Folder browser | it opens beside the source-folder field | ok |
+| 3 Motion | the spinner and the skeleton animate with `prefers-reduced-motion` set to `reduce` and to `no-preference`, which is what [ADR 0021](../../../docs/decisions/0021-ignore-prefers-reduced-motion-in-the-admin-ui.md) decided | ok |
+| 4 Logs | toolbar and lines; every button has an accessible name (the copy button is icon-only: "copy the shown lines") | ok |
+| 5 Console-style layout | ten app sections as a sidebar, one page each (10 of 10 loaded); five platform areas (5 of 5); the app switcher in the breadcrumb; the launcher and an app overview at 390 px in both themes | ok |
+| 6 Resources | the Add resource panel asks type, object, permission, mode and key | ok |
+| 7 Theme | dark, light and system; the choice survives a reload | ok |
+| 8 One bar geometry | top navigation, sidebar items and tabs share one `bar-item` rule: same font size (14 px), weight (500) and 12 px side padding, no underline; the vertical padding is 10 px for the top bar and the tabs and 8 px for the sidebar | ok, but two padding sets, not literally one geometry |
+| 9 Select | no native `select` on any page; the level menu opens as a popover list | ok |
+| 10, 11 Dashboard | full page at 1 hour and at 7 days, and in the dark theme | ok; the first scripted check read 0 chart groups with a wrong selector, which was the script and not the page |
+
+What this does not show:
+
+* There are no "before" screenshots, so nothing here compares the new pages with the old ones.
+* The signed-in user was a platform admin. A plain visitor, an app admin, and a browser session with
+  its own token (the folder browser and the pickers read with it) were not driven.
+* The dashboard showed a notice of three minutes without data at one point; it came from the
+  container restarts of the same day. A week of real data has not been seen.
+* The 7-day view draws 3-hour columns.
+
 ### What the quickstart still leaves open
 
 * The paid workspace was not used, so every figure above is Free Edition's quota and platform.
 * The 100-app figure is a linear estimate from ten apps.
 * A fast allocator that reaches the container's memory limit between two one-second readings of
-  the RSS watchdog is not measured; a hog over four processes was stopped by the watchdog at 491 MB
-  against its limit of 384 MB ([TD-029](../../../docs/tech-debt.md#td-029-the-rss-watchdog-is-written-and-tested-but-the-service-never-starts-it),
+  the RSS watchdog is not measured; a hog over several processes was stopped by the watchdog at 491 MB
+  in the earlier run and at 632 MB in this one, against its limit of 384 MB, so the overshoot is not a fixed
+  figure (two readings, not a distribution) ([TD-029](../../../docs/tech-debt.md#td-029-the-rss-watchdog-is-written-and-tested-but-the-service-never-starts-it),
   [TD-003](../../../docs/tech-debt.md#td-003-cpu-and-memory-limits-are-best-effort)).
 * Fairness among children that share the pinned CPU, and pinning without `nice`, were not measured
   (TD-003).
 * Whether 62 % to 86 % of one core is "room to spare" for
   [ADR 0014](../../../docs/decisions/0014-build-the-edge-on-the-environments-http-stack.md) is the
-  owner's judgement; the revisit trigger written there did not fire.
+  owner's judgement; the revisit trigger written there did not fire. The tail of the edge's latency
+  moved between two invocations (p95 3.98 ms, then 247 ms, [above](#the-edge-at-500-a-second-twice))
+  and the cause was not isolated; a run that samples the container during the first minutes after a
+  restart would say whether children starting up are it.
+* The hostile fixtures' "neighbour p95" is read from the dev machine through the Apps proxy and the
+  network, so it measures that path (about 240 ms idle) more than the container; the difference
+  between idle and beside hostile children is the figure to read.
+* The run directory's cap was tested for bytes only: a writer was refused at 64 MiB, but no test
+  created files, and the mount sets no `nr_inodes` ([TD-004](../../../docs/tech-debt.md#td-004-a-childs-run-directory-size-cap-is-unproven),
+  T219).

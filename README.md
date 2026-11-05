@@ -3,11 +3,12 @@
 A reverse proxy that runs as a single Databricks App and lets many child apps
 share its slot.
 
-> **Status: pre-alpha.** Implementation has started: settings, identity, the
-> registry models and migrations, the egress rules, the deploy scripts and the
-> admin UI scaffold exist, and nothing has run in a Databricks container yet
-> ([ARCHITECTURE.md](ARCHITECTURE.md) marks what exists). Everything under *How it
-> works* describes the intended behavior, not shipped behavior.
+> **Status: pre-alpha.** Most of v1 is implemented, and its container tests have
+> passed on a Databricks Free Edition workspace (one development App, 2026-11-05).
+> It has not run on a paid workspace, no version is released, and some parts
+> are only partly built or unseen on a container ([ARCHITECTURE.md](ARCHITECTURE.md)
+> marks which). *How it works* describes the design; the parts of it that have
+> not been seen running are listed there too.
 
 ## Why appmux
 
@@ -47,10 +48,10 @@ apps that are already running.
 - [docs/product/DESIGN.md](docs/product/DESIGN.md) — product direction, goals,
   non-goals, and the ADR behind each early question
 - [docs/product/v1-design.md](docs/product/v1-design.md) — what appmux v1 is and
-  how it behaves (planned, not implemented)
+  how it behaves (the design; [ARCHITECTURE.md](ARCHITECTURE.md) marks what exists)
 - [specs/001-appmux-v1/spec.md](specs/001-appmux-v1/spec.md) — the v1 feature
   spec and the spikes that gate its plan
-- [ARCHITECTURE.md](ARCHITECTURE.md) — intended module map and invariants
+- [ARCHITECTURE.md](ARCHITECTURE.md) — module map: what exists, what is partly built, invariants
 
 ## License
 

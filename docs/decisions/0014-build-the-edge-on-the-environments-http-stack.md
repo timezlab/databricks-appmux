@@ -83,6 +83,13 @@ which is the first "Must now be true" item above:
   68 % of a core in the control and up to 86 % while three builds ran, when p95 rose to 1.9 s
   ([SC-001 table](../../specs/001-appmux-v1/spikes/README.md#sc-001-no-disruption-under-operations-t108), T108).
 
+A second invocation of the same tests, in order with the rest of the quickstart on one head
+([spike log](../../specs/001-appmux-v1/spikes/README.md#plan-checks-the-quickstart-run-2026-11-05)),
+served the whole load again with no failed request, and moved two figures: the edge test read p95
+247 ms and 75 % of a core (the first minutes after the App's restart; a later control run at the same
+rate read a median slice p95 of 5.2 ms), and the heavy-build slice p95 was 2.2 s with the edge at
+85 % ([the edge at 500 a second, twice](../../specs/001-appmux-v1/spikes/README.md#the-edge-at-500-a-second-twice)).
+
 The revisit trigger below is not met. One workload (an empty `GET`), one container, Free Edition
 only; whether 62 to 86 % of a core is room to spare is the owner's judgement, and no figure for it
 is written here.
