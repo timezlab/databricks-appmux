@@ -72,10 +72,11 @@ watch``) is not started by the service, so this test cannot show it acting; the 
 way of stopping (``MemoryError`` inside the child, or the child gone) and prints which one it saw.
 That the watchdog is not wired is TD-029.
 
-Row 20. Killing ``slirp4netns`` leaves the child running with no way out. The design treats that
-as a crash (restart with backoff, then ``crashed``). The supervisor waits only for the sandbox
-process, so nothing notices (TD-030). The test asserts what the design says; it fails until the
-supervisor watches its helpers.
+Row 20. Killing ``slirp4netns`` leaves the child with no way out, and the design treats that as a
+crash of that child (restart with backoff, then ``crashed``). The supervisor used to wait only for
+the sandbox process, so nothing noticed (TD-030, found by the first run of this test); it now ends
+the sandbox when ``slirp4netns`` or the frame pump stops, and the reconciler restarts the child.
+The test kills the helper and asserts the replacement, and that a neighbour answers throughout.
 
 It needs the container's ``/proc`` and ``APPMUX_TEST_EDGE_PID``, which ``scripts/run-container-
 tests.sh`` provides, and what ``ops_session.load_target`` reads. It is marked ``integration`` and

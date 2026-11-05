@@ -1907,7 +1907,7 @@ unreadable reads that prints the App's state, and a restore that removes the ove
 | `test_edge_capacity` (1) | T086 | **passed**, see below |
 | `test_capacity` (3) | T162 | **passed**, see below |
 | `test_requests_walkthrough` (4) | T148 | passed (4) |
-| `test_failure_table` (2) | T180 | row 19 passed; **row 20 failed** (the product, see TD-030) |
+| `test_failure_table` (2) | T180 | row 19 passed; row 20 **failed** (the product, TD-030), then **passed** after the supervisor fix, see below |
 
 ### SC-002: a weakened sandbox fails closed (T070)
 
@@ -1969,9 +1969,14 @@ already running:
   so a hog that spreads over several processes is still unmeasured.
 * **Row 20, `slirp4netns` killed**: 90 s later the child was still `running` in the same sandbox
   with no network helper, and the supervisor had noticed nothing. The design says this is a crash of
-  that child. **The test fails and was left failing**:
+  that child. **The test failed and was left failing**:
   [TD-030](../../../docs/tech-debt.md#td-030-a-child-whose-slirp4netns-dies-keeps-running-with-no-way-out)
-  is now confirmed on a real container, not only read from the code.
+  was confirmed on a real container, not only read from the code.
+* **Row 20 after the fix (same day)**: the supervisor now ends a sandbox whose `slirp4netns` or frame
+  pump has stopped. In the container the reconciler logged `slirp4netns was killed by SIGKILL, so the
+  child has no network`, closed the route and `restarting ... in 1 s`; `1 passed, 1 deselected in
+  10.28 s` (Free Edition only). The test's own `noticed=` line was not captured (pytest hides the
+  output of a passing test), so no figure for the time to notice is recorded.
 
 ### Request walkthrough (T148)
 
