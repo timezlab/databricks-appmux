@@ -8,11 +8,11 @@ describe("MemorySection", () => {
   it("states the committed memory in words and numbers next to the strip", () => {
     renderInPlatform(<MemorySection view={platformView()} />);
     expect(
-      screen.getByText("5,775 of 7,168 MB committed (81%); 1,393 MB free"),
+      screen.getByText("6,336 of 7,168 MB committed (88%); 832 MB free"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("img", {
-        name: "Memory: 1,024 MB reserved for appmux, 5,775 MB committed to apps, 1,393 MB free, of the 8,192 MB the container allows.",
+        name: "Memory: 1,024 MB reserved for appmux, 6,336 MB committed to apps, 832 MB free, of the 8,192 MB the container allows.",
       }),
     ).toBeInTheDocument();
     expect(
@@ -27,14 +27,14 @@ describe("MemorySection", () => {
     renderInPlatform(<MemorySection view={platformView()} />);
     const expectedFigures: readonly (readonly [string, string])[] = [
       ["Reserved for appmux", "1,024 MB"],
-      ["Committed to apps", "5,775 MB"],
-      ["Free", "1,393 MB"],
+      ["Committed to apps", "6,336 MB"],
+      ["Free", "832 MB"],
     ];
     for (const [label, figure] of expectedFigures) {
       const item = screen.getByText(label).closest("li");
       expect(item).toHaveTextContent(figure);
     }
-    expect(screen.getByText("81% committed")).toBeInTheDocument();
+    expect(screen.getByText("88% committed")).toBeInTheDocument();
   });
 
   it("says the level in words once the committed share passes a threshold", () => {
