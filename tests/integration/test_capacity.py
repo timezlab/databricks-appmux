@@ -27,7 +27,11 @@ estimate and never asserted.
 
 The apps already registered on the App (a development App hosts demos) run beside these ten and
 count in the ledger; the report says how many. "The budget set for 10 apps" therefore means the
-ledger holds these ten and whatever else runs, with less free than one more app needs.
+ledger holds these ten and whatever else runs, with less free than one more app needs. If the
+ledger has no room for the ten when the run starts (the default ``memory_reserve_mb`` of 1024 MB and
+a handful of demos leave less than the ten need once each app is charged ``OVERHEAD_PER_CHILD_MB``),
+the run lowers the reserve first, says so in the report, and puts the original value back at the
+end; it never drops an app that was already there.
 
 It reads ``/proc`` of the container, so it runs only inside it (``scripts/run-container-tests.sh``);
 it is marked ``integration`` and skipped unless ``APPMUX_TEST_CONTAINER=1``. It needs what
@@ -279,6 +283,30 @@ def capacity() -> Iterator[CapacityRun]:
             session.delete_created_apps()
 
 
+def _reserve_that_leaves_room_for_ten(ledger: dict[str, int], current_reserve_mb: int) -> int:
+    """The reserve to set so the ledger can admit all ten, or ``current_reserve_mb`` if it can.
+
+    ``free_mb`` is the limit minus the reserve minus what is committed, so lowering the reserve by
+    the shortfall raises ``free_mb`` by the same amount. ``FREE_AFTER_TEN_MB`` is added to the need
+    so a small drift of the ledger between this reading and the last registration does not turn
+    into a refusal that looks like a product fault.
+    """
+    needed_mb = (
+        sum((kind.budget_mb + OVERHEAD_PER_CHILD_MB) * kind.copies for kind in KINDS)
+        + FREE_AFTER_TEN_MB
+    )
+    shortfall_mb = needed_mb - ledger["free_mb"]
+    if shortfall_mb <= 0:
+        return current_reserve_mb
+    lowered_mb = current_reserve_mb - shortfall_mb
+    assert lowered_mb >= 1, (
+        f"the ten need {needed_mb} MB but only {ledger['free_mb']} MB are free, and the reserve "
+        f"({current_reserve_mb} MB) is too small to make up {shortfall_mb} MB: the apps already on "
+        f"this App hold {ledger['committed_mb']} MB of {ledger['limit_mb']} MB; delete some first"
+    )
+    return lowered_mb
+
+
 def _put_reserve(session: AdminSession, value_mb: int) -> None:
     # Platform settings are written under the admin's own role, so the token goes with the call.
     session.call(
@@ -290,6 +318,19 @@ def _run(
     session: AdminSession, target: Target, edge_pid: int, original_reserve_mb: int
 ) -> CapacityRun:
     other_running = _running_count(session)
+    ledger_before = _platform(session)["memory"]
+    reserve_for_ten_mb = _reserve_that_leaves_room_for_ten(ledger_before, original_reserve_mb)
+    if reserve_for_ten_mb != original_reserve_mb:
+        _put_reserve(session, reserve_for_ten_mb)
+        _say(
+            "reserve_lowered_for_the_run",
+            {
+                "from_mb": original_reserve_mb,
+                "to_mb": reserve_for_ten_mb,
+                "ledger_before": ledger_before,
+                "charged_per_app_beyond_its_budget_mb": OVERHEAD_PER_CHILD_MB,
+            },
+        )
     apps = [_register(session, kind, index) for kind in KINDS for index in range(kind.copies)]
     assert len(apps) == EXPECTED_STARTED
 
