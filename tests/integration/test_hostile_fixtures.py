@@ -15,9 +15,11 @@ the registry path here).
   well before the fixture's own ceiling;
 * ``network_scanner``: the metadata address cannot be reached, and a destination that the app's
   own egress rule denies is reached before the rule and not after it. The second needs a control:
-  a deny that nothing could reach anyway proves nothing. A rule is read when a child starts (the
-  live reload of a running pump is not wired, T066), so the rule goes in and a new release starts
-  a new child. Two of its targets are *not* covered here:
+  a deny that nothing could reach anyway proves nothing. A rule is read when a child starts, so
+  one test puts the rule in and starts a new release, whose child reads it; another saves the rule
+  for a running child and asks it again with no new release, which only the live reload of the
+  pump (``SIGHUP``, T066) can explain, and then reads the pump's drop counters through
+  ``GET /metrics`` (T061, T168). Two of its targets are *not* covered here:
 
   * ``appmux_loopback``: every child listens on port 8000 inside its own network namespace
     (``DEFAULT_CHILD_PORT``) and the platform gives appmux port 8000 as well, so a connect to
@@ -80,6 +82,11 @@ SCANNER_TARGETS_NOT_SET: Final = frozenset(
 # public resolver); the control step of the deny test fails loudly when it is not reached.
 DENIED_HOST: Final = "1.1.1.1"
 DENIED_PORT: Final = 443
+# The reload is a signal and the pump says nothing back; this long is plenty for one SIGHUP.
+LIVE_RELOAD_WAIT_S: Final = 20.0
+# The sampler reads the pump every 15 s and a minute is written every 60 s.
+METRICS_WAIT_S: Final = 180.0
+METRICS_POLL_S: Final = 10.0
 
 
 @pytest.fixture(scope="module")
@@ -267,6 +274,65 @@ def test_a_deny_rule_of_the_app_stops_a_destination_that_the_control_reaches(
     print(f"deny rule: before {control['connected']}, after {ruled['connected']}, {outcomes}")
     assert ruled["connected"] == []
     assert outcomes.get("denied_destination") not in {None, "connected"}
+
+
+def test_a_deny_rule_saved_for_a_running_child_applies_without_a_new_release(
+    session: AdminSession,
+) -> None:
+    slug = f"zh-live-{_suffix()}"
+    destination = f"{DENIED_HOST}:{DENIED_PORT}"
+    env = [{"name": "SCANNER_DENIED_DESTINATION", "value": destination, "value_from": None}]
+    _start(session, slug, "network_scanner")
+    _new_release_with_env(session, slug, env)
+    control = _report(session, slug, "network_scanner")
+    assert destination in control["connected"], (
+        f"the control did not reach {destination} ({control['attempts']}), so a deny rule on it "
+        "would prove nothing: egress from this container is closed or the address is not served"
+    )
+
+    rule = {"action": "deny", "cidr": f"{DENIED_HOST}/32", "port": str(DENIED_PORT), "comment": ""}
+    version = session.app(slug)["version"]
+    session.call("PUT", f"/apps/{slug}/egress", json=egress_body(version=version, rules=[rule]))
+    # A signal is not an acknowledgement, so ask again until the child no longer gets through.
+    deadline = time.monotonic() + LIVE_RELOAD_WAIT_S
+    while True:
+        ruled = _report(session, slug, "network_scanner")
+        if destination not in ruled["connected"] or time.monotonic() > deadline:
+            break
+
+    outcomes = {attempt["label"]: attempt["result"] for attempt in ruled["attempts"]}
+    print(f"live deny rule: before {control['connected']}, after {ruled['connected']}, {outcomes}")
+    assert destination not in ruled["connected"], "the saved rule never reached the running pump"
+    assert (ruled["process_id"], ruled["started_at"]) == (
+        control["process_id"],
+        control["started_at"],
+    ), "the child was restarted, so the rule was read at its start and the reload proved nothing"
+
+    dropped = _wait_for_drops(session, slug)
+    print(
+        f"pump counters for {slug}: {dropped['egress_dropped']} dropped, "
+        f"by rule {dropped['egress_dropped_by_rule']}"
+    )
+    assert dropped["egress_dropped"] > 0, "no drop was counted for the denied destination"
+    assert dropped["egress_dropped_by_rule"].get("app:1", 0) > 0, "the drop names no rule"
+
+
+def _wait_for_drops(session: AdminSession, slug: str) -> dict[str, Any]:
+    """The first per-minute row of ``slug`` that counts a drop; the last row seen if none does.
+
+    The sampler reads the pump every 15 s and the writer flushes a minute a minute, so the figure
+    needs about two minutes to appear.
+    """
+    deadline = time.monotonic() + METRICS_WAIT_S
+    last: dict[str, Any] = {"egress_dropped": 0, "egress_dropped_by_rule": {}}
+    while time.monotonic() < deadline:
+        rows = session.read("/metrics?step=1m")["items"]
+        mine = [row for row in rows if row["app_slug"] == slug]
+        last = max(mine, key=lambda row: row["egress_dropped"], default=last)
+        if last["egress_dropped"] > 0:
+            return last
+        time.sleep(METRICS_POLL_S)
+    return last
 
 
 def test_a_neighbour_keeps_its_latency_while_hostile_children_run(

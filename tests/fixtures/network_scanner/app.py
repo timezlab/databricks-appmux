@@ -28,6 +28,9 @@ The metadata address ``169.254.169.254:80`` is always tried.
                      name.
     connected        ``"host:port"`` of every attempt that connected (must be []).
     not_configured   labels whose variable is unset (must be []).
+    process_id,      the identity of this process: two reports with the same pair came from the
+    started_at       same child, so a rule that took effect between them was reloaded, not read
+                     by a new child.
 """
 
 from __future__ import annotations
@@ -47,6 +50,7 @@ MAX_PARALLEL_CONNECTS = 32
 METADATA_HOST = "169.254.169.254"
 METADATA_PORT = 80
 CONNECTED = "connected"
+STARTED_AT = time.time()
 
 app = FastAPI()
 
@@ -137,6 +141,8 @@ def build_report() -> dict[str, object]:
         "attempts": attempts,
         "connected": [f"{a['host']}:{a['port']}" for a in attempts if a["result"] == CONNECTED],
         "not_configured": NOT_CONFIGURED,
+        "process_id": os.getpid(),
+        "started_at": STARTED_AT,
     }
 
 
