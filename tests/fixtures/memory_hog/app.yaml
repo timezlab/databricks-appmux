@@ -1,2 +1,9 @@
 # Hostile fixture: run it only inside an appmux sandbox. It allocates until it is stopped.
 command: ["python", "app.py"]
+# A net for the day the sandbox's address-space limit does not hold: without a cap the first run in a
+# container would eat all of its memory in seconds and take the other apps with it. The cap is three
+# times the limit of a 256 MB budget (512 MB), so a sandbox that works never reaches it, and one that
+# does not stops the hog at "cap" with more held than the limit, which test_failure_table.py fails on.
+env:
+  - name: HOG_MAX_MB
+    value: "1536"

@@ -51,6 +51,8 @@ TOKEN_RENEW_MARGIN_S: Final = 600.0
 TOKEN_ASK_TIMEOUT_S: Final = 60.0
 HTTPS_PORT: Final = 443
 REQUEST_TIMEOUT_S: Final = 30.0
+# Deleting a running app stops it first, which takes longer than an ordinary call.
+DELETE_TIMEOUT_S: Final = 180.0
 POLL_INTERVAL_S: Final = 1.0
 BUDGET_MB: Final = 256
 DEFAULT_RELEASE_WAIT_S: Final = 600.0
@@ -333,7 +335,8 @@ class AdminSession:
     def register(self, slug: str, *, fixture: str, name: str | None = None) -> dict[str, Any]:
         folder = f"{self.target.fixtures_folder}/{fixture}"
         body = register_body(slug=slug, name=name or slug, folder=folder, owner=self.admin)
-        response = self.call("POST", "/apps", json=body, expect=(200, 201))
+        # The platform fields are written under the person's token: 403 user_token_missing without.
+        response = self.call("POST", "/apps", json=body, expect=(200, 201), with_token=True)
         self.created_apps.append(slug)
         detail: dict[str, Any] = response.json()
         return detail
@@ -398,11 +401,31 @@ class AdminSession:
         return self._client.get(f"/{slug}{path}", headers=identity_headers(self.target))
 
     def delete_created_apps(self) -> None:
+        """Delete every app of the run, newest first; one that cannot be deleted is warned about.
+
+        Best-effort on purpose: a cleanup that stopped at the first failure would leave the others
+        registered (and running) on the App. Deleting a running app stops it first, so a DELETE can
+        take longer than an ordinary call; the time it took is printed.
+        """
         for slug in reversed(self.created_apps):
-            response = self._client.request(
-                "DELETE",
-                f"{API}/apps/{slug}",
-                headers=identity_headers(self.target, mutating=True),
+            started_at = time.monotonic()
+            try:
+                response = self._client.request(
+                    "DELETE",
+                    f"{API}/apps/{slug}",
+                    headers=identity_headers(self.target, with_token=True, mutating=True),
+                    timeout=DELETE_TIMEOUT_S,
+                )
+            except httpx.TransportError as error:
+                warnings.warn(
+                    f"could not delete the test app {slug} ({type(error).__name__} after "
+                    f"{time.monotonic() - started_at:.0f} s); remove it by hand",
+                    stacklevel=2,
+                )
+                continue
+            print(
+                f"deleting the test app {slug} took {time.monotonic() - started_at:.1f} s "
+                f"(status {response.status_code})"
             )
             if response.status_code not in {204, 404}:
                 warnings.warn(

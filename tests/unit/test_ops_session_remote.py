@@ -230,6 +230,75 @@ def test_a_remote_session_sends_the_bearer_token_and_checks_the_answer_for_it(
     assert "X-Forwarded-Access-Token" not in request.headers
 
 
+def test_inside_the_container_registering_an_app_sends_the_token_the_proxy_would_add(
+    session: ModuleType,
+) -> None:
+    # POST /apps writes the platform fields under the person's own token and answers
+    # 403 user_token_missing without it. The first container run of test_edge_capacity (2026-11-05)
+    # stopped there: the session played the proxy but left the token out of the registration.
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(201, json={"slug": "demo"})
+
+    client = httpx.Client(base_url=BASE_URL, transport=httpx.MockTransport(handler))
+    admin = session.AdminSession(client, remote_target(session, is_remote=False))
+
+    admin.register("demo", fixture="light_fastapi")
+
+    (request,) = sent
+    assert request.headers["X-Forwarded-Email"] == ADMIN
+    assert request.headers["X-Forwarded-Access-Token"] == TOKEN
+
+
+def test_inside_the_container_deleting_the_test_apps_sends_the_token_too(
+    session: ModuleType,
+) -> None:
+    # DELETE /apps/{slug} is written under the admin's token as well; without it the cleanup of a
+    # container run would only warn and leave the apps it registered behind.
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(204)
+
+    client = httpx.Client(base_url=BASE_URL, transport=httpx.MockTransport(handler))
+    admin = session.AdminSession(client, remote_target(session, is_remote=False))
+    admin.created_apps.append("demo")
+
+    admin.delete_created_apps()
+
+    (request,) = sent
+    assert request.method == "DELETE"
+    assert request.headers["X-Forwarded-Access-Token"] == TOKEN
+
+
+def test_a_delete_that_times_out_does_not_stop_the_cleanup_of_the_other_apps(
+    session: ModuleType,
+) -> None:
+    # The first container run of test_requests_walkthrough (2026-11-05): the DELETE of a running,
+    # renamed app took longer than the client's timeout; the exception ended the loop and left the
+    # three other apps of the run registered.
+    asked: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.path.rsplit("/", 1)[-1])
+        if asked[-1] == "slow":
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(204)
+
+    client = httpx.Client(base_url=BASE_URL, transport=httpx.MockTransport(handler))
+    admin = session.AdminSession(client, remote_target(session, is_remote=False))
+    admin.created_apps.extend(["first", "slow", "last"])
+
+    with pytest.warns(UserWarning, match="slow") as raised:
+        admin.delete_created_apps()
+
+    assert asked == ["last", "slow", "first"]
+    assert all("by hand" in str(warning.message) for warning in raised)
+
+
 def test_a_session_fails_when_an_answer_repeats_the_token(session: ModuleType) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text=f"leaked {TOKEN}")

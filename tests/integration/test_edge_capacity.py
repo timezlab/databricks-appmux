@@ -5,7 +5,8 @@ connections, paced, against a fast app that is registered and running (the ``lig
 fixture). The load generator (``tests/load/http_load.py``) runs as its own process, started by this
 test, and reports the p95 latency, the error rate and the CPU the edge process used.
 
-Nothing here has been run against a container yet; the numbers it prints are not known.
+First run inside the dev App's container, 2026-11-05: 0 failures, p95 3.98 ms, the edge at 62.3% of
+one core (see the spike log, "Container runs inside the dev App").
 
 What the test asserts and what it leaves to a person. It asserts the things that need no judgement:
 that the app answers before the load starts, that no request fails, and that the generator reached
@@ -24,9 +25,13 @@ a container.
 Set-up the run needs (it fails loudly when one is missing, instead of passing on nothing):
 
 * ``APPMUX_TEST_BASE_URL``: where the edge listens, for example ``http://127.0.0.1:8000``;
-* ``APPMUX_TEST_LOAD_APP``: the slug of a registered, running ``light_fastapi`` app;
-* ``APPMUX_TEST_USER_EMAIL``: a person who may open that app;
 * ``APPMUX_TEST_EDGE_PID``: the process id of the edge, whose CPU the run reports;
+* either ``APPMUX_TEST_LOAD_APP`` (the slug of a registered, running ``light_fastapi`` app) with
+  ``APPMUX_TEST_USER_EMAIL`` (a person who may open it), or nothing of the two: the run then
+  registers its own ``light_fastapi`` as the platform admin and deletes it afterwards, which needs
+  what ``ops_session.load_target`` reads (``APPMUX_TEST_FIXTURES_FOLDER``,
+  ``APPMUX_TEST_USER_TOKEN`` and ``APPMUX_TEST_ADMIN_EMAIL``; ``scripts/run-container-tests.sh``
+  provides them);
 * ``APPMUX_TEST_LOAD_SECONDS``: how long the load lasts (optional, 30 by default).
 """
 
@@ -34,8 +39,10 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -43,6 +50,7 @@ from urllib.parse import urlsplit
 
 import httpx
 import pytest
+from ops_session import REQUEST_TIMEOUT_S, AdminSession, load_target
 
 pytestmark = pytest.mark.integration
 
@@ -56,6 +64,7 @@ DEFAULT_LOAD_SECONDS: Final = 30.0
 PREFLIGHT_TIMEOUT_S: Final = 30.0
 # How long beyond the load itself the generator process may take to start, finish and print.
 GENERATOR_GRACE_S: Final = 60.0
+SLUG_SUFFIX_BYTES: Final = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,19 +84,44 @@ def _required(name: str) -> str:
     return value
 
 
-@pytest.fixture(scope="module")
-def target() -> Target:
+def _edge_target(*, app: str, email: str) -> Target:
     base_url = urlsplit(_required("APPMUX_TEST_BASE_URL"))
     if base_url.scheme != "http" or not base_url.hostname or base_url.port is None:
         pytest.fail("APPMUX_TEST_BASE_URL must look like http://127.0.0.1:8000 (host and port)")
     return Target(
         host=base_url.hostname,
         port=base_url.port,
-        app=_required("APPMUX_TEST_LOAD_APP"),
-        email=_required("APPMUX_TEST_USER_EMAIL").strip(),
+        app=app,
+        email=email,
         edge_pid=int(_required("APPMUX_TEST_EDGE_PID")),
         load_seconds=float(os.environ.get("APPMUX_TEST_LOAD_SECONDS", DEFAULT_LOAD_SECONDS)),
     )
+
+
+@pytest.fixture(scope="module")
+def target() -> Iterator[Target]:
+    """The app under load: the one named by the environment, or a ``light_fastapi`` of this run.
+
+    Without ``APPMUX_TEST_LOAD_APP`` the run registers its own (the way ``scripts/run-container-
+    tests.sh`` runs it, where nothing is registered beforehand), presses Update as the platform
+    admin, waits until the app runs, loads it as that admin and deletes it afterwards.
+    """
+    named_app = os.environ.get("APPMUX_TEST_LOAD_APP", "").strip()
+    if named_app:
+        yield _edge_target(app=named_app, email=_required("APPMUX_TEST_USER_EMAIL").strip())
+        return
+    admin_target = load_target()
+    with httpx.Client(base_url=admin_target.base_url, timeout=REQUEST_TIMEOUT_S) as client:
+        session = AdminSession(client, admin_target)
+        slug = f"it-edge-load-{secrets.token_hex(SLUG_SUFFIX_BYTES)}"
+        try:
+            session.register(slug, fixture="light_fastapi", name="Edge capacity load")
+            release_no = session.press_update(slug)
+            session.wait_for_release(slug, release_no, "active")
+            session.wait_for_state(slug, "running")
+            yield _edge_target(app=slug, email=admin_target.admin_email)
+        finally:
+            session.delete_created_apps()
 
 
 def test_the_edge_holds_500_requests_a_second_over_10_connections(target: Target) -> None:

@@ -153,7 +153,7 @@ class Inbox:
 
     def register_for(self, slug: str, owner: str) -> dict[str, Any]:
         body = register_body(slug=slug, name=f"Requests {slug}", folder=self.folder, owner=owner)
-        response = self.admin.call("POST", "/apps", json=body, expect=(200, 201))
+        response = self.admin.call("POST", "/apps", json=body, expect=(200, 201), with_token=True)
         self.admin.created_apps.append(slug)
         detail: dict[str, Any] = response.json()
         return detail
