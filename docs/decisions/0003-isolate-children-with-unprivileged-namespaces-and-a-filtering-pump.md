@@ -216,3 +216,19 @@ process counts are unbounded" is now bounded for processes and mitigated for CPU
 - **Disk:** the `tmpfs` mounts are hard caps (`ENOSPC` at 64 MiB); the host-backed
   run directory is not (1 GiB in 1.5 s; `RLIMIT_FSIZE` is per file). It stays a
   known gap.
+
+
+## Update 2026-11-06 (T060, T219): the run directory is a `tmpfs` now
+
+The Decision is unchanged and the status stays `accepted`. This note records what became of the
+**Disk** gap above, which was true when the spike ran.
+
+The per-child run directory is a 64 MiB `tmpfs` inside the sandbox: the launcher binds the relay's
+socket outside it and hands it in as an open descriptor, so nothing outside needs a path in the
+directory. A writer was refused with `ENOSPC` at exactly 64 MiB in a container. Every writable
+`tmpfs` of a sandbox also has a file limit (`nr_inodes`), and the memory watchdog adds the used
+bytes of those mounts to the resident memory it compares with the app's limit. A host-backed run
+directory remains only for a child that holds a shared service principal's token, and a size
+watchdog bounds it by bytes. What is still open is in
+[TD-004](../tech-debt.md#td-004-a-childs-run-directory-size-cap-is-unproven); the current text is
+[design 6.1 and 6.4](../product/v1-design.md#61-sandbox).

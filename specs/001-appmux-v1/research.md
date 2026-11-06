@@ -74,7 +74,7 @@ Phase 0 of the [plan](plan.md). The spikes answered the platform questions ([log
 
 - **Decision.** The launcher is a subreaper; `RLIMIT_NPROC` is set per sandbox (`max_processes_per_child`, 256); a build has a wall-clock limit (`build_timeout_s`, 600). The run directory is a size-limited tmpfs, with a size watchdog as fallback.
 - **Rationale.** PID 1 does not reap (spike 7); `RLIMIT_NPROC` is counted per sandbox user namespace; a denied build otherwise takes 128 s to fail and more than 300 s when names resolve but connections drop; a tmpfs gave `ENOSPC` at its cap.
-- **Alternatives.** A pre-bound socket descriptor so the run directory need not be writable. *Untested* ([TD-004](../../docs/tech-debt.md#td-004-a-childs-run-directory-size-cap-is-unproven)).
+- **Alternatives.** A pre-bound socket descriptor so the run directory need not be writable. *Untested* when the plan was written; built afterwards as the way the relay's socket reaches the sandbox, and the run directory's cap was measured in a container on 2026-11-05 ([TD-004](../../docs/tech-debt.md#td-004-a-childs-run-directory-size-cap-is-unproven)).
 
 ## D13. Pump behaviour when idle
 
