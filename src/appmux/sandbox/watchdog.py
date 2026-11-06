@@ -21,6 +21,11 @@ by their host pids even though the child's own pid namespace hides them from eac
 summed per process, so a page shared by several processes (a forked worker, a mapped library) is
 counted once per process; that over-counts, which is why the stop threshold has headroom.
 
+The files a child writes to its tmpfs mounts (``/tmp``, ``/dev/shm``, ...) are memory in the
+container's cgroup but in no process's RSS, so the watchdog adds the used bytes of those mounts to
+the figure it compares (:func:`tmpfs_used_bytes`, TD-004). A page of ``/dev/shm`` that the child
+also maps is then counted twice, which over-counts in the same direction as the RSS sum.
+
 Stopping is the caller's job: :func:`watch` takes a ``stop`` callback so the reconciler can end
 the sandbox through the launcher and record why. This module imports nothing from them
 (design 3.4: ``sandbox`` does not import ``reconciler``).
@@ -30,8 +35,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import resource
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -48,6 +54,10 @@ ADDRESS_SPACE_HEADROOM_FACTOR: Final = 2.0
 # One second keeps the cost of scanning /proc small and bounds how far a steady allocator gets.
 CHECK_INTERVAL_S: Final = 1.0
 
+# Kernel memory held by one file of a tmpfs (inode, dentry, page-cache bookkeeping), on top of its
+# pages: about 1.1 KB measured on the dev App, where 74 MB of slab held every file the mounts allow.
+TMPFS_BYTES_PER_FILE: Final = 1024
+
 PROC_ROOT: Final = Path("/proc")
 _BYTES_PER_MB: Final = 1024 * 1024
 _PAGE_SIZE_BYTES: Final = resource.getpagesize()
@@ -61,17 +71,21 @@ class WatchedChild:
     egress pump, ``slirp4netns``, the supervisor). It is added to the limit after the headroom,
     because it does not grow with the budget; leaving it out would stop a small app that stays
     inside its budget.
+
+    ``tmpfs_paths`` are the memory-backed mounts of the child's root (as the child sees them);
+    their used bytes count against the same limit. Leave it empty for a child without any.
     """
 
     slug: str
     root_pid: int
     budget_mb: int
     allowance_mb: int = 0
+    tmpfs_paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class Offence:
-    """A child whose process tree holds more than its budget times the headroom, plus allowance."""
+    """A child whose tree and tmpfs hold more than its budget times the headroom, plus allowance."""
 
     slug: str
     root_pid: int
@@ -79,13 +93,21 @@ class Offence:
     rss_mb: int
     limit_mb: int
     allowance_mb: int = 0
+    tmpfs_mb: int = 0
 
     @property
     def reason(self) -> str:
         budget = f"budget {self.budget_mb} MB"
         if self.allowance_mb:
             budget += f", plus {self.allowance_mb} MB for the sandbox itself"
-        return f"uses {self.rss_mb} MB, over its limit of {self.limit_mb} MB ({budget})"
+        if self.tmpfs_mb:
+            held = (
+                f"{self.rss_mb + self.tmpfs_mb} MB "
+                f"({self.rss_mb} MB resident, {self.tmpfs_mb} MB in its temporary directories)"
+            )
+        else:
+            held = f"{self.rss_mb} MB"
+        return f"uses {held}, over its limit of {self.limit_mb} MB ({budget})"
 
 
 # ---- reading /proc ------------------------------------------------------------------------------
@@ -117,6 +139,52 @@ def process_tree_rss_bytes(root_pid: int, *, proc_root: Path = PROC_ROOT) -> int
         if resident_pages is not None:
             total_bytes += resident_pages * _PAGE_SIZE_BYTES
     return total_bytes
+
+
+def tmpfs_used_bytes(
+    root_pid: int,
+    paths: Sequence[str],
+    *,
+    proc_root: Path = PROC_ROOT,
+    statvfs: Callable[[str | Path], os.statvfs_result] = os.statvfs,
+) -> int:
+    """Bytes held by the tmpfs mounts ``paths`` of the sandbox rooted at ``root_pid``.
+
+    Each mount counts its used blocks plus :data:`TMPFS_BYTES_PER_FILE` for every file in it.
+    ``root_pid`` is the ``unshare`` process, whose own root is not the child's, so a mount is read
+    through ``/proc/<pid>/root`` of a process below it (the sandbox init comes first). 0 when
+    nothing runs below ``root_pid`` yet; an ``OSError`` naming the mount when processes run but
+    none lets the mount be read (a missing ptrace permission, say), so the caller can say so
+    instead of reading "nothing there".
+    """
+    inside = process_tree_pids(root_pid, proc_root=proc_root)[1:]
+    if not inside:
+        return 0
+    total_bytes = 0
+    for path in paths:
+        total_bytes += _tmpfs_mount_bytes(proc_root, inside, path, statvfs)
+    return total_bytes
+
+
+def _tmpfs_mount_bytes(
+    proc_root: Path,
+    pids_inside: Sequence[int],
+    path: str,
+    statvfs: Callable[[str | Path], os.statvfs_result],
+) -> int:
+    last_error: OSError | None = None
+    for pid in pids_inside:
+        try:
+            reading = statvfs(proc_root / str(pid) / "root" / path.lstrip("/"))
+        except OSError as exc:
+            last_error = exc  # that process may have exited since the tree was read: try the next
+            continue
+        used_blocks = reading.f_blocks - reading.f_bfree
+        files = reading.f_files - reading.f_ffree
+        return used_blocks * reading.f_frsize + files * TMPFS_BYTES_PER_FILE
+    raise OSError(
+        f"cannot read the mount {path} of the sandbox at pid {pids_inside[0]}"
+    ) from last_error
 
 
 def _listed_pids(proc_root: Path) -> list[int]:
@@ -159,13 +227,22 @@ def find_offenders(
     *,
     headroom_factor: float = RSS_HEADROOM_FACTOR,
     measure_rss_bytes: Callable[[int], int] = process_tree_rss_bytes,
+    measure_tmpfs_bytes: Callable[[int, tuple[str, ...]], int] = tmpfs_used_bytes,
+    unreadable_reported: set[tuple[str, int]] | None = None,
 ) -> list[Offence]:
-    """The children whose tree holds more than ``budget_mb * headroom_factor + allowance_mb``."""
+    """The children whose resident memory plus tmpfs is over ``budget * headroom + allowance``.
+
+    A child whose tmpfs cannot be read is judged on its resident memory alone and reported once in
+    ``unreadable_reported`` (the caller keeps the set across rounds).
+    """
+    if unreadable_reported is None:
+        unreadable_reported = set()
     offenders: list[Offence] = []
     for child in children:
         limit_bytes = int((child.budget_mb * headroom_factor + child.allowance_mb) * _BYTES_PER_MB)
         rss_bytes = measure_rss_bytes(child.root_pid)
-        if rss_bytes > limit_bytes:
+        tmpfs_bytes = _tmpfs_bytes_of(child, measure_tmpfs_bytes, unreadable_reported)
+        if rss_bytes + tmpfs_bytes > limit_bytes:
             offenders.append(
                 Offence(
                     slug=child.slug,
@@ -174,9 +251,37 @@ def find_offenders(
                     rss_mb=rss_bytes // _BYTES_PER_MB,
                     limit_mb=limit_bytes // _BYTES_PER_MB,
                     allowance_mb=child.allowance_mb,
+                    tmpfs_mb=tmpfs_bytes // _BYTES_PER_MB,
                 )
             )
     return offenders
+
+
+def _tmpfs_bytes_of(
+    child: WatchedChild,
+    measure_tmpfs_bytes: Callable[[int, tuple[str, ...]], int],
+    unreadable_reported: set[tuple[str, int]],
+) -> int:
+    if not child.tmpfs_paths:
+        return 0
+    try:
+        return measure_tmpfs_bytes(child.root_pid, child.tmpfs_paths)
+    except OSError as exc:
+        # Best-effort like the rest of the watchdog (TD-003): without this reading the child is
+        # judged on its resident memory, as before TD-004, and one child whose mounts cannot be
+        # read must not hide the others. Said once per sandbox, so a round per second is not a log
+        # line per second.
+        key = (child.slug, child.root_pid)
+        if key not in unreadable_reported:
+            unreadable_reported.add(key)
+            logger.warning(
+                "memory watchdog cannot read the tmpfs mounts %s of %s (%s); its temporary "
+                "files are not counted against its budget",
+                ", ".join(child.tmpfs_paths),
+                child.slug,
+                exc,
+            )
+        return 0
 
 
 async def watch(
@@ -186,6 +291,7 @@ async def watch(
     interval_s: float = CHECK_INTERVAL_S,
     headroom_factor: float = RSS_HEADROOM_FACTOR,
     measure_rss_bytes: Callable[[int], int] = process_tree_rss_bytes,
+    measure_tmpfs_bytes: Callable[[int, tuple[str, ...]], int] = tmpfs_used_bytes,
 ) -> None:
     """Check every ``interval_s`` and ``await stop(offence)`` for each child over its limit.
 
@@ -195,6 +301,7 @@ async def watch(
     and a ``stop`` that raises is retried at the next round.
     """
     stopped: set[tuple[str, int]] = set()
+    unreadable_reported: set[tuple[str, int]] = set()
     while True:
         try:
             children = list(list_children())
@@ -203,6 +310,8 @@ async def watch(
                 children,
                 headroom_factor=headroom_factor,
                 measure_rss_bytes=measure_rss_bytes,
+                measure_tmpfs_bytes=measure_tmpfs_bytes,
+                unreadable_reported=unreadable_reported,
             )
         except Exception:
             # A background loop: one failed reading (an unreadable /proc, a provider that was not
@@ -215,7 +324,9 @@ async def watch(
                 if key not in stopped and await _try_stop(stop, offence):
                     stopped.add(key)
             # Forget children that left the list, so the set cannot grow without bound.
-            stopped.intersection_update((child.slug, child.root_pid) for child in children)
+            listed = {(child.slug, child.root_pid) for child in children}
+            stopped.intersection_update(listed)
+            unreadable_reported.intersection_update(listed)
         await asyncio.sleep(interval_s)
 
 

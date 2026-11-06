@@ -210,6 +210,16 @@ class RootPlan:
             or (isinstance(step, BindMount) and step.writable)
         }
 
+    def tmpfs_directories(self) -> set[str]:
+        """The writable targets that live in memory: what a child fills is charged to the cgroup.
+
+        A writable bind mount (the build output, a host-backed run directory) is a directory of
+        the host's disk, so it is not here; ``statvfs`` of it would report the host's filesystem.
+        """
+        return {
+            step.target for step in self.steps if isinstance(step, TmpfsMount) and step.writable
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class RootLayout:

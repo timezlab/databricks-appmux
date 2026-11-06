@@ -53,9 +53,11 @@ from appmux.sandbox.launcher import (
     SandboxExit,
     SandboxSpec,
     SandboxStartError,
+    root_layout_for,
     start_sandbox,
 )
 from appmux.sandbox.pump import PumpStats, write_rules_file
+from appmux.sandbox.rootfs import plan_rootfs
 from appmux.sandbox.rules import EgressRule
 from appmux.sandbox.run_dir import (
     RUN_DIR_LIMIT_BYTES,
@@ -251,12 +253,14 @@ class SandboxRunningChild:
         memory_budget_mb: int,
         rules_path: Path,
         host_run_dir: _HostRunDir | None = None,
+        tmpfs_paths: tuple[str, ...] = (),
     ) -> None:
         self._process = process
         self._socket_path = socket_path
         self._rules_path = rules_path
         self._output = (_OutputFile(log_path, "stdout"), _OutputFile(stderr_path, "stderr"))
         self._memory_budget_mb = memory_budget_mb
+        self._tmpfs_paths = tmpfs_paths
         self._host_run_dir = host_run_dir
         self._over_memory_reason: str | None = None
 
@@ -315,6 +319,14 @@ class SandboxRunningChild:
     def memory_budget_mb(self) -> int:
         """The app's memory budget this copy was started with."""
         return self._memory_budget_mb
+
+    @property
+    def tmpfs_paths(self) -> tuple[str, ...]:
+        """The child's mounts that live in memory (as it sees them): the watchdog counts their use.
+
+        Not a run directory on the host's disk: that one is measured by bytes (``watch_run_dir``).
+        """
+        return self._tmpfs_paths
 
     async def stop_over_memory(self, reason: str) -> None:
         """Stop the sandbox because its tree holds more than its limit; ``wait`` then says why.
@@ -434,6 +446,7 @@ class SandboxChildLauncher:
             memory_budget_mb=child.memory_budget_mb,
             rules_path=spec.rules_path,
             host_run_dir=host_run_dir,
+            tmpfs_paths=tuple(sorted(plan_rootfs(root_layout_for(spec)).tmpfs_directories())),
         )
 
     async def _watch(

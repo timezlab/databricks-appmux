@@ -98,6 +98,7 @@ from appmux.sandbox.watchdog import (
     Offence,
     WatchedChild,
     process_tree_rss_bytes,
+    tmpfs_used_bytes,
     watch,
 )
 from appmux.secrets.credentials import ChildCredentials, CredentialsRefused
@@ -279,6 +280,7 @@ class Service:
         cleanup_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         metrics_root: Path = ROOT,
         memory_watch_interval_s: float = CHECK_INTERVAL_S,
+        statvfs: Callable[[str | Path], os.statvfs_result] = os.statvfs,
     ) -> None:
         self._settings = settings
         self._registry = registry
@@ -297,6 +299,7 @@ class Service:
         self._cleanup_sleep = cleanup_sleep
         self._cleanup_task: asyncio.Task[None] | None = None
         self._memory_watch_interval_s = memory_watch_interval_s
+        self._statvfs = statvfs
         self._memory_watch_task: asyncio.Task[None] | None = None
 
         self.routes = routes
@@ -504,8 +507,10 @@ class Service:
 
     def _start_memory_watch(self) -> None:
         # The same root as the sampler, so a test points both at one fake /proc.
-        measure_rss_bytes = functools.partial(
-            process_tree_rss_bytes, proc_root=self._metrics_root / "proc"
+        proc_root = self._metrics_root / "proc"
+        measure_rss_bytes = functools.partial(process_tree_rss_bytes, proc_root=proc_root)
+        measure_tmpfs_bytes = functools.partial(
+            tmpfs_used_bytes, proc_root=proc_root, statvfs=self._statvfs
         )
         self._memory_watch_task = asyncio.create_task(
             watch(
@@ -513,6 +518,7 @@ class Service:
                 self._stop_over_memory,
                 interval_s=self._memory_watch_interval_s,
                 measure_rss_bytes=measure_rss_bytes,
+                measure_tmpfs_bytes=measure_tmpfs_bytes,
             ),
             name="memory watchdog",
         )
@@ -535,6 +541,7 @@ class Service:
                     budget_mb=child.memory_budget_mb,
                     # The sandbox's own processes are in the tree; admission counts the same share.
                     allowance_mb=OVERHEAD_PER_CHILD_MB,
+                    tmpfs_paths=child.tmpfs_paths,
                 )
             )
         return watched

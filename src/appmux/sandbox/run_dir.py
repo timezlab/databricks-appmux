@@ -20,9 +20,12 @@ Measured in a container (dev App, 2026-11-05, ``tests/integration/test_run_dir_c
   figure shows (TD-004);
 * its pages are memory, and in one run they were counted in the container and not in the child's
   resident figure (the container's rose by 68 MiB for 64 MiB written, the child's by 1 MiB), so
-  the memory watchdog, which reads that figure, does not see them. ``RLIMIT_AS`` bounds a
-  process's address space and file pages it has not mapped are not in it; that is how the kernel
-  defines it, and it was not measured here. That is why TD-004 stays open.
+  the resident figure alone never sees them. The memory watchdog therefore adds the used bytes of
+  this mount and of the other ``tmpfs`` ones to that figure (``watchdog.tmpfs_used_bytes``, T219;
+  proven in ``test_tmpfs_memory_stop.py``). ``RLIMIT_AS`` bounds a process's address space and file
+  pages it has not mapped are not in it; that is how the kernel defines it, and it was not
+  measured here. The host-backed directory below is not read that way (``statvfs`` of it reports
+  the host's disk), which is what keeps TD-004 open.
 
 Not run in a container: :func:`watch_run_dir` below stopping a child that overfills a host-backed
 directory (the directory itself has carried a shared-service-principal child's token file).

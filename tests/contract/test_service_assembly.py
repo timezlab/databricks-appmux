@@ -68,6 +68,7 @@ from appmux.registry.client import RegistryClient
 from appmux.registry.errors import RegistryError
 from appmux.registry.models import Release
 from appmux.sandbox.launcher import LAUNCH_SOCKET_NAME, SandboxExit
+from appmux.sandbox.rootfs import TMP_PATH
 from appmux.sandbox.watchdog import RSS_HEADROOM_FACTOR
 from appmux.secrets.resolver import MissingResourceKeys, SecretUnreadable, UnreadableSecret
 from appmux.secrets.shared_sp_token import TOKEN_COMMAND_PATH
@@ -116,6 +117,7 @@ def make_service(
     cleanup_sleep: Callable[[float], Awaitable[None]] | None = None,
     metrics_root: Path | None = None,
     memory_watch_interval_s: float | None = None,
+    statvfs: Callable[[str | Path], os.statvfs_result] | None = None,
 ) -> Service:
     return Service(
         settings=environment(),
@@ -138,6 +140,7 @@ def make_service(
             if memory_watch_interval_s is None
             else {"memory_watch_interval_s": memory_watch_interval_s}
         ),
+        **({} if statvfs is None else {"statvfs": statvfs}),
         # The tests' machine's own /sys and /proc are not the container's: an empty root by default.
         metrics_root=metrics_root if metrics_root is not None else tmp_path / "no-container",
     )
@@ -624,6 +627,7 @@ def sandbox_child(
     *,
     memory_budget_mb: int = 256,
     process: SandboxStandIn | None = None,
+    tmpfs_paths: tuple[str, ...] = (),
 ) -> SandboxRunningChild:
     scratch = root / "run" / slug / instance
     return SandboxRunningChild(
@@ -633,6 +637,7 @@ def sandbox_child(
         stderr_path=scratch / "child.err",
         memory_budget_mb=memory_budget_mb,
         rules_path=scratch / "rules.json",
+        tmpfs_paths=tmpfs_paths,
     )
 
 
@@ -967,20 +972,35 @@ class StoppableSandboxStandIn(SandboxStandIn):
 
 
 def watched_sandbox(
-    root: Path, slug: str, *, sandbox_pid: int, own_mb: int, app_mb: int, budget_mb: int
+    root: Path,
+    slug: str,
+    *,
+    sandbox_pid: int,
+    own_mb: int,
+    app_mb: int,
+    budget_mb: int,
+    tmpfs_paths: tuple[str, ...] = (),
 ) -> tuple[SandboxRunningChild, StoppableSandboxStandIn]:
     """A sandbox whose root holds ``own_mb`` and whose app (a child of it) holds ``app_mb``."""
     fake_process(root, sandbox_pid, 1, own_mb)
     fake_process(root, sandbox_pid + 1, sandbox_pid, app_mb)
     process = StoppableSandboxStandIn(sandbox_pid)
     child = sandbox_child(
-        root, slug, f"1-{sandbox_pid}", sandbox_pid, memory_budget_mb=budget_mb, process=process
+        root,
+        slug,
+        f"1-{sandbox_pid}",
+        sandbox_pid,
+        memory_budget_mb=budget_mb,
+        process=process,
+        tmpfs_paths=tmpfs_paths,
     )
     return child, process
 
 
 async def watched_service(
-    tmp_path: Path, *children: tuple[str, SandboxRunningChild]
+    tmp_path: Path,
+    *children: tuple[str, SandboxRunningChild],
+    statvfs: Callable[[str | Path], os.statvfs_result] | None = None,
 ) -> tuple[Service, StubRegistry]:
     registry = seeded_registry()
     service = make_service(
@@ -988,6 +1008,7 @@ async def watched_service(
         registry=registry,
         metrics_root=tmp_path / "root",
         memory_watch_interval_s=MEMORY_WATCH_INTERVAL_S,
+        statvfs=statvfs,
     )
     await service.start_children(registry)
     RecordingReconciler.instances[-1].children = list(children)
@@ -1021,6 +1042,77 @@ async def test_a_sandbox_over_its_limit_is_stopped_with_the_reason_and_its_neigh
     )
     assert hog_process.stopped_with == [MEMORY_STOP_GRACE_S]
     assert tidy_process.stopped_with == []
+    await service.stop()
+
+
+def tmpfs_holding(used_mb: int) -> Callable[[str | Path], os.statvfs_result]:
+    """A ``statvfs`` that finds ``used_mb`` of 4 KiB blocks and no files in any mount asked."""
+    total_blocks = 1_000_000
+    free_blocks = total_blocks - used_mb * MB // PAGE_SIZE
+
+    def statvfs(_path: str | Path) -> os.statvfs_result:
+        return os.statvfs_result(
+            (PAGE_SIZE, PAGE_SIZE, total_blocks, free_blocks, free_blocks, 1000, 1000, 1000, 0, 255)
+        )
+
+    return statvfs
+
+
+async def test_a_sandbox_whose_tmpfs_and_memory_together_pass_its_limit_is_stopped(
+    tmp_path: Path,
+) -> None:
+    # 120 MB resident is far under the limit of 384 MB and so is 300 MB of files; together they
+    # are not (TD-004).
+    root = fake_container(tmp_path / "root")
+    filler, filler_process = watched_sandbox(
+        root,
+        "sales",
+        sandbox_pid=500,
+        own_mb=20,
+        app_mb=100,
+        budget_mb=256,
+        tmpfs_paths=(TMP_PATH,),
+    )
+    tidy, tidy_process = watched_sandbox(
+        root, "docs", sandbox_pid=600, own_mb=20, app_mb=100, budget_mb=256
+    )
+    service, _ = await watched_service(
+        tmp_path, ("sales", filler), ("docs", tidy), statvfs=tmpfs_holding(300)
+    )
+
+    await asyncio.wait_for(filler_process.is_stopped.wait(), timeout=WATCH_TIMEOUT_S)
+    exit_ = await asyncio.wait_for(filler.wait(), timeout=WATCH_TIMEOUT_S)
+    await a_few_rounds_of_the_watch()
+
+    limit_mb = int(256 * RSS_HEADROOM_FACTOR + OVERHEAD_PER_CHILD_MB)
+    assert exit_.description.startswith(
+        f"uses 420 MB (120 MB resident, 300 MB in its temporary directories), "
+        f"over its limit of {limit_mb} MB "
+        f"(budget 256 MB, plus {OVERHEAD_PER_CHILD_MB} MB for the sandbox itself); "
+    )
+    # The neighbour has no memory-backed mount listed, so the same statvfs does not count for it.
+    assert tidy_process.stopped_with == []
+    await service.stop()
+
+
+async def test_a_sandbox_whose_tmpfs_and_memory_fit_its_limit_together_is_left_running(
+    tmp_path: Path,
+) -> None:
+    root = fake_container(tmp_path / "root")
+    child, process = watched_sandbox(
+        root,
+        "sales",
+        sandbox_pid=500,
+        own_mb=20,
+        app_mb=100,
+        budget_mb=256,
+        tmpfs_paths=(TMP_PATH,),
+    )
+    service, _ = await watched_service(tmp_path, ("sales", child), statvfs=tmpfs_holding(200))
+
+    await a_few_rounds_of_the_watch()
+
+    assert process.stopped_with == []
     await service.stop()
 
 

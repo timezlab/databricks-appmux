@@ -26,7 +26,9 @@ from appmux.reconciler.sandbox_adapter import (
 )
 from appmux.sandbox.launcher import SandboxExit, SandboxSpec, SandboxStartError
 from appmux.sandbox.pump import PumpStats
+from appmux.sandbox.rootfs import HOME_PATH, SHM_PATH, TMP_PATH, VAR_TMP_PATH
 from appmux.sandbox.rules import EgressRule
+from appmux.sandbox.run_dir import RUN_DIR_MOUNT_PATH
 
 pytestmark = pytest.mark.anyio
 
@@ -640,6 +642,33 @@ async def test_the_pump_counters_are_asked_of_the_supervisor_within_a_bound(
 
 
 # --- what the memory watchdog asks of a running sandbox (TD-029) --------------------------------
+
+
+async def test_a_running_sandbox_lists_the_mounts_that_live_in_memory(tmp_path: Path) -> None:
+    starter = FakeStarter()
+
+    running = await launcher(tmp_path, starter).start(child_start())
+
+    # What the watchdog adds to the child's resident memory (TD-004, T219).
+    assert set(running.tmpfs_paths) == {
+        TMP_PATH,
+        VAR_TMP_PATH,
+        SHM_PATH,
+        HOME_PATH,
+        RUN_DIR_MOUNT_PATH,
+    }
+
+
+async def test_a_run_directory_on_the_host_is_not_listed_among_the_memory_mounts(
+    tmp_path: Path,
+) -> None:
+    starter = FakeStarter()
+    files = FakeRunDirFiles(starter)
+
+    running = await launcher_with_files(tmp_path, starter, files).start(shared_sp_child())
+
+    assert RUN_DIR_MOUNT_PATH not in running.tmpfs_paths
+    assert TMP_PATH in running.tmpfs_paths
 
 
 async def test_a_running_sandbox_knows_the_budget_it_was_started_with(tmp_path: Path) -> None:

@@ -23,9 +23,24 @@ HTTP paths
     GET /files/clear?directory=D
                    200 ``{"removed": true|false}``. Deletes what ``/files`` made in ``D``.
 
+    GET /fill?directory=D
+                   200 JSON. Like ``/report`` for any of the five writable mounts: writes 1 MiB at
+                   a time into ``D/fill.bin`` until the filesystem refuses or ``CEILING_MB`` is
+                   reached, and keeps the file. Keys: ``directory``, ``written_mb``,
+                   ``refused_with``.
+    GET /fill/clear?directory=D
+                   200 ``{"removed": true|false}``. Deletes what ``/fill`` wrote in ``D``.
+    GET /hold?mb=N
+                   200 ``{"held_mb": total}``. Allocates N MiB of heap, writes every page (so it is
+                   resident) and keeps it until the process ends. At most ``HOLD_CEILING_MB`` in
+                   all; more is a 400.
+    GET /usage     200 JSON ``{"rss_mb", "tmpfs_used_mb": {mount: MiB}, "tmpfs_used_total_mb"}``:
+                   what this process holds, for a test to state its premises (T219 watchdog test:
+                   neither the resident memory nor the files alone are over the limit, the sum is).
+
 Safety stops, so a sandbox that failed to cap the directory costs a bounded write and not the
-host's disk or memory: the byte loop stops at ``CEILING_MB`` and the file loop at
-``CEILING_FILES``.
+host's disk or memory: the byte loop stops at ``CEILING_MB``, the file loop at ``CEILING_FILES``
+and the heap at ``HOLD_CEILING_MB``.
 
 ``/report`` keys
     written_bytes        bytes the file holds when the loop ends (a short write at the cap counts).
@@ -70,12 +85,15 @@ CEILING_MB = 256
 # The five mounts a child can write to (design 6.1); the fixture refuses any other folder.
 WRITABLE_DIRECTORIES = (RUN_DIR, "/tmp", "/var/tmp", "/dev/shm", "/home/app")
 FILES_FOLDER = "inode_filler"
+FILL_NAME = "fill.bin"
+HOLD_CEILING_MB = 400
 # More than the largest limit (16 384 files) so a missing limit is seen, and few enough that it
 # costs a bounded amount of kernel memory (about 100 MB at 1 KB a file, from memory, not measured).
 CEILING_FILES = 100_000
 
 app = FastAPI()
 fill_lock = threading.Lock()
+held: list[bytearray] = []
 
 
 # Fixtures are standalone apps and cannot share code, so the hostile ones repeat this helper.
@@ -141,10 +159,65 @@ def meminfo_kb(name: str) -> int | None:
     return None
 
 
-def files_folder(directory: str) -> str:
+def require_writable_mount(directory: str) -> str:
     if directory not in WRITABLE_DIRECTORIES:
         raise HTTPException(status_code=400, detail="not one of the writable mounts")
-    return os.path.join(directory, FILES_FOLDER)
+    return directory
+
+
+def files_folder(directory: str) -> str:
+    return os.path.join(require_writable_mount(directory), FILES_FOLDER)
+
+
+def fill_mount(directory: str) -> dict[str, object]:
+    chunk = bytes(MIB)
+    written_bytes = 0
+    refused_with: str | None = None
+    try:
+        fd = os.open(
+            os.path.join(require_writable_mount(directory), FILL_NAME),
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+    except OSError as exc:
+        refused_with = errno_name(exc)
+    else:
+        try:
+            while written_bytes < CEILING_MB * MIB:
+                try:
+                    written_bytes += os.write(fd, chunk)
+                except OSError as exc:
+                    refused_with = errno_name(exc)
+                    break
+        finally:
+            os.close(fd)
+    return {
+        "fixture": "disk_filler",
+        "directory": directory,
+        "written_mb": written_bytes // MIB,
+        "refused_with": refused_with,
+    }
+
+
+def held_mb() -> int:
+    return sum(len(block) for block in held) // MIB
+
+
+def rss_mb() -> int:
+    with open("/proc/self/statm", encoding="ascii") as statm:
+        resident_pages = int(statm.read().split()[1])
+    return resident_pages * os.sysconf("SC_PAGE_SIZE") // MIB
+
+
+def tmpfs_used_mb() -> dict[str, int]:
+    used: dict[str, int] = {}
+    for directory in WRITABLE_DIRECTORIES:
+        try:
+            stats = os.statvfs(directory)
+        except OSError:
+            continue  # not a mount of this sandbox (the fixture is run outside one)
+        used[directory] = (stats.f_blocks - stats.f_bfree) * stats.f_frsize // MIB
+    return used
 
 
 def create_files_until_refused(directory: str) -> dict[str, object]:
@@ -210,6 +283,39 @@ def report() -> dict[str, object]:
 def files(directory: str) -> dict[str, object]:
     with fill_lock:
         return create_files_until_refused(directory)
+
+
+@app.get("/fill")
+def fill(directory: str) -> dict[str, object]:
+    with fill_lock:
+        return fill_mount(directory)
+
+
+@app.get("/fill/clear")
+def clear_fill(directory: str) -> dict[str, bool]:
+    path = os.path.join(require_writable_mount(directory), FILL_NAME)
+    with fill_lock:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            return {"removed": False}
+        return {"removed": True}
+
+
+@app.get("/hold")
+def hold(mb: int) -> dict[str, int]:
+    with fill_lock:
+        if mb < 1 or held_mb() + mb > HOLD_CEILING_MB:
+            raise HTTPException(status_code=400, detail=f"hold between 1 and {HOLD_CEILING_MB} MB")
+        # Written, not only allocated: untouched pages are not resident.
+        held.append(bytearray(b"\x01") * (mb * MIB))
+        return {"held_mb": held_mb()}
+
+
+@app.get("/usage")
+def usage() -> dict[str, object]:
+    used = tmpfs_used_mb()
+    return {"rss_mb": rss_mb(), "tmpfs_used_mb": used, "tmpfs_used_total_mb": sum(used.values())}
 
 
 @app.get("/files/clear")

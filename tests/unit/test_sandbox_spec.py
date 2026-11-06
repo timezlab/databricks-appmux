@@ -259,6 +259,26 @@ def _file_limit_of(mount_data: str) -> int | None:
     return int(options["nr_inodes"]) if "nr_inodes" in options else None
 
 
+def test_the_memory_backed_directories_are_the_writable_tmpfs_mounts_of_the_plan() -> None:
+    # What the memory watchdog reads the used bytes of (TD-004, T219).
+    assert plan_for().tmpfs_directories() == {
+        RUN_DIR_MOUNT_PATH,
+        TMP_PATH,
+        VAR_TMP_PATH,
+        SHM_PATH,
+        "/home/app",
+    }
+
+
+def test_a_host_backed_run_directory_is_writable_but_not_memory_backed() -> None:
+    # A statvfs of it would report the host's disk, not memory; watch_run_dir counts its bytes.
+    plan = plan_for(host_run_dir=HOST_APPMUX / "run/shop/rundir")
+
+    assert RUN_DIR_MOUNT_PATH in plan.writable_directories()
+    assert RUN_DIR_MOUNT_PATH not in plan.tmpfs_directories()
+    assert plan.tmpfs_directories() == {TMP_PATH, VAR_TMP_PATH, SHM_PATH, "/home/app"}
+
+
 def test_the_run_directory_is_a_host_directory_only_when_one_is_given() -> None:
     host_run_dir = HOST_APPMUX / "run/shop/rundir"
 
