@@ -77,6 +77,11 @@ VAR_TMP_SIZE_MB: Final = 16
 SHM_SIZE_MB: Final = 64
 HOME_SIZE_MB: Final = 64
 SKELETON_SIZE_MB: Final = 1
+# One file per 4 KiB page: a writable tmpfs takes no more files than a full one could hold if each
+# file held a page. An empty file costs nothing against ``size=``, so without this a child could
+# make files until the kernel's default (half the RAM pages) is reached; each one is kernel memory
+# charged to the container and shown in no figure of the child's (TD-004, T219).
+TMPFS_FILES_PER_MB: Final = 256
 
 ETC_FILES: Final = (
     "ld.so.cache",
@@ -146,6 +151,19 @@ class TmpfsMount:
     writable: bool = True
     mode: int = 0o1777
     noexec: bool = False
+
+
+def tmpfs_mount_data(step: TmpfsMount) -> str:
+    """The mount options of ``step``: its size, its file limit if the child can write, its mode.
+
+    A skeleton (``writable=False``) is read-only once the root is built, so nothing can fill it
+    and it keeps the kernel's default.
+    """
+    options = [f"size={step.size_mb}m"]
+    if step.writable:
+        options.append(f"nr_inodes={step.size_mb * TMPFS_FILES_PER_MB}")
+    options.append(f"mode={step.mode:04o}")
+    return ",".join(options)
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,9 +358,8 @@ def _apply_step(step: RootStep, ops: RootOps, root: str) -> None:
             ops.mount(str(step.source), destination, None, MS_BIND, None)
         case TmpfsMount():
             ops.makedirs(destination)
-            data = f"size={step.size_mb}m,mode={step.mode:04o}"
             flags = MS_NOSUID | MS_NODEV | (MS_NOEXEC if step.noexec else 0)
-            ops.mount("tmpfs", destination, "tmpfs", flags, data)
+            ops.mount("tmpfs", destination, "tmpfs", flags, tmpfs_mount_data(step))
         case Symlink():
             ops.symlink(step.destination, destination)
         case WrittenFile():

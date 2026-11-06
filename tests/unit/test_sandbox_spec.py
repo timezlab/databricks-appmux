@@ -40,6 +40,7 @@ from appmux.sandbox.rootfs import (
     WrittenFile,
     overlay_path,
     plan_rootfs,
+    tmpfs_mount_data,
 )
 from appmux.sandbox.run_dir import RUN_DIR_MOUNT_PATH, RUN_DIR_SIZE_MB
 
@@ -232,6 +233,30 @@ def test_the_private_temp_directories_are_capped_tmpfs() -> None:
     assert sizes[SHM_PATH] == 64
     assert sizes["/home/app"] == 64
     assert sizes[RUN_DIR_MOUNT_PATH] == RUN_DIR_SIZE_MB
+
+
+def test_every_writable_tmpfs_of_the_plan_is_limited_in_files_as_well_as_in_bytes() -> None:
+    limits = {
+        step.target: tmpfs_mount_data(step)
+        for step in plan_for().steps
+        if isinstance(step, TmpfsMount) and step.writable
+    }
+
+    assert {target: _file_limit_of(data) for target, data in limits.items()} == {
+        RUN_DIR_MOUNT_PATH: 16384,
+        TMP_PATH: 16384,
+        VAR_TMP_PATH: 4096,
+        SHM_PATH: 16384,
+        "/home/app": 16384,
+    }
+    # The set of writable directories above is the set that has a limit: a new writable mount
+    # without one fails here.
+    assert set(limits) == plan_for().writable_directories()
+
+
+def _file_limit_of(mount_data: str) -> int | None:
+    options = dict(option.split("=", 1) for option in mount_data.split(","))
+    return int(options["nr_inodes"]) if "nr_inodes" in options else None
 
 
 def test_the_run_directory_is_a_host_directory_only_when_one_is_given() -> None:

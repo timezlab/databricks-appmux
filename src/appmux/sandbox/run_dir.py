@@ -12,8 +12,12 @@ Measured in a container (dev App, 2026-11-05, ``tests/integration/test_run_dir_c
 
 * the ``tmpfs`` inside the unprivileged mount namespace, with the inherited socket, holds its cap
   *in bytes*: a writer was refused with ``ENOSPC`` at exactly ``RUN_DIR_SIZE_MB`` and the child
-  went on answering. The mount sets no ``nr_inodes``, so the number of files is not capped, and
-  the test never created any (TD-004);
+  went on answering. The mount also carries ``nr_inodes`` (one file per 4 KiB page of its size,
+  ``rootfs.tmpfs_mount_data``), because ``size=`` caps bytes and not files: with it, an
+  empty-file loop was refused with ``ENOSPC`` at 16 384 files, in this mount and in the four
+  other writable ones (``test_tmpfs_file_limit.py``, T219, 2026-11-06). A file costs the
+  container about 1 KB of kernel memory that neither the byte cap nor the child's resident
+  figure shows (TD-004);
 * its pages are memory, and in one run they were counted in the container and not in the child's
   resident figure (the container's rose by 68 MiB for 64 MiB written, the child's by 1 MiB), so
   the memory watchdog, which reads that figure, does not see them. ``RLIMIT_AS`` bounds a

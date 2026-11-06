@@ -37,6 +37,7 @@ from appmux.sandbox.rootfs import (
     WrittenFile,
     build_root,
     parse_mount_flags,
+    tmpfs_mount_data,
 )
 
 PIVOT = "/work/newroot"
@@ -197,7 +198,7 @@ def test_a_required_source_that_is_missing_stops_the_build_before_the_pivot() ->
 # ---- tmpfs, links, written files, devices ------------------------------------------------------
 
 
-def test_a_private_tmpfs_is_sized_and_sticky_and_cannot_hold_setuid_files_or_devices() -> None:
+def test_a_private_tmpfs_is_sized_file_limited_sticky_and_holds_no_setuid_or_devices() -> None:
     ops = RecordingOps()
 
     build_root(plan_of(TmpfsMount(TMP_PATH, size_mb=64)), ops, pivot_dir=PIVOT)
@@ -208,8 +209,23 @@ def test_a_private_tmpfs_is_sized_and_sticky_and_cannot_hold_setuid_files_or_dev
         ROOT + TMP_PATH,
         "tmpfs",
         MS_NOSUID | MS_NODEV,
-        "size=64m,mode=1777",
+        "size=64m,nr_inodes=16384,mode=1777",
     ) in ops.calls
+
+
+def test_a_writable_tmpfs_takes_one_file_for_each_page_its_size_could_hold() -> None:
+    # An empty file costs nothing in "size=", so the byte cap alone lets a child make files until
+    # the kernel's default (half the RAM pages) is reached, each one kernel memory that no figure
+    # of the child's shows (TD-004, T219). One file per 4 KiB page is the most a full mount of
+    # one-page files could hold anyway.
+    assert tmpfs_mount_data(TmpfsMount("/data", size_mb=64)) == "size=64m,nr_inodes=16384,mode=1777"
+    assert tmpfs_mount_data(TmpfsMount("/data", size_mb=16)) == "size=16m,nr_inodes=4096,mode=1777"
+
+
+def test_a_skeleton_tmpfs_has_no_file_limit_because_nothing_can_write_to_it_afterwards() -> None:
+    skeleton = TmpfsMount("/dev", size_mb=1, writable=False, mode=0o755)
+
+    assert tmpfs_mount_data(skeleton) == "size=1m,mode=0755"
 
 
 def test_a_skeleton_tmpfs_is_made_read_only_after_everything_mounted_below_it() -> None:
