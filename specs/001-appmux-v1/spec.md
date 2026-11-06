@@ -352,7 +352,7 @@ Each requirement is testable. The cited document gives the detail and the number
 
 **UI and metrics**
 
-- **FR-051**: The admin UI MUST be a static export served by the edge, polling a JSON API every few seconds, with the screens of [design §10.1](../../docs/product/v1-design.md#101-screens); no Node process runs in the slot. ([ADR 0012](../../docs/decisions/0012-build-services-in-python-and-the-admin-ui-in-nextjs.md))
+- **FR-051**: The admin UI MUST be a static export served by the edge, polling a JSON API every few seconds, with the screens of [design §10.1](../../docs/product/v1-design.md#101-screens); no Node process runs in the slot. The dashboard's metrics panel polls every 5 s for a range of up to 1 hour, every 15 s for a range of up to 24 hours and every 60 s for a longer range (amended by the owner on 2026-11-06, T218, to match the built panel; other pages keep their own intervals). ([ADR 0012](../../docs/decisions/0012-build-services-in-python-and-the-admin-ui-in-nextjs.md))
 - **FR-052**: Metrics MUST be collected as one-minute aggregates per app, flushed to the registry in one batch per minute and kept 7 days, with the columns of [design §10.2](../../docs/product/v1-design.md#102-metrics).
 - **FR-053**: Every action in the SC-004 walkthrough MUST be available in the UI or API, so no SQL is ever typed to operate appmux.
 

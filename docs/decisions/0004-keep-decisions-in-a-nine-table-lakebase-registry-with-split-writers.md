@@ -132,3 +132,26 @@ residual is stated, not removed: a platform admin's default view mode stays
 *without token* (assumption A1), and the gap is logged as TD-002 in
 [tech-debt](../tech-debt.md).
 
+
+## Update 2026-11-06 (T217): the deployer loads the schema, never the App
+
+The Decision is unchanged and the status stays `accepted`. This note records a consequence the
+Decision left open: who creates the nine tables.
+
+The tables are loaded by **the deployer, with the deployer's own Postgres role and OAuth token**,
+by `python -m appmux.registry.load_schema` ([design 13.1](../product/v1-design.md#131-what-the-operator-sets-up),
+item 2). Nothing inside the App loads or migrates the schema at start-up, and no code path that
+runs as the appmux service principal does. The reason is the split itself: if the App's role created
+the tables it would own them, and an owner can change its own grants, so a child holding the shared
+service principal's token could rewrite `apps` and `platform_settings` — the one thing the split
+exists to prevent. `scripts/sync-deploy.sh` runs the command before it uploads when the developer
+names the Lakebase endpoint, so a deploy loads the schema on a new database and answers "already
+loaded" on every later one.
+
+**Must now be true (added):** no migration is applied by a connection that logs in as the appmux
+service principal or as `appmux_sp`.
+
+**Worse (added):** because this ADR allows no tenth table, the loader keeps no record of what it
+applied. "Already loaded" (a table named `apps` exists) is not "up to date": a migration file added
+after the first load is applied by hand with the deployer's login ([TD-008](../tech-debt.md)). A
+record of applied files would be a change to the nine-table registry and needs its own ADR.

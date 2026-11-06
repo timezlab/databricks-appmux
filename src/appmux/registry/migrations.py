@@ -35,7 +35,7 @@ The folder is a parameter, because the migrations folder of a repository checkou
 release zip are not found the same way. This module opens no connection and imports no database
 or network library: the caller opens the connection (a psycopg ``AsyncConnection`` satisfies
 ``MigrationConnection``), calls ``apply_migrations`` and closes it. The command-line entry point
-belongs to that caller.
+is ``appmux.registry.load_schema`` (T217).
 """
 
 from __future__ import annotations

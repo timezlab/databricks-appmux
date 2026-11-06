@@ -52,7 +52,10 @@ GitHub Spec Kit (`specify` CLI).
 - Deploy scripts: `scripts/sync-deploy.sh` needs `APPMUX_WORKSPACE_FOLDER` and
   `APPMUX_DATABRICKS_PROFILE` (local, never committed, never defaulted); its output
   passes through `scripts/lib/mask-identifiers.sh`. Run `scripts/vendor-wheels.sh` and
-  `scripts/fetch-slirp4netns.sh` first. For the integration tests, deploy with
+  `scripts/fetch-slirp4netns.sh` first. With
+  `APPMUX_LAKEBASE_ENDPOINT` set (the Lakebase endpoint's resource name; local, never committed) it
+  also loads the registry schema with your own login before it uploads anything
+  (`scripts/load-schema.sh`; exit 3 means already loaded, which is not a failure). For the integration tests, deploy with
   `APPMUX_DEPLOY_BOOTSTRAP_ADMIN` set to your own address (local, never committed: it replaces the
   placeholder admin in the synced copy of `app.yaml` only), so the token owner is a platform admin.
   The dev App also needs `workspace.workspace:read` in its `user_api_scopes` (Update reads the

@@ -36,6 +36,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 ASSEMBLE = SCRIPTS_DIR / "assemble-deploy.sh"
 SYNC = SCRIPTS_DIR / "sync-deploy.sh"
 FETCH_LOGS = SCRIPTS_DIR / "fetch-logs.sh"
+LOAD_SCHEMA = SCRIPTS_DIR / "load-schema.sh"
 VENDOR_WHEELS = SCRIPTS_DIR / "vendor-wheels.sh"
 RUN_CONTAINER_TESTS = SCRIPTS_DIR / "run-container-tests.sh"
 
@@ -53,6 +54,7 @@ EXPECTED_DEPLOY_FILES = frozenset(
         "appmux/__init__.py",
         "appmux/__main__.py",
         "appmux/edge/__init__.py",
+        "migrations/0001_baseline.sql",
         "web/out/index.html",
         "web/out/_next/app.js",
         "bin/slirp4netns",
@@ -106,6 +108,7 @@ def tree(tmp_path: Path) -> FakeTree:
     # What the allow-list copies.
     write(root / "app.yaml", 'command: ["python", "-m", "appmux"]\n')
     write(root / "LICENSE", "Apache License\n")
+    write(root / "migrations" / "0001_baseline.sql", "CREATE TABLE apps ();\n")
     package = root / "src" / "appmux"
     write(package / "__init__.py", f'"""Fake."""\n\n__version__ = "{FAKE_VERSION}"\n')
     write(package / "__main__.py")
@@ -213,6 +216,7 @@ def test_assembly_removes_the_zip_and_hash_of_an_earlier_run(tree: FakeTree) -> 
         pytest.param("app.yaml", "app.yaml", id="app.yaml"),
         pytest.param("LICENSE", "LICENSE", id="licence"),
         pytest.param("src/appmux", "src/appmux", id="package"),
+        pytest.param("migrations", "migrations", id="migrations"),
     ],
 )
 def test_a_missing_repository_file_is_refused_without_leaving_earlier_output(
@@ -448,6 +452,16 @@ case "$1" in
       printf '%s\\n' "$STUB_EXTRA_OUTPUT" >&2
     fi
     ;;
+  postgres)
+    case "$2" in
+      get-endpoint) echo '{"status": {"hosts": {"host": "endpoint.database.example.test"}}}' ;;
+      generate-database-credential)
+        if [ "${STUB_CREDENTIAL_FAILS:-}" = "1" ]; then echo "credential refused" >&2; exit 1; fi
+        printf '{"token": "%s", "expire_time": "2030-01-01T00:00:00Z"}\n' "$STUB_DB_TOKEN"
+        ;;
+    esac
+    ;;
+  current-user) echo '{"userName": "deployer@example.test"}' ;;
   apps)
     case "$2" in
       deploy) echo '{"deployment_id": "deployment-1", "status": {"state": "IN_PROGRESS"}}' ;;
@@ -460,8 +474,22 @@ case "$1" in
 esac
 """
 
+# Stands in for ``uv``: records the loader's command line and whether the login reached it through
+# the environment, prints canned output and exits with the code the test asks for.
+STUB_UV_SCRIPT = """#!/bin/bash
+printf 'uv %s\\n' "$*" >> "$STUB_CALLS"
+if [ "${PGPASSWORD:-}" = "$STUB_DB_TOKEN" ] && [ -n "${PGHOST:-}" ] && [ -n "${PGUSER:-}" ]; then
+  printf 'login-in-environment\\n' >> "$STUB_CALLS"
+fi
+printf '%s\\n' "${STUB_LOAD_OUTPUT:-loaded the registry: applied 3 migration file(s)}"
+exit "${STUB_LOAD_STATUS:-0}"
+"""
+
 WORKSPACE_FOLDER = "/Workspace/Users/user@example.com/appmux-deploy"
 PROFILE = "example-profile"
+LAKEBASE_ENDPOINT = "projects/example/branches/main/endpoints/primary"
+# Fake, built at run time so no token-shaped literal sits in the source.
+FAKE_DB_TOKEN = "dbtok" + "k3" * 10
 # Fake secret-shaped text, built at run time so no such literal sits in the source.
 FAKE_OPAQUE_VALUE = "Zq7" + "x" * 15 + "9"
 FAKE_DOSE_TOKEN = "dose" + "0f" * 16
@@ -483,6 +511,7 @@ class StubCli:
 def stub_cli(tmp_path: Path) -> StubCli:
     stub_dir = tmp_path / "stub-bin"
     write(stub_dir / "databricks", STUB_CLI_SCRIPT, executable=True)
+    write(stub_dir / "uv", STUB_UV_SCRIPT, executable=True)
     calls = tmp_path / "databricks-calls.txt"
     listing = tmp_path / "sync-listing.txt"
     log_text = tmp_path / "log-text.txt"
@@ -493,6 +522,7 @@ def stub_cli(tmp_path: Path) -> StubCli:
         "STUB_CALLS": str(calls),
         "STUB_SYNC_LISTING": str(listing),
         "STUB_LOG_TEXT": str(log_text),
+        "STUB_DB_TOKEN": FAKE_DB_TOKEN,
         "STUB_STATE": "SUCCEEDED",
         "STUB_MESSAGE": "",
     }
@@ -1165,3 +1195,142 @@ def test_every_script_parses_and_is_executable(script: Path) -> None:
 
     assert syntax.returncode == 0, syntax.stderr
     assert os.access(script, os.X_OK), f"{script.name} must carry the executable bit"
+
+
+# --- loading the schema when deploying (T217) ----------------------------------------------------
+
+
+def schema_environment(fake: FakeTree, stub: StubCli, **overrides: str) -> dict[str, str]:
+    return sync_environment(fake, stub, APPMUX_LAKEBASE_ENDPOINT=LAKEBASE_ENDPOINT, **overrides)
+
+
+def loader_calls(stub: StubCli) -> list[str]:
+    return [line for line in stub.call_lines() if line.startswith("uv ")]
+
+
+@pytest.mark.parametrize(
+    "unset_variable", ["APPMUX_DATABRICKS_PROFILE", "APPMUX_LAKEBASE_ENDPOINT"]
+)
+def test_load_schema_stops_on_an_unset_variable_before_calling_anything(
+    tree: FakeTree, stub_cli: StubCli, unset_variable: str
+) -> None:
+    environment = schema_environment(tree, stub_cli)
+    del environment[unset_variable]
+
+    result = run_script(LOAD_SCHEMA, environment)
+
+    assert result.returncode != 0
+    assert unset_variable in result.stderr
+    assert not stub_cli.calls.exists(), "the CLI or the loader was called"
+
+
+def test_load_schema_gives_the_loader_the_login_through_its_environment(
+    tree: FakeTree, stub_cli: StubCli
+) -> None:
+    result = run_script(LOAD_SCHEMA, schema_environment(tree, stub_cli))
+
+    assert result.returncode == 0, result.stderr
+    calls = stub_cli.call_lines()
+    assert [
+        call.split()[:2] for call in calls if call.startswith(("postgres", "current-user"))
+    ] == [
+        ["postgres", "get-endpoint"],
+        ["current-user", "me"],
+        ["postgres", "generate-database-credential"],
+    ]
+    assert (
+        f"uv run --project {tree.root} python -m appmux.registry.load_schema "
+        f"--migrations {tree.root / 'migrations'}"
+    ) in calls
+    assert "login-in-environment" in calls
+    assert all(FAKE_DB_TOKEN not in call for call in calls), "the token reached a command line"
+
+
+def test_load_schema_takes_the_migrations_folder_as_an_argument(
+    tree: FakeTree, stub_cli: StubCli
+) -> None:
+    result = run_script(LOAD_SCHEMA, schema_environment(tree, stub_cli), "/unpacked/migrations")
+
+    assert result.returncode == 0, result.stderr
+    [call] = loader_calls(stub_cli)
+    assert call.endswith("--migrations /unpacked/migrations")
+
+
+@pytest.mark.parametrize("loader_status", [0, 1, 2, 3])
+def test_load_schema_exits_with_the_code_of_the_loader(
+    tree: FakeTree, stub_cli: StubCli, loader_status: int
+) -> None:
+    environment = schema_environment(tree, stub_cli, STUB_LOAD_STATUS=str(loader_status))
+
+    result = run_script(LOAD_SCHEMA, environment)
+
+    assert result.returncode == loader_status
+
+
+def test_load_schema_does_not_run_the_loader_when_the_credential_is_refused(
+    tree: FakeTree, stub_cli: StubCli
+) -> None:
+    result = run_script(LOAD_SCHEMA, schema_environment(tree, stub_cli, STUB_CREDENTIAL_FAILS="1"))
+
+    assert result.returncode == 1
+    assert loader_calls(stub_cli) == []
+    assert "credential" in result.stderr
+
+
+def test_load_schema_masks_what_the_loader_prints(tree: FakeTree, stub_cli: StubCli) -> None:
+    leaking = f"login as deployer@example.test failed, token={FAKE_DB_TOKEN}"
+
+    result = run_script(LOAD_SCHEMA, schema_environment(tree, stub_cli, STUB_LOAD_OUTPUT=leaking))
+
+    shown = result.stdout + result.stderr
+    assert "deployer@example.test" not in shown
+    assert FAKE_DB_TOKEN not in shown
+    assert "failed" in shown, "the rest of the line is kept"
+
+
+def test_sync_deploy_loads_the_schema_of_the_deployment_folder_before_it_uploads(
+    tree: FakeTree, stub_cli: StubCli
+) -> None:
+    result = run_script(SYNC, schema_environment(tree, stub_cli))
+
+    assert result.returncode == 0, result.stderr
+    calls = stub_cli.call_lines()
+    [loader_call] = loader_calls(stub_cli)
+    assert loader_call.endswith(f"--migrations {tree.deploy / 'migrations'}")
+    first_upload = next(i for i, call in enumerate(calls) if call.startswith("sync "))
+    assert calls.index(loader_call) < first_upload
+    assert any(call.startswith("apps deploy") for call in calls[first_upload:])
+
+
+@pytest.mark.parametrize("loader_status", [1, 2])
+def test_sync_deploy_uploads_and_deploys_nothing_when_the_schema_cannot_be_loaded(
+    tree: FakeTree, stub_cli: StubCli, loader_status: int
+) -> None:
+    environment = schema_environment(tree, stub_cli, STUB_LOAD_STATUS=str(loader_status))
+
+    result = run_script(SYNC, environment)
+
+    assert result.returncode != 0
+    assert "schema" in result.stderr
+    calls = stub_cli.call_lines()
+    assert not any(call.startswith(("sync ", "apps ")) for call in calls)
+
+
+def test_sync_deploy_goes_on_when_the_schema_is_already_loaded(
+    tree: FakeTree, stub_cli: StubCli
+) -> None:
+    result = run_script(SYNC, schema_environment(tree, stub_cli, STUB_LOAD_STATUS="3"))
+
+    assert result.returncode == 0, result.stderr
+    assert any(call.startswith("apps deploy") for call in stub_cli.call_lines())
+    assert "already loaded" in result.stdout
+
+
+def test_sync_deploy_says_when_it_skips_the_schema_step(tree: FakeTree, stub_cli: StubCli) -> None:
+    result = run_script(SYNC, sync_environment(tree, stub_cli))
+
+    assert result.returncode == 0, result.stderr
+    assert "APPMUX_LAKEBASE_ENDPOINT" in result.stdout
+    assert "schema" in result.stdout
+    assert loader_calls(stub_cli) == []
+    assert not any(call.startswith("postgres") for call in stub_cli.call_lines())

@@ -15,6 +15,10 @@
 # The allow-list (nothing else is copied):
 #   app.yaml, LICENSE                       from the repository root
 #   appmux/                                 from src/appmux, without __pycache__
+#   migrations/                             from the repository root: the schema files that
+#                                           `python -m appmux.registry.load_schema` applies
+#                                           (design 13.1), so an operator who holds only the
+#                                           release zip can load the registry
 #   web/out/                                from web/out (a warning when absent; the zip refuses)
 #   requirements.txt, wheels/               from the build folder (scripts/vendor-wheels.sh)
 #   bin/slirp4netns, licenses/slirp4netns/  from build/slirp4netns/ (scripts/fetch-slirp4netns.sh)
@@ -86,6 +90,7 @@ vendor_hint="run scripts/vendor-wheels.sh first"
 [[ -f "$repo_root/app.yaml" ]] || die "app.yaml is missing from the repository root"
 [[ -f "$repo_root/LICENSE" ]] || die "LICENSE is missing from the repository root"
 [[ -d "$repo_root/src/appmux" ]] || die "src/appmux is missing from the repository root"
+[[ -d "$repo_root/migrations" ]] || die "migrations is missing from the repository root"
 [[ -f "$build_dir/requirements.txt" ]] || die "build/requirements.txt is missing; $vendor_hint"
 [[ -d "$build_dir/wheels" ]] || die "build/wheels is missing; $vendor_hint"
 
@@ -128,6 +133,7 @@ install -m 0644 -- "$repo_root/LICENSE" "$deploy_dir/LICENSE"
 install -m 0644 -- "$build_dir/requirements.txt" "$deploy_dir/requirements.txt"
 copy_folder "$build_dir/wheels" "$deploy_dir/wheels"
 copy_folder "$repo_root/src/appmux" "$deploy_dir/appmux"
+copy_folder "$repo_root/migrations" "$deploy_dir/migrations"
 if [[ "$have_ui_export" == true ]]; then
   copy_folder "$repo_root/web/out" "$deploy_dir/web/out"
 fi

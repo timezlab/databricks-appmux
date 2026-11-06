@@ -112,3 +112,15 @@ every other app, and an idle pump should wake on a file change instead of
 polling every 10 ms (3 % of one CPU for ten sandboxes). The real edge costs more
 than the stand-in, so the plan measures it against the SC-001 load; the Decision
 is unchanged and the status stays `accepted`.
+
+## Update 2026-11-06 (T218): how often the dashboard polls
+
+The Decision is unchanged and the status stays `accepted`. Its words "the pages poll every few
+seconds" are made exact for the dashboard and an app's Insights, where the owner chose on
+2026-11-06 to amend the documents to match the code rather than the code to match the documents:
+the metrics panel polls **every 5 seconds for a range of up to 1 hour, every 15 seconds for a range
+of up to 24 hours, and every 60 seconds for a longer range**. Up to a day the answer holds up
+to 1440 rows and changes once a minute; a longer range is read in steps of 5 or 15 minutes whose
+newest step also grows once a minute, so asking once a minute is enough. The tiers are in `web/src/lib/dashboard/scope.ts`; [FR-051](../../specs/001-appmux-v1/spec.md),
+[design 10.1](../product/v1-design.md) and [TD-009](../tech-debt.md) name them. Other pages keep
+their own intervals (the logs page polls every 2 seconds).

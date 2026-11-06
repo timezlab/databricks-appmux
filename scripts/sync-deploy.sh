@@ -23,6 +23,14 @@
 #                              defaulted: an implicit default profile could point
 #                              at a workspace this project must not touch.
 # Optional:
+#   APPMUX_LAKEBASE_ENDPOINT   the Lakebase endpoint's resource name,
+#                              projects/<project>/branches/<branch>/endpoints/<endpoint>.
+#                              When it is set, the deployment first loads the registry schema
+#                              (scripts/load-schema.sh, with your own Lakebase login, from the
+#                              assembled folder's migrations/) and uploads nothing if that fails.
+#                              A registry that is already loaded is left as it is and the
+#                              deployment goes on. When it is unset the step is skipped, and the
+#                              script says so.
 #   APPMUX_APP_NAME            the App to deploy. Default: appmux.
 #   APPMUX_POLL_INTERVAL_S     seconds between deployment checks. Default: 10.
 #   APPMUX_POLL_ATTEMPTS       checks before giving up. Default: 60.
@@ -140,6 +148,22 @@ build_dir=${APPMUX_BUILD_DIR:-$repo_root/build}
 "$script_dir/assemble-deploy.sh"
 deploy_dir="$build_dir/deploy"
 [[ -d "$deploy_dir" ]] || die "assemble-deploy.sh left no deployment folder at build/deploy"
+
+# The schema before the upload: an App started on an empty registry stops at "starting", and a
+# failed load must not leave a half-deployed App behind. It is loaded from the folder that is
+# about to be uploaded, so the schema and the code in it belong together.
+if [[ -n "${APPMUX_LAKEBASE_ENDPOINT:-}" ]]; then
+  printf 'loading the registry schema with your own Lakebase login\n'
+  schema_status=0
+  "$script_dir/load-schema.sh" "$deploy_dir/migrations" || schema_status=$?
+  case "$schema_status" in
+    0) ;;
+    3) printf 'the registry schema is already loaded; nothing was changed\n' ;;
+    *) die "the registry schema was not loaded (load-schema.sh exited $schema_status); nothing was uploaded" ;;
+  esac
+else
+  printf 'registry schema step skipped: APPMUX_LAKEBASE_ENDPOINT is not set\n'
+fi
 
 work_dir=$(mktemp -d)
 trap 'rm -rf -- "$work_dir"' EXIT

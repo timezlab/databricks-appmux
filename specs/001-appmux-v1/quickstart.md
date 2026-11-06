@@ -24,11 +24,14 @@ Expected: formatting and lint clean, no type errors, all unit and contract tests
 ```
 scripts/vendor-wheels.sh      # once, and again when uv.lock changes: build/requirements.txt, build/wheels/
 scripts/fetch-slirp4netns.sh  # once, and again when the pin changes: build/slirp4netns/
-scripts/sync-deploy.sh        # assemble build/deploy/, sync it to the workspace folder, deploy, wait
+scripts/load-schema.sh        # once on a new database: apply migrations/ with your own login (exit 0 loaded, 3 already loaded)
+scripts/sync-deploy.sh        # assemble build/deploy/, load the schema when APPMUX_LAKEBASE_ENDPOINT is set, sync it to the workspace folder, deploy, wait
 scripts/fetch-logs.sh         # fetch the app logs, identifiers masked
 scripts/run-remote-tests.sh   # the container scenarios below, from this machine, as the CLI's token owner
 scripts/run-container-tests.sh  # the ones that need to run inside the App (capacity, /proc); restarts the App
 ```
+
+Schema step (`APPMUX_LAKEBASE_ENDPOINT` is the Lakebase endpoint's resource name, local and never committed): on an empty database `scripts/load-schema.sh` exits `0` and names the applied files; run again it exits `3` ("already loaded", nothing changed; `sync-deploy.sh` goes on). Two refusals exit `2` before anything runs: a group role missing (`appmux_sp` or `appmux_platform_writers`, named in the message) and an unusable migrations folder. A failed file exits `1` and commits nothing. Neither the token nor a driver message appears in the output (`tests/unit/test_load_schema.py`, `test_assemble_deploy.py`). Seen on the dev Lakebase on 2026-11-06: the loaded database answered `3`, a scratch database in the same project loaded the three files and nine tables with `0` and then answered `3`, and a folder that does not exist answered `2`; the scratch database was dropped afterwards.
 
 Expected: once the process is up, and until the registry is loaded and the start-up steps (the content store, `self_check`, the children) have run, `/` answers `200` "starting" and every other path `503` (the startup gate, [design 5.6](../../docs/product/v1-design.md#56-crash-restart-and-shutdown)); before the process is up the Apps proxy answers its own `502` page, which appmux does not control (on 2026-11-05 that lasted about 77 s and the gate was visible for about 10 s, [log](spikes/README.md#the-startup-gate-during-a-deploy)); the app is not restarted by the platform while `self_check` runs; then the platform page shows `self_check` **ok** with every check of [design 6.4](../../docs/product/v1-design.md#64-self-check-failures-and-gaps) listed; no child exists yet.
 
