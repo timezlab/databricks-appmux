@@ -14,3 +14,10 @@ env:
   # Lakebase project's default database is databricks_postgres.
   - name: APPMUX_LAKEBASE_DATABASE
     value: databricks_postgres
+  # Where the content store keeps its files (design 3.3). Left commented out, appmux uses a
+  # folder of the App's own service principal, and that folder is lost when the App is deleted
+  # and created again. A fixed folder is not: remove the two `#`, put your folder here (or let
+  # scripts/sync-deploy.sh or the deploy notebook do it) and grant the App's service principal
+  # CAN_MANAGE on it. It must be an absolute path under /Workspace/.
+  # - name: APPMUX_CONTENT_STORE_FOLDER
+  #   value: /Workspace/Shared/appmux-store

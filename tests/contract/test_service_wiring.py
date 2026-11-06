@@ -4,9 +4,10 @@
 ``_start_with_real_wiring`` (the registry stands in; the workspace, the container and the reconciler
 come from ``service_harness``) and pin what only the wiring decides:
 
-* the order of the start-up steps: the content store's folder, then the self-check, then the
-  children, each only after the one before it succeeded (a store folder that cannot be created
-  keeps the gate shut; a failed self-check opens the gate but starts nothing, FR-013);
+* the order of the start-up steps: the check of the service principal (ADR 0022), the content
+  store's folder, then the self-check, then the children, each only after the one before it
+  succeeded (a store folder that cannot be created keeps the gate shut; a failed self-check opens
+  the gate but starts nothing, FR-013);
 * the edge and the reconciler share one route table and one set of open connections, and a release
   that is created wakes the reconciler;
 * the edge is given the control of the reconciler (restart, rename, the state of an app), its
@@ -33,6 +34,7 @@ from edge_harness import (
     app_row,
     call,
     canary_text,
+    seed_standard_rows,
     settings_for_wiring,
 )
 from service_harness import (
@@ -52,6 +54,9 @@ from appmux import __main__ as entry
 from appmux.edge.gate import BlockReason, Gate, Phase
 from appmux.metrics.aggregate import MetricsAggregator
 from appmux.metrics.service import DEFAULT_STOP_BUDGET_S
+from appmux.registry.audit import AuditEntry
+from appmux.registry.errors import RegistryUnavailable
+from appmux.registry.service_principal import SERVICE_PRINCIPAL_ACTION
 from appmux.sandbox.self_check import CHECK_IDS
 
 pytestmark = pytest.mark.anyio
@@ -130,6 +135,116 @@ async def test_the_store_folder_is_made_first_then_the_self_check_runs_then_the_
         "self-check",
         "reconciler start",
     ]
+    await entry.stop_background(task)
+
+
+WIRING_CLIENT_ID: Final = "client-id-placeholder"
+EARLIER_CLIENT_ID: Final = "5b7e2c10-91d4-4c3e-8a67-2f0e5d8a1c44"
+
+
+class WriteLoggingRegistry(ManagedRegistry):
+    """A managed registry that notes each write in the log, to show where a step ran."""
+
+    async def write(self, *args: Any, **kwargs: Any) -> Any:
+        self.log.append("registry write")
+        return await super().write(*args, **kwargs)
+
+
+async def remember_service_principal(registry: ManagedRegistry, client_id: str) -> None:
+    """The row an earlier start wrote, noted as the id appmux ran as."""
+    await registry.write(
+        [],
+        [
+            AuditEntry.model_validate(
+                {
+                    "actor": "appmux",
+                    "action": SERVICE_PRINCIPAL_ACTION,
+                    "detail": {"client_id": client_id},
+                    "automatic": True,
+                }
+            )
+        ],
+    )
+    registry.log.clear()
+
+
+def desired_states(registry: ManagedRegistry) -> dict[str, str]:
+    return {c.app_slug: c.desired_state for c in registry.snapshot.app_configs}
+
+
+async def test_a_new_service_principal_stops_every_app_before_anything_else_starts(
+    monkeypatch: pytest.MonkeyPatch, doubles: ServiceDoubles
+) -> None:
+    script_canary(monkeypatch, doubles)
+    registry = seed_standard_rows(WriteLoggingRegistry(log=doubles.log))
+    await remember_service_principal(registry, EARLIER_CLIENT_ID)
+    gate = Gate()
+
+    task = await start_like_serve(monkeypatch, registry, gate)
+
+    assert gate.phase is Phase.OPEN
+    assert doubles.log == [
+        "registry write",
+        "workspace POST /api/2.0/workspace/mkdirs",
+        "self-check",
+        "reconciler start",
+    ]
+    assert desired_states(registry) == {"sales": "stopped", "docs": "stopped"}
+    await entry.stop_background(task)
+
+
+async def test_the_same_service_principal_leaves_the_apps_running(
+    monkeypatch: pytest.MonkeyPatch, doubles: ServiceDoubles
+) -> None:
+    script_canary(monkeypatch, doubles)
+    registry = seed_standard_rows(WriteLoggingRegistry(log=doubles.log))
+    await remember_service_principal(registry, WIRING_CLIENT_ID)
+    gate = Gate()
+
+    task = await start_like_serve(monkeypatch, registry, gate)
+
+    assert gate.phase is Phase.OPEN
+    assert doubles.log == [
+        "workspace POST /api/2.0/workspace/mkdirs",
+        "self-check",
+        "reconciler start",
+    ]
+    assert desired_states(registry) == {"sales": "running", "docs": "running"}
+    await entry.stop_background(task)
+
+
+async def test_a_registry_without_a_record_only_notes_the_service_principal(
+    monkeypatch: pytest.MonkeyPatch, doubles: ServiceDoubles
+) -> None:
+    script_canary(monkeypatch, doubles)
+    registry = seed_standard_rows(WriteLoggingRegistry(log=doubles.log))
+    gate = Gate()
+
+    task = await start_like_serve(monkeypatch, registry, gate)
+
+    assert gate.phase is Phase.OPEN
+    assert desired_states(registry) == {"sales": "running", "docs": "running"}
+    assert [row.detail["client_id"] for row in registry.audit_rows] == [WIRING_CLIENT_ID]
+    await entry.stop_background(task)
+
+
+async def test_a_service_principal_check_that_cannot_be_read_keeps_the_gate_shut(
+    monkeypatch: pytest.MonkeyPatch, doubles: ServiceDoubles
+) -> None:
+    class CannotReadAudit(ManagedRegistry):
+        async def read_audit_of(self, **kwargs: Any) -> Any:
+            raise RegistryUnavailable
+
+    script_canary(monkeypatch, doubles)
+    gate = Gate()
+
+    task = await start_like_serve(
+        monkeypatch, seed_standard_rows(CannotReadAudit(log=doubles.log)), gate
+    )
+
+    assert gate.phase is Phase.BLOCKED
+    assert gate.reason is BlockReason.STARTUP_FAILED
+    assert doubles.log == ["registry closed"]  # no folder, no self-check, no app
     await entry.stop_background(task)
 
 

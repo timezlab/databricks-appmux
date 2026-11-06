@@ -66,13 +66,16 @@ export function reconcileSelection(
 
 // ----------------------------------------------------------------- notices
 
+/** The `updated_by` of a change appmux makes on its own, with nobody signed in. */
+const APPMUX_ACTOR = "appmux";
+
 /**
  * What the person can do about a notice, drawn beside it: go to the section
  * where it is fixed, or press one of the app's buttons right there.
  */
 export type NoticeAction =
   | { kind: "section"; section: AppSection; label: string }
-  | { kind: "control"; control: "restart" | "update" };
+  | { kind: "control"; control: "start" | "restart" | "update" };
 
 export interface StatusNotice {
   /** Stable, for the React key and for tests. */
@@ -89,6 +92,26 @@ export interface StatusNotice {
 export function statusNotices(app: AppDetail): StatusNotice[] {
   const notices: StatusNotice[] = [];
   const active = activeRelease(app);
+
+  // appmux itself stopped the app because it now runs as another service principal (ADR 0022).
+  // Pressing Start sets `updated_by` to the person, which is what ends this notice.
+  if (
+    app.config.desired_state === "stopped" &&
+    app.config.updated_by === APPMUX_ACTOR
+  ) {
+    const principal =
+      app.service_principal === null
+        ? "the new service principal"
+        : `the new service principal (${app.service_principal})`;
+    notices.push({
+      id: "service-principal-changed",
+      tone: "warning",
+      title: "appmux stopped this app",
+      detail: `appmux now runs as another service principal, and the old one's access is gone. Give ${principal} what this app needs (a secret scope, a warehouse, table access), then press Start.`,
+      action: { kind: "control", control: "start" },
+      releaseNo: null,
+    });
+  }
 
   if (app.state === "crashed") {
     notices.push({

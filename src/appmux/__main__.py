@@ -17,8 +17,9 @@ The order is the one of design 5.6 and FR-008:
 Nothing slow is imported at the top of this module: the registry client (psycopg), the Databricks
 SDK, httpx and the application are imported in a worker thread by the background task, after the
 port is bound. ``STARTUP_STEPS`` is for steps that need nothing from the wiring; the steps that do
-(the content store's folder, the self-check of T067, the children of T095) come from the real
-wiring itself, because the edge needs the state they run into.
+(the service principal check of T224, the content store's folder, the self-check of T067, the
+children of T095) come from the real wiring itself, because the edge needs the state they run
+into.
 """
 
 from __future__ import annotations
@@ -212,10 +213,11 @@ def _load_wiring(
 
     The edge and the reconciler share one route table, one set of open connections, one upstream
     client and one workspace client; ``Service`` (``assembly.py``) holds them and the reconciler.
-    The start-up steps are, in order: the content store's folder, the self-check, then the
-    children (only if the self-check passed), the metrics writer and the daily clean-up of the
-    content store. ``Service.stop`` is the first shutdown hook, so the children stop while the
-    registry is still open. The edge is given the service as the control of the reconciler
+    The start-up steps are, in order: the check of the service principal (every running app is
+    stopped if appmux is no longer the one it ran as, ADR 0022), the content store's folder, the
+    self-check, then the children (only if the self-check passed), the metrics writer and the daily
+    clean-up of the content store. ``Service.stop`` is the first shutdown hook, so the children stop
+    while the registry is still open. The edge is given the service as the control of the reconciler
     (restart, rename, the state of an app), its memory books for ``GET /platform``, and the
     aggregator the pipeline counts requests into.
     """
@@ -281,6 +283,7 @@ def _load_wiring(
             metrics=service.metrics,
             app_state=service.run_state,
             restart_failure=service.last_restart_failure,
+            service_principal=settings.databricks_client_id,
             app_control=service,
             rename_cascade=service,
             memory=service.memory_ledger,
@@ -292,6 +295,7 @@ def _load_wiring(
         )
 
     steps = (
+        service.stop_apps_if_service_principal_changed,
         service.ensure_store_folder,
         _self_check_step(self_check),
         service.start_children,

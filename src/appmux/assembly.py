@@ -8,21 +8,26 @@ built; the steps do.
 
 The steps run in this order, each only after the registry loaded:
 
-1. ``ensure_store_folder``: the content store's folder exists. A store that cannot be created stops
+1. ``stop_apps_if_service_principal_changed``: if the App was deleted and created again its new
+   service principal has none of the old grants, so every running app is stopped before anything
+   starts and its admin grants and presses Start (ADR 0022, FR-055). It runs first so the stop is
+   stored even when a later step stops the start. A registry that cannot be read or written stops
+   the start: starting the apps without having decided would run them under the wrong identity.
+2. ``ensure_store_folder``: the content store's folder exists. A store that cannot be created stops
    the start (the gate blocks): without it no Update can store a snapshot and no release can be
    built.
-2. the self-check (``__main__`` adds it).
-3. ``start_children``: the reconciler starts **only if the self-check passed** (FR-013: with a
+3. the self-check (``__main__`` adds it).
+4. ``start_children``: the reconciler starts **only if the self-check passed** (FR-013: with a
    failed self-check no route opens; the platform admin reads the result and restarts). It reads
    the container's memory limit once; a limit nobody states stops the start, because admission
    control would otherwise decide against a guess. The memory watchdog starts with it: once a
    second it sums the resident memory of each running sandbox's process tree and stops the one
    that holds more than its budget with headroom (``sandbox/watchdog.py``, design 5.7, TD-029).
-4. ``start_metrics``: the per-minute counters start being written to the registry. The sampler
+5. ``start_metrics``: the per-minute counters start being written to the registry. The sampler
    reads the container's cgroup and ``/proc`` (``metrics/sources.py``, under ``metrics_root``), the
    reconciler's running children and the registry's app count; the reconciler and the registry
    client count restarts, admission refusals and registry calls into the same aggregator.
-5. ``start_cleanup``: the daily clean-up of the content store starts; its first pass is an hour
+6. ``start_cleanup``: the daily clean-up of the content store starts; its first pass is an hour
    after the start and it never blocks the start-up.
 
 The admin routes reach the reconciler through ``Service``: it is their ``AppControl`` (restart,
@@ -91,6 +96,7 @@ from appmux.reconciler.swap import ConnectionCloser
 from appmux.reconciler.update import UpdateService
 from appmux.reconciler.update_packages import UpdatePackages
 from appmux.registry.client import RegistryClient
+from appmux.registry.service_principal import stop_apps_when_the_service_principal_changed
 from appmux.sandbox.pump import PumpReloader, PumpTarget
 from appmux.sandbox.rules import EgressRule
 from appmux.sandbox.watchdog import (
@@ -305,10 +311,12 @@ class Service:
         self.routes = routes
         self.closer = closer
         workspace_api = WorkspaceHttpApi(workspace)
+        self._store_folder = (
+            settings.content_store_folder
+            or f"/Workspace/Users/{settings.databricks_client_id}/{STORE_FOLDER_NAME}"
+        )
         self.content_store = ContentStore(
-            workspace_api,
-            folder=f"/Workspace/Users/{settings.databricks_client_id}/{STORE_FOLDER_NAME}",
-            token_source=service_principal_token,
+            workspace_api, folder=self._store_folder, token_source=service_principal_token
         )
         self.updater = UpdateService(
             registry=registry,
@@ -344,8 +352,16 @@ class Service:
 
     # --- the start-up steps and the hook --------------------------------------------------
 
+    async def stop_apps_if_service_principal_changed(self, registry: Registry) -> None:
+        """Stop every running app if this is not the service principal appmux ran as last time."""
+        await stop_apps_when_the_service_principal_changed(
+            registry, client_id=self._settings.databricks_client_id
+        )
+
     async def ensure_store_folder(self, registry: Registry) -> None:
         """Create the content store's folder if missing; ``ContentStoreError`` if it cannot."""
+        # Named in the log so a person can see which folder a new App must be granted on.
+        logger.info("the content store folder is %s", self._store_folder)
         await self.content_store.ensure_folder()
 
     async def start_children(self, registry: Registry) -> None:
@@ -604,6 +620,7 @@ class Service:
             reader=DatabricksSecretReader(
                 self._workspace, token_provider=self._service_principal_token_async
             ),
+            service_principal=self._settings.databricks_client_id,
         )
         # One cache for both uses: the check that refuses a release and the files the child reads.
         shared_sp_tokens = SharedSpTokens(

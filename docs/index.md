@@ -41,6 +41,7 @@ Navigation only — content lives in the linked documents.
 - [0019 — The admin UI's own identity and a theme switch](decisions/0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md) — a "patch bay" (route strip, lamp, cord-teal primary, IBM Plex) on the Databricks Apps console's layout; Light, Dark or System set by a same-origin head script, System resolved by CSS; supersedes 0017's red, header band and logo only. *Accepted 2026-11-06 (proposed 2026-11-03); its motion rule is superseded by 0021.*
 - [0020 — A service principal may hold an app grant](decisions/0020-let-a-service-principal-hold-an-app-grant.md) — a `service_principal` grant names another App's SP by its application id, `CAN_USE` only, instead of opening the child to `everyone`; extends 0010. *Accepted 2026-11-06 (proposed 2026-11-03).*
 - [0021 — The admin UI ignores prefers-reduced-motion](decisions/0021-ignore-prefers-reduced-motion-in-the-admin-ui.md) — no media query, utility or script reads the preference, so a spinner turns for every visitor; supersedes 0019's motion rule only. *Accepted 2026-11-04.*
+- [0022 — Stop every app when the appmux service principal changes](decisions/0022-stop-every-app-when-the-appmux-service-principal-changes.md) — after the App is deleted and created again its new SP has none of the old grants, so at start appmux compares the SP with the one in its newest `platform.service_principal` audit row and stops every running app; their admins grant by hand and press Start; appmux still grants nothing; extends 0009. *Accepted 2026-11-06.*
 
 ## Reference
 

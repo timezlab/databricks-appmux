@@ -39,7 +39,11 @@ VALID_ENVIRONMENT: Mapping[str, str] = {
 
 REQUIRED_VARIABLES = tuple(VALID_ENVIRONMENT)
 
-OPTIONAL_VARIABLES = ("APPMUX_BOOTSTRAP_ADMINS", "APPMUX_UI_DIR")
+OPTIONAL_VARIABLES = (
+    "APPMUX_BOOTSTRAP_ADMINS",
+    "APPMUX_UI_DIR",
+    "APPMUX_CONTENT_STORE_FOLDER",
+)
 
 # The keys of data model 4.1, in the order of that table.
 PLATFORM_SETTING_KEYS = (
@@ -286,6 +290,41 @@ def test_ui_dir_defaults_to_a_relative_path_and_can_be_set() -> None:
 @pytest.mark.parametrize("blank", ["", " ", "\t\n"])
 def test_a_blank_ui_dir_means_the_default_not_the_working_directory(blank: str) -> None:
     assert load({"APPMUX_UI_DIR": blank}).ui_dir == Path("web/out")
+
+
+def test_the_content_store_folder_is_unset_by_default() -> None:
+    assert load().content_store_folder is None
+
+
+@pytest.mark.parametrize("blank", ["", " ", "\t\n"])
+def test_a_blank_content_store_folder_means_unset_not_the_workspace_root(blank: str) -> None:
+    assert load({"APPMUX_CONTENT_STORE_FOLDER": blank}).content_store_folder is None
+
+
+def test_the_content_store_folder_is_kept_without_a_trailing_slash() -> None:
+    folder = "/Workspace/Shared/appmux-store"
+
+    assert load({"APPMUX_CONTENT_STORE_FOLDER": folder}).content_store_folder == folder
+    assert load({"APPMUX_CONTENT_STORE_FOLDER": folder + "/"}).content_store_folder == folder
+
+
+@pytest.mark.parametrize(
+    "folder",
+    [
+        "Shared/appmux-store",
+        "/Users/someone/appmux-store",
+        "/Workspace",
+        "/Workspace/",
+        "/Workspace/Shared/../Users/someone/store",
+        "/Workspace//Shared/store",
+        "/Workspace/Shared/./store",
+    ],
+)
+def test_a_content_store_folder_outside_the_workspace_tree_is_refused_at_start(folder: str) -> None:
+    with pytest.raises(SettingsError) as raised:
+        load({"APPMUX_CONTENT_STORE_FOLDER": folder})
+
+    assert raised.value.variables == ("APPMUX_CONTENT_STORE_FOLDER",)
 
 
 def test_unrelated_environment_variables_are_ignored() -> None:

@@ -685,7 +685,7 @@ CREATE TABLE metrics (
 
 ### 4.9 `audit_log`
 
-**Purpose and rules.** The record of every administrative action: who, what, on which app, with which reason. Append-only: no role has `UPDATE` or `DELETE`. Written in the same transaction as the change, by whichever identity made it (so both write identities hold `INSERT`). The actor is the email from the proxy headers, `db:<role>` for a manual change, or `appmux` for automatic clean-up. Actions that pass a risk through a gate **require a reason**. No UI in v1; read it in SQL. There is no foreign key to `apps`, so entries outlive the apps they describe.
+**Purpose and rules.** The record of every administrative action: who, what, on which app, with which reason. Append-only: no role has `UPDATE` or `DELETE`. Written in the same transaction as the change, by whichever identity made it (so both write identities hold `INSERT`). The actor is the email from the proxy headers, `db:<role>` for a manual change, or `appmux` for automatic clean-up and for its own start-up record of the service principal. Actions that pass a risk through a gate **require a reason**. No UI in v1; read it in SQL. There is no foreign key to `apps`, so entries outlive the apps they describe.
 
 **Columns.**
 
@@ -717,8 +717,12 @@ CREATE TABLE metrics (
 | 2026-10-30T09:40Z | `appmux` | `release.delete` | `sales` | `{"release": 1, "by": "retention", "cap": 10}` | |
 | 2026-10-30T09:45Z | `dana@example.com` | `release.view_source` | `sales` | `{"release": 7, "path": "app.py"}` | |
 | 2026-10-30T10:20Z | `dana@example.com` | `request.deny` | `docs` | `{"request": 8, "kind": "settings", "automatic": true}` | slug 'reports' is already taken (automatic) |
+| 2026-11-06T07:02Z | `appmux` | `platform.service_principal` | | `{"client_id": "0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10", "previous_client_id": "5b7e2c10-91d4-4c3e-8a67-2f0e5d8a1c44", "automatic": true}` | |
+| 2026-11-06T07:02Z | `appmux` | `app.stop` | `sales` | `{"automatic": true}` | the appmux service principal changed |
 
-Action names: `app.register`, `app.delete`, `app.rename`, `app.view_as_user`, `app.set_owner`, `app.edit_platform_fields`, `app.start`, `app.stop`, `app.restart`, `request.create`, `request.withdraw`, `request.approve`, `request.deny`, `delegation.grant`, `delegation.revoke`, `platform_admin.add`, `platform_admin.remove`, `grant.app`, `egress.edit`, `settings.edit`, `resource.attach`, `resource.detach`, `config.edit`, `release.create`, `release.activate`, `release.tag`, `release.untag`, `release.label`, `release.lock`, `release.unlock`, `release.delete`, `release.view_source`, `app.view_logs` (the first read of an app's output by an actor in 10 minutes; no content).
+Action names: `app.register`, `app.delete`, `app.rename`, `app.view_as_user`, `app.set_owner`, `app.edit_platform_fields`, `app.start`, `app.stop`, `app.restart`, `request.create`, `request.withdraw`, `request.approve`, `request.deny`, `delegation.grant`, `delegation.revoke`, `platform_admin.add`, `platform_admin.remove`, `grant.app`, `egress.edit`, `settings.edit`, `resource.attach`, `resource.detach`, `config.edit`, `release.create`, `release.activate`, `release.tag`, `release.untag`, `release.label`, `release.lock`, `release.unlock`, `release.delete`, `release.view_source`, `app.view_logs` (the first read of an app's output by an actor in 10 minutes; no content), `platform.service_principal` (appmux's own record of the application id it runs as; actor `appmux`, no `app_slug`; `detail` holds `client_id` and, when it replaced another, `previous_client_id`; see below).
+
+**The service principal record.** At every start appmux reads the newest rows with actor `appmux` and action `platform.service_principal` (the `audit_by_actor` index), takes the first whose `detail.client_id` has the shape of an application id, and compares it with the id it runs as now ([design 5.6](v1-design.md#56-crash-restart-and-shutdown), [ADR 0022](../decisions/0022-stop-every-app-when-the-appmux-service-principal-changes.md)). No such row writes one and stops nothing; the same id writes nothing; another id writes a row with `previous_client_id` and stops every running app in the same transaction, one `app.stop` row each. It is a log row, not a table or a column, so no migration is needed and no role can delete it. Anyone who can insert audit rows (the shared-SP token holds that right, [design 8.4](v1-design.md#84-shared-sp-what-it-reaches-and-what-can-be-done)) can forge one, and the most it does is stop the apps at the next start.
 
 **DDL.**
 

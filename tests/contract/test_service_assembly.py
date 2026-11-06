@@ -118,9 +118,10 @@ def make_service(
     metrics_root: Path | None = None,
     memory_watch_interval_s: float | None = None,
     statvfs: Callable[[str | Path], os.statvfs_result] | None = None,
+    settings: EnvironmentSettings | None = None,
 ) -> Service:
     return Service(
-        settings=environment(),
+        settings=settings if settings is not None else environment(),
         registry=registry if registry is not None else seeded_registry(),
         workspace=(workspace if workspace is not None else Workspace()).client,
         service_principal_token=lambda: SYNC_TOKEN,
@@ -809,6 +810,25 @@ async def test_the_store_folder_is_created_in_the_service_principals_own_workspa
     assert request.headers["authorization"] == f"Bearer {SYNC_TOKEN}"
 
 
+async def test_a_configured_store_folder_replaces_the_service_principals_own_folder(
+    tmp_path: Path,
+) -> None:
+    # The service principal is new after the App is deleted and created again; a fixed folder is
+    # the one place the earlier App's files can still be read from (v1-design 3.3).
+    folder = "/Workspace/Shared/appmux-store"
+    workspace = Workspace()
+    service = make_service(
+        tmp_path,
+        workspace=workspace,
+        settings=environment(APPMUX_CONTENT_STORE_FOLDER=f"{folder}/"),
+    )
+
+    await service.ensure_store_folder(seeded_registry())
+
+    (request,) = workspace.requests
+    assert json.loads(request.content) == {"path": folder}
+
+
 async def test_a_store_folder_that_cannot_be_created_stops_the_start(tmp_path: Path) -> None:
     service = make_service(tmp_path, workspace=Workspace(status=500))
 
@@ -1309,6 +1329,27 @@ async def test_an_unreadable_secret_refuses_the_environment_without_a_value() ->
         await adapter.resolve("sales", ["token"])
 
     assert "ops" in str(refused.value)
+
+
+async def test_the_resolver_is_told_which_service_principal_it_reads_secrets_as(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A denied read names this id in its message, so the person knows who needs READ (ADR 0022).
+    built: list[dict[str, Any]] = []
+    real = assembly.ResourceValueResolver
+
+    def spy(**kwargs: Any) -> Any:
+        built.append(kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(assembly, "ResourceValueResolver", spy)
+    registry = seeded_registry()
+    service = make_service(tmp_path, registry=registry)
+
+    await service.start_children(registry)
+
+    (kwargs,) = built
+    assert kwargs["service_principal"] == CLIENT_ID
 
 
 # --- the identity the children are told -----------------------------------------------------

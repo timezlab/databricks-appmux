@@ -242,6 +242,39 @@ async def test_the_message_says_why_and_what_to_do(reason: str, advice: str) -> 
     assert "start the release again" in unreadable.value.message
 
 
+APPMUX_APPLICATION_ID: Final = "0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10"
+
+
+async def test_a_denied_read_names_the_service_principal_that_needs_the_grant() -> None:
+    # After the App is deleted and created again its service principal is new, and the person who
+    # reads this has to find it among the workspace's principals (ADR 0022).
+    reader = StubReader({}, failures={"sales-secrets": "denied"})
+    current = [snapshot_of(resource("openai-api-key"))]
+    resolver = ResourceValueResolver(
+        snapshot=lambda: current[-1], reader=reader, service_principal=APPMUX_APPLICATION_ID
+    )
+
+    with pytest.raises(SecretUnreadable) as unreadable:
+        await resolver.resolve("sales", ["openai-api-key"])
+
+    message = unreadable.value.message
+    assert f"service principal {APPMUX_APPLICATION_ID} needs READ" in message
+    assert "'sales-secrets'" in message
+
+
+async def test_a_read_that_failed_for_another_reason_does_not_name_the_service_principal() -> None:
+    reader = StubReader({}, failures={"sales-secrets": "not_found"})
+    current = [snapshot_of(resource("openai-api-key"))]
+    resolver = ResourceValueResolver(
+        snapshot=lambda: current[-1], reader=reader, service_principal=APPMUX_APPLICATION_ID
+    )
+
+    with pytest.raises(SecretUnreadable) as unreadable:
+        await resolver.resolve("sales", ["openai-api-key"])
+
+    assert APPMUX_APPLICATION_ID not in unreadable.value.message
+
+
 async def test_a_stored_reference_that_is_not_scope_slash_key_is_never_sent_anywhere() -> None:
     # A row written around the attach check (a shared-SP child can write app_resources) can hold
     # any text as a target. It is not a reference, so no read is made, and the text that reaches

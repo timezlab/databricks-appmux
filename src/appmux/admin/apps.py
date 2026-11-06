@@ -151,6 +151,7 @@ def build_app_detail(
     *,
     app_state: AppStateReader = state_from_desired,
     restart_failure: RestartFailureReader = no_restart_failure,
+    service_principal: str | None = None,
 ) -> AppDetail:
     """The contract's ``AppDetail`` for ``app``, from ``snapshot`` and the app's own rows.
 
@@ -162,6 +163,8 @@ def build_app_detail(
     registry alone supports (``state_from_desired``), in the server the reconciler's.
     ``restart_failure`` comes from ``restart_failure``: in the server, why the copy the last
     Restart started beside the running one did not come up (TD-028); by default nothing failed.
+    ``service_principal`` is the application id appmux runs as, which the page of an app stopped
+    because that changed shows (ADR 0022); ``None`` when the server was not told it.
     """
     live = sorted(
         (release for release in snapshot.releases_for(app.slug) if release.deleted_at is None),
@@ -182,6 +185,7 @@ def build_app_detail(
         runtime=_runtime_of(active),
         restart_to_apply=False,
         restart_failure=restart_failure(app.slug),
+        service_principal=service_principal,
         version=app.version,
         created_by=app.created_by,
         created_at=app.created_at,
@@ -333,9 +337,10 @@ class AppRoutes:
 
     ``egress`` is shared with ``PlatformRoutes``; the default has no closed targets, so the route
     answers ``503`` until a real one is given. ``app_state`` answers ``AppDetail.state`` and
-    ``restart_failure`` answers ``AppDetail.restart_failure`` (the reconciler's in the server).
-    ``on_renamed`` receives the old and the new slug after a rename
-    was written (the server wires it to ``Reconciler.app_renamed``); by default nobody is told.
+    ``restart_failure`` answers ``AppDetail.restart_failure`` (the reconciler's in the server) and
+    ``service_principal`` is ``AppDetail.service_principal``. ``on_renamed`` receives the old and
+    the new slug after a rename was written (the server wires it to ``Reconciler.app_renamed``); by
+    default nobody is told.
     """
 
     def __init__(
@@ -344,11 +349,13 @@ class AppRoutes:
         egress: EgressEditor | None = None,
         app_state: AppStateReader = state_from_desired,
         restart_failure: RestartFailureReader = no_restart_failure,
+        service_principal: str | None = None,
         on_renamed: Callable[[str, str], None] | None = None,
     ) -> None:
         self._egress = egress if egress is not None else EgressEditor()
         self._app_state = app_state
         self._restart_failure = restart_failure
+        self._service_principal = service_principal
         self._on_renamed = on_renamed
 
     def _detail(self, snapshot: RegistrySnapshot, app: App, config: AppConfig) -> AppDetail:
@@ -358,6 +365,7 @@ class AppRoutes:
             config,
             app_state=self._app_state,
             restart_failure=self._restart_failure,
+            service_principal=self._service_principal,
         )
 
     def routes(self, context: AdminContext) -> Sequence[Route]:

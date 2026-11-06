@@ -39,6 +39,12 @@ _PLAIN_DECIMAL: Final = re.compile(r"[0-9]+", re.ASCII)
 
 DEFAULT_UI_DIR: Final = Path("web/out")
 
+# The content store lives in the workspace tree; the Workspace API addresses it under this root.
+WORKSPACE_ROOT: Final = "/Workspace"
+_CONTENT_STORE_FOLDER_MESSAGE: Final = (
+    "must be an absolute workspace path under /Workspace/ with no '..', '.' or empty segment"
+)
+
 # The active release, the target, one release in progress and one to clean up must always fit
 # beside the locked ones (data model 4.1, rule between keys; rule 10 of section 7).
 RELEASES_KEPT_FREE: Final = 4
@@ -111,6 +117,10 @@ class EnvironmentSettings(BaseModel):
     )
     # Where the admin UI export is served from; relative to the working directory.
     ui_dir: Path = Field(default=DEFAULT_UI_DIR, alias="APPMUX_UI_DIR")
+    # Where the content store keeps its files. Unset means the service principal's own workspace
+    # folder, which dies with the service principal; a fixed folder outlives an App that is
+    # deleted and created again (docs/product/v1-design.md section 3.3).
+    content_store_folder: str | None = Field(default=None, alias="APPMUX_CONTENT_STORE_FOLDER")
 
     @field_validator(
         "databricks_host",
@@ -158,6 +168,23 @@ class EnvironmentSettings(BaseModel):
         if isinstance(value, str) and not value.strip():
             return DEFAULT_UI_DIR
         return value
+
+    @field_validator("content_store_folder", mode="before")
+    @classmethod
+    def check_content_store_folder(cls, value: object) -> object:
+        # Blank means unset: an empty folder would silently mean the workspace root.
+        if not isinstance(value, str) or not value.strip():
+            return None
+        folder = value.strip().rstrip("/")
+        segments = folder.split("/")
+        # ["", "Workspace", "x", ...]: the first segment is empty because the path starts with "/".
+        if (
+            not folder.startswith(f"{WORKSPACE_ROOT}/")
+            or len(segments) < 3
+            or any(segment in ("", ".", "..") for segment in segments[1:])
+        ):
+            raise ValueError(_CONTENT_STORE_FOLDER_MESSAGE)
+        return folder
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str] | None = None) -> Self:

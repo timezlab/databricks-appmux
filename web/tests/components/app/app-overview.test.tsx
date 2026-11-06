@@ -11,15 +11,17 @@ import { AppOverview } from "@/components/app/app-header";
 import type { AppActions } from "@/components/app/use-app-actions";
 import { readExample } from "../../support/contract-examples";
 
-const { getRelease, restartApp } = vi.hoisted(() => ({
+const { getRelease, restartApp, startApp } = vi.hoisted(() => ({
   getRelease: vi.fn(),
   restartApp: vi.fn(),
+  startApp: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof Api>()),
   getRelease,
   restartApp,
+  startApp,
 }));
 
 /** The example: running, release 7 active, release 8 the failed target. */
@@ -150,6 +152,34 @@ describe("AppOverview", () => {
     expect(
       within(notice).getByRole("button", { name: "Restart now" }),
     ).toBeEnabled();
+  });
+
+  it("tells the admin of an app that appmux stopped to grant the new service principal, then start it", async () => {
+    startApp.mockResolvedValue(undefined);
+    const applicationId = "0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10";
+    const stopped = AppDetail.parse({
+      ...EXAMPLE_APP,
+      state: "stopped",
+      service_principal: applicationId,
+      config: {
+        ...EXAMPLE_APP.config,
+        desired_state: "stopped",
+        updated_by: "appmux",
+      },
+    });
+    const { user } = setup(stopped);
+    const notice = within(attention())
+      .getAllByRole("listitem")
+      .find((item) => item.textContent.includes("appmux stopped this app"));
+    if (notice === undefined) throw new Error("no service principal notice");
+    expect(notice).toHaveTextContent(applicationId);
+
+    await user.click(within(notice).getByRole("button", { name: "Start now" }));
+    expect(startApp).not.toHaveBeenCalled();
+    await user.click(
+      within(notice).getByRole("button", { name: "Yes, start sales" }),
+    );
+    expect(startApp).toHaveBeenCalledExactlyOnceWith("sales");
   });
 
   it("says nothing needs attention for a healthy app, and reads no release", () => {

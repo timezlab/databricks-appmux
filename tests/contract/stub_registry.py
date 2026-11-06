@@ -226,6 +226,14 @@ class StubRegistry:
         newest_first = sorted(rows, key=lambda row: row.id, reverse=True)
         return tuple(newest_first[:limit]) if limit > 0 else ()
 
+    async def read_audit_of(
+        self, *, actor: str, action: str, limit: int
+    ) -> tuple[AuditLogRow, ...]:
+        self._require_up()
+        rows = [row for row in self._audit if row.actor == actor and row.action == action]
+        newest_first = sorted(rows, key=lambda row: row.id, reverse=True)
+        return tuple(newest_first[:limit]) if limit > 0 else ()
+
     async def read_metrics(
         self,
         *,

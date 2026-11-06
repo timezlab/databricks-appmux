@@ -740,6 +740,42 @@ async def test_every_write_records_its_audit_entries_and_read_audit_filters_them
     assert [row.id for row in both] == [2, 1]
 
 
+async def test_read_audit_of_returns_one_actors_action_newest_first() -> None:
+    clock = Clock()
+    registry = new_registry(clock)
+    await register(registry, "sales")
+    for tick, client_id in enumerate(("a" * 8, "b" * 8, "c" * 8), start=1):
+        clock.now = START + timedelta(minutes=tick)
+        await registry.write(
+            [],
+            [
+                AuditEntry.model_validate(
+                    {
+                        "actor": "appmux",
+                        "action": "platform.service_principal",
+                        "detail": {"client_id": client_id},
+                        "automatic": True,
+                    }
+                )
+            ],
+            admin_token=ADMIN_TOKEN,
+        )
+
+    newest_two = await registry.read_audit_of(
+        actor="appmux", action="platform.service_principal", limit=2
+    )
+    by_someone_else = await registry.read_audit_of(
+        actor=ADMIN, action="platform.service_principal", limit=2
+    )
+    nothing = await registry.read_audit_of(
+        actor="appmux", action="platform.service_principal", limit=0
+    )
+
+    assert [row.detail["client_id"] for row in newest_two] == ["c" * 8, "b" * 8]
+    assert by_someone_else == ()
+    assert nothing == ()
+
+
 async def test_the_audit_detail_is_stored_as_the_entry_writes_it() -> None:
     registry = new_registry()
     entry = AuditEntry.model_validate(

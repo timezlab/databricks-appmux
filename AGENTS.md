@@ -58,6 +58,8 @@ GitHub Spec Kit (`specify` CLI).
   (`scripts/load-schema.sh`; exit 3 means already loaded, which is not a failure). For the integration tests, deploy with
   `APPMUX_DEPLOY_BOOTSTRAP_ADMIN` set to your own address (local, never committed: it replaces the
   placeholder admin in the synced copy of `app.yaml` only), so the token owner is a platform admin.
+  `APPMUX_DEPLOY_CONTENT_STORE_FOLDER` (a `/Workspace/` path) likewise switches on the commented
+  `APPMUX_CONTENT_STORE_FOLDER` entry, for an App that may be deleted and created again.
   The dev App also needs `workspace.workspace:read` in its `user_api_scopes` (Update reads the
   folder with the presser's token): `databricks apps update` replaces the whole body and takes
   no default scopes, and a changed scope reaches tokens only after a stop and start.

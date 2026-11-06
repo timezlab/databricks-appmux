@@ -194,6 +194,68 @@ describe("statusNotices", () => {
     );
   });
 
+  it("explains an app that appmux stopped because its service principal changed", () => {
+    const applicationId = "0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10";
+    const notices = statusNotices(
+      appWith({
+        state: "stopped",
+        service_principal: applicationId,
+        config: {
+          ...EXAMPLE_APP.config,
+          desired_state: "stopped",
+          updated_by: "appmux",
+        },
+        releases: [release(7, { status: "active", is_target: true })],
+      }),
+    );
+    assert.deepEqual(
+      notices.map((notice) => [notice.id, notice.tone]),
+      [["service-principal-changed", "warning"]],
+    );
+    assert.ok((notices[0]?.detail ?? "").includes(applicationId));
+    assert.match(notices[0]?.detail ?? "", /press Start/i);
+    assert.deepEqual(notices[0]?.action, { kind: "control", control: "start" });
+  });
+
+  it("still explains it when the page was not given the service principal", () => {
+    const notice = statusNotices(
+      appWith({
+        state: "stopped",
+        service_principal: null,
+        config: {
+          ...EXAMPLE_APP.config,
+          desired_state: "stopped",
+          updated_by: "appmux",
+        },
+        releases: [release(7, { status: "active", is_target: true })],
+      }),
+    ).find((item) => item.id === "service-principal-changed");
+    assert.ok(notice);
+    assert.doesNotMatch(notice.detail ?? "", /null/);
+  });
+
+  it("says nothing of the service principal once a person has stopped or started the app", () => {
+    for (const config of [
+      {
+        ...EXAMPLE_APP.config,
+        desired_state: "stopped" as const,
+        updated_by: "alice@example.com",
+      },
+      {
+        ...EXAMPLE_APP.config,
+        desired_state: "running" as const,
+        updated_by: "appmux",
+      },
+    ]) {
+      const app = appWith({
+        state: config.desired_state === "stopped" ? "stopped" : "running",
+        config,
+        releases: [release(7, { status: "active", is_target: true })],
+      });
+      assert.ok(!ids(app).includes("service-principal-changed"));
+    }
+  });
+
   it("reports a failed target with its reason and says what keeps serving", () => {
     const [notice] = statusNotices(EXAMPLE_APP);
     assert.equal(notice?.id, "failed-target");

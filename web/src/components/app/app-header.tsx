@@ -187,6 +187,25 @@ function NoticeActionControl({
       </AppSectionLink>
     );
   }
+  if (action.control === "start") {
+    return (
+      <ConfirmButton
+        label="Start now"
+        size="small"
+        prompt={`Start ${app.slug}? Do it after the new service principal has what the app needs.`}
+        confirmLabel={`Yes, start ${app.slug}`}
+        isBusy={actions.stateOf("start") === "busy"}
+        busyLabel="Starting"
+        isDisabled={
+          !availability.start.isAllowed ||
+          actions.stateOf("start") === "blocked"
+        }
+        onConfirm={() => {
+          controls.runControl("start");
+        }}
+      />
+    );
+  }
   if (action.control === "restart") {
     return (
       <ConfirmButton

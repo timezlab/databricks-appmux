@@ -65,6 +65,7 @@ AuditAction = Literal[
     "release.delete",
     "release.view_source",
     "app.view_logs",
+    "platform.service_principal",
 ]
 AUDIT_ACTIONS: Final[tuple[str, ...]] = get_args(AuditAction)
 
@@ -218,6 +219,14 @@ Reason = Annotated[
     StringConstraints(min_length=1, max_length=_MAX_REASON_LENGTH, pattern=r"\S"),
     AfterValidator(_refuse_credential_shape),
 ]
+# The application id of a service principal (a UUID on Databricks). The pattern is wider than a
+# UUID so that a test environment with another id still starts; it has no space, no slash and no
+# way to hold a credential, and the credential check runs on top (ADR 0022).
+ClientId = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,128}$"),
+    AfterValidator(_refuse_credential_shape),
+]
 
 
 class _AuditModel(BaseModel):
@@ -279,6 +288,8 @@ class AuditDetail(_AuditModel):
     path: SafeText | None = None
     digest: Annotated[str, StringConstraints(pattern=r"^sha256:[0-9a-f]{4,64}$")] | None = None
     setting: Annotated[str, StringConstraints(pattern=r"^[a-z_]{1,64}$")] | None = None
+    client_id: ClientId | None = None
+    previous_client_id: ClientId | None = None
     before: ChangedFields | None = None
     after: ChangedFields | None = None
     automatic: bool | None = None

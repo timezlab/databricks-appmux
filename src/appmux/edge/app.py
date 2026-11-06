@@ -190,6 +190,7 @@ def create_edge_app(
     forward_token_policy: ForwardTokenPolicy | None = None,
     app_state: AppStateReader = state_from_desired,
     restart_failure: RestartFailureReader = no_restart_failure,
+    service_principal: str | None = None,
     release_updater: ReleaseUpdater | None = None,
     on_release_created: Callable[[str], None] | None = None,
     attach_checker: AttachChecker | None = None,
@@ -271,6 +272,8 @@ def create_edge_app(
       what ``GET /apps`` reports, so a visitor reads one state in both places.
     * ``restart_failure`` names why the last Restart (or rename) of an app did not come up; the
       page of the app shows it (TD-028). Left out, nothing is reported as failed.
+    * ``service_principal`` is the application id appmux runs as; the page of an app that appmux
+      stopped because that changed names it (ADR 0022). Left out, the page shows none.
     """
     # Read once: the authorizer and the platform routes both need the list, and an iterator
     # given here would be empty for the second.
@@ -287,6 +290,7 @@ def create_edge_app(
             egress=egress,
             app_state=app_state,
             restart_failure=restart_failure,
+            service_principal=service_principal,
             on_renamed=None if app_control is None else app_control.app_renamed,
         ),
         RequestRoutes(authorizer, rename=rename_cascade),

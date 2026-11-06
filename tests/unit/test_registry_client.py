@@ -1654,6 +1654,44 @@ async def test_read_audit_is_newest_first_within_the_window() -> None:
     assert statement.params == (start, end, "sales", 50)
 
 
+async def test_read_audit_of_selects_one_actors_action_newest_first() -> None:
+    database = FakeDatabase()
+    database.on("SELECT", [audit_row(9), audit_row(8)])
+    client = make_client(database)
+
+    rows = await client.read_audit_of(actor="appmux", action="platform.service_principal", limit=5)
+
+    assert [type(r) for r in rows] == [AuditLogRow, AuditLogRow]
+    assert [r.id for r in rows] == [9, 8]
+    statement = database.connections[0].reads()[0]
+    assert statement.sql.endswith(
+        'WHERE "actor" = %s AND "action" = %s ORDER BY "ts" DESC, "id" DESC LIMIT %s'
+    )
+    assert statement.params == ("appmux", "platform.service_principal", 5)
+
+
+async def test_read_audit_of_asks_for_nothing_when_the_limit_is_below_one() -> None:
+    database = FakeDatabase()
+    client = make_client(database)
+
+    rows = await client.read_audit_of(actor="appmux", action="platform.service_principal", limit=0)
+
+    assert rows == ()
+    assert database.connections == []
+
+
+async def test_read_audit_of_skips_a_row_its_model_cannot_read() -> None:
+    database = FakeDatabase()
+    # detail must be an object; a holder of the shared-SP token can store a list.
+    database.on("SELECT", [audit_row(9, [LEAK]), audit_row(8)])
+    client = make_client(database)
+
+    rows = await client.read_audit_of(actor="appmux", action="platform.service_principal", limit=5)
+
+    assert [r.id for r in rows] == [8]
+    assert client.unreadable_rows == 1
+
+
 def audit_row(row_id: int, detail: object = None) -> dict[str, object]:
     return {
         "id": row_id,

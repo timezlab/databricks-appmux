@@ -158,7 +158,9 @@ class StubUpdater:
 class Harness:
     """The admin application with the app and release routes, on a registry and a stub updater."""
 
-    def __init__(self, registry: StubRegistry | None = None) -> None:
+    def __init__(
+        self, registry: StubRegistry | None = None, *, service_principal: str | None = None
+    ) -> None:
         self.registry = registry if registry is not None else seeded_registry()
         self.updater = StubUpdater(self.registry)
         self.woken: list[str] = []
@@ -166,7 +168,7 @@ class Harness:
             registry=self.registry,
             authorizer=make_authorizer(self.registry, FakeGroups()),
             route_providers=[
-                AppRoutes(),
+                AppRoutes(service_principal=service_principal),
                 ReleaseRoutes(self.updater, on_release_created=self.woken.append),
             ],
         )
@@ -530,6 +532,27 @@ async def test_a_platform_admin_the_owner_and_a_can_manage_holder_read_the_app_p
         (CAROL, "CAN_MANAGE"),
     ]
     assert harness.is_untouched()
+
+
+async def test_the_app_page_names_the_service_principal_appmux_runs_as() -> None:
+    # ADR 0022: after the App is deleted and created again the person who must grant access to
+    # the new service principal reads its application id on the page of a stopped app.
+    application_id = "0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10"
+    harness = Harness(service_principal=application_id)
+
+    reply = await harness.request("GET", "/apps/sales", CAROL)
+
+    assert reply.status == 200
+    assert AppDetail.model_validate_json(reply.body).service_principal == application_id
+
+
+async def test_the_app_page_has_no_service_principal_when_the_server_was_not_told_one() -> None:
+    harness = Harness()
+
+    reply = await harness.request("GET", "/apps/sales", CAROL)
+
+    assert reply.status == 200
+    assert reply.json()["service_principal"] is None
 
 
 async def test_the_app_page_lists_a_service_principal_grant() -> None:

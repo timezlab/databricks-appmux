@@ -349,6 +349,7 @@ Each requirement is testable. The cited document gives the detail and the number
 - **FR-048**: Every write and every source view MUST produce an `audit_log` row with the actor; an automatic action is marked as such.
 - **FR-049**: A write conflict MUST be reported as `changed by someone else, reload and retry`.
 - **FR-050**: Admission control MUST refuse to start or update an app when budgets, update overlap, appmux's reserve and per-child overhead exceed the container's limit, stating the amount needed and free; `RLIMIT_AS` MUST be set from the budget and a best-effort watchdog MUST stop only the offending app. ([§5.7](../../docs/product/v1-design.md#57-memory-and-admission-control))
+- **FR-055**: Before it starts any app, appmux MUST compare the service principal it runs as with the one it last recorded (the newest `audit_log` row with the action `platform.service_principal`). If they differ, it MUST in one transaction set every `running` app to `stopped`, write an `app.stop` row for each and a new `platform.service_principal` row, and start nothing; if no row exists it MUST only write the row; if they match it MUST write nothing. A failure of the step MUST keep the gate shut. A start that cannot read a secret MUST name the service principal that needs `READ` by its application id. appmux still grants nothing. (added by the owner on 2026-11-06, T221–T227; [ADR 0022](../../docs/decisions/0022-stop-every-app-when-the-appmux-service-principal-changes.md), [§5.6](../../docs/product/v1-design.md#56-crash-restart-and-shutdown))
 
 **UI and metrics**
 

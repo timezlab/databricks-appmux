@@ -179,6 +179,8 @@ TEXT_FIELD_CASES: dict[str, TextFieldCase] = {
     "AuditDetail.path": TextFieldCase("app.py"),
     "AuditDetail.digest": TextFieldCase("sha256:9f2c1234"),
     "AuditDetail.setting": TextFieldCase("shared_sp_delegation_allowed"),
+    "AuditDetail.client_id": TextFieldCase("0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10"),
+    "AuditDetail.previous_client_id": TextFieldCase("5b7e2c10-91d4-4c3e-8a67-2f0e5d8a1c44"),
     "ChangedFields.slug": TextFieldCase("reports"),
     "ChangedFields.display_name": TextFieldCase("Team docs"),
     "ChangedFields.source_path": TextFieldCase("/Workspace/Shared/apps/sales"),
@@ -510,7 +512,7 @@ def test_every_action_name_of_the_data_model_is_known() -> None:
         "egress.edit", "settings.edit", "resource.attach", "resource.detach", "config.edit",
         "release.create", "release.activate", "release.tag", "release.untag", "release.label",
         "release.lock", "release.unlock", "release.delete", "release.view_source",
-        "app.view_logs",
+        "app.view_logs", "platform.service_principal",
     }  # fmt: skip
     assert set(audit.AUDIT_ACTIONS) == expected
 
@@ -642,3 +644,31 @@ def test_masking_and_refusing_a_long_line_take_time_in_proportion_to_its_length(
 
     assert (masked, kept) == (line, line)
     assert took_s < 0.5
+
+
+# --- the service principal appmux ran as (ADR 0022, FR-055) --------------------------------------
+
+
+def test_a_service_principal_change_records_the_id_before_and_after() -> None:
+    entry = _entry(
+        actor="appmux",
+        action="platform.service_principal",
+        detail=AuditDetail(
+            client_id="0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10",
+            previous_client_id="5b7e2c10-91d4-4c3e-8a67-2f0e5d8a1c44",
+        ),
+        automatic=True,
+    )
+    stored = json.loads(audit.insert_statement(entry)[1][3])
+    assert stored["client_id"] == "0d4c1b84-3f5a-4a52-9a52-6a9c1f3e7b10"
+    assert stored["previous_client_id"] == "5b7e2c10-91d4-4c3e-8a67-2f0e5d8a1c44"
+
+
+@pytest.mark.parametrize(
+    "bad", ["", "two words", "a/b", "x" * 129, "dapi" + "0123456789abcdef" * 2]
+)
+def test_a_client_id_that_is_not_an_application_id_is_refused(bad: str) -> None:
+    with pytest.raises(ValidationError):
+        AuditDetail(client_id=bad)
+    with pytest.raises(ValidationError):
+        AuditDetail(previous_client_id=bad)

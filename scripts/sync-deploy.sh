@@ -40,6 +40,13 @@
 #                              release zip keep the placeholder. It makes that person the
 #                              first platform admin of this development App (the integration
 #                              tests need one). The value is never printed.
+#   APPMUX_DEPLOY_CONTENT_STORE_FOLDER   a workspace folder (/Workspace/...) that turns the
+#                              commented APPMUX_CONTENT_STORE_FOLDER template of app.yaml into an
+#                              entry, in the synced copy only. Unset, appmux keeps its content
+#                              store in the service principal's own folder, which is lost when
+#                              the App is deleted and created again. A fixed folder is not: grant
+#                              the App's service principal CAN_MANAGE on it (docs/product/
+#                              v1-design.md section 3.3). Plain characters only; not printed.
 #   APPMUX_DEPLOY_OVERLAY      a folder whose files are copied over the synced copy (its app.yaml
 #                              replaces the assembled one), for a test run inside the container
 #                              (scripts/run-container-tests.sh). Like the bootstrap admin it reaches
@@ -82,6 +89,16 @@ bootstrap_admin_pattern='^[A-Za-z0-9][A-Za-z0-9._+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2
 if [[ -n "${APPMUX_DEPLOY_BOOTSTRAP_ADMIN:-}" ]]; then
   [[ "$APPMUX_DEPLOY_BOOTSTRAP_ADMIN" =~ $bootstrap_admin_pattern ]] \
     || die "APPMUX_DEPLOY_BOOTSTRAP_ADMIN must be one plain e-mail address (the value is not shown)"
+fi
+
+# A path under /Workspace/ of plain characters: it goes into a YAML scalar, so no space, quote,
+# '#' or line break. No "." or ".." segment and no empty one (a "//") either. Not echoed.
+store_folder_pattern='^/Workspace/[A-Za-z0-9._@+-]+(/[A-Za-z0-9._@+-]+)*$'
+if [[ -n "${APPMUX_DEPLOY_CONTENT_STORE_FOLDER:-}" ]]; then
+  [[ "$APPMUX_DEPLOY_CONTENT_STORE_FOLDER" =~ $store_folder_pattern \
+    && "$APPMUX_DEPLOY_CONTENT_STORE_FOLDER/" != */./* \
+    && "$APPMUX_DEPLOY_CONTENT_STORE_FOLDER/" != */../* ]] \
+    || die "APPMUX_DEPLOY_CONTENT_STORE_FOLDER must be a plain path under /Workspace/ (the value is not shown)"
 fi
 
 if [[ -n "${APPMUX_DEPLOY_OVERLAY:-}" ]]; then
@@ -180,6 +197,34 @@ call_cli() {
 # databricks sync honours .gitignore files and this repository ignores build/, so sync a
 # copy that lives outside the repository instead of depending on how that interacts.
 sync_source="$work_dir/deploy"
+# Turn the APPMUX_CONTENT_STORE_FOLDER entry of the file given as the argument (the commented
+# template, or an entry already switched on) into an active entry whose value is
+# $APPMUX_DEPLOY_CONTENT_STORE_FOLDER. Exactly one must be found, for the reason given above.
+substitute_content_store_folder() {
+  python3 -I -c '
+import os
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+entry = re.compile(
+    r"^([ \t]*)(?:# ?)?- name: APPMUX_CONTENT_STORE_FOLDER\n[ \t]*#?[ \t]*value:[^\n]*", re.MULTILINE
+)
+text = path.read_text(encoding="utf-8")
+folder = os.environ["APPMUX_DEPLOY_CONTENT_STORE_FOLDER"]
+replaced, count = entry.subn(
+    lambda match: (
+        f"{match.group(1)}- name: APPMUX_CONTENT_STORE_FOLDER\n{match.group(1)}  value: {folder}"
+    ),
+    text,
+)
+if count != 1:
+    sys.exit(1)
+path.write_text(replaced, encoding="utf-8")
+' "$1"
+}
+
 cp -a -- "$deploy_dir" "$sync_source"
 
 if [[ -n "${APPMUX_DEPLOY_OVERLAY:-}" ]]; then
@@ -192,6 +237,12 @@ if [[ -n "${APPMUX_DEPLOY_BOOTSTRAP_ADMIN:-}" ]]; then
   substitute_bootstrap_admin "$sync_source/app.yaml" \
     || die "app.yaml has no single APPMUX_BOOTSTRAP_ADMINS entry to put the bootstrap admin in"
   printf 'bootstrap admin set in the synced copy of app.yaml (the value is not shown)\n'
+fi
+
+if [[ -n "${APPMUX_DEPLOY_CONTENT_STORE_FOLDER:-}" ]]; then
+  substitute_content_store_folder "$sync_source/app.yaml" \
+    || die "app.yaml has no single APPMUX_CONTENT_STORE_FOLDER entry to put the store folder in"
+  printf 'content store folder set in the synced copy of app.yaml (the value is not shown)\n'
 fi
 
 printf 'syncing the deployment folder to the workspace folder\n'

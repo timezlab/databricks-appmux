@@ -1005,6 +1005,29 @@ class RegistryClient:
         rows = await self._read(query, (*params, limit))
         return self._readable(AuditLogRow, "audit_log", rows)
 
+    async def read_audit_of(
+        self, *, actor: str, action: str, limit: int
+    ) -> tuple[AuditLogRow, ...]:
+        """The newest audit rows of one actor and action, at most ``limit`` (ADR 0022).
+
+        Uses ``audit_by_actor (actor, ts DESC)``, so the read does not grow with the log.
+        """
+        if limit <= 0:
+            return ()
+        query = sql.SQL(
+            "SELECT {columns} FROM {table} WHERE {actor} = %s AND {action} = %s "
+            "ORDER BY {ts} DESC, {id} DESC LIMIT %s"
+        ).format(
+            columns=_column_list(tuple(AuditLogRow.model_fields)),
+            table=sql.Identifier("audit_log"),
+            actor=sql.Identifier("actor"),
+            action=sql.Identifier("action"),
+            ts=sql.Identifier("ts"),
+            id=sql.Identifier("id"),
+        )
+        rows = await self._read(query, (actor, action, limit))
+        return self._readable(AuditLogRow, "audit_log", rows)
+
     def _readable(
         self, model: type[_Row], table: str, rows: Sequence[Mapping[str, object]]
     ) -> tuple[_Row, ...]:

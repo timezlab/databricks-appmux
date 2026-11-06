@@ -265,6 +265,17 @@ class Registry(Protocol):
         """
         ...
 
+    async def read_audit_of(
+        self, *, actor: str, action: str, limit: int
+    ) -> tuple[AuditLogRow, ...]:
+        """The newest rows of one ``actor`` and ``action``, whatever their age, at most ``limit``.
+
+        For a start-up decision that needs the last row of a kind (ADR 0022), not a window of
+        time. Newest first; none when ``limit`` is below 1. A row the model cannot read is left out,
+        as in ``read_audit``, so a caller asks for a few and takes the first it can use.
+        """
+        ...
+
     async def read_metric_steps(
         self,
         *,

@@ -649,7 +649,14 @@ env:
     value: {BOOTSTRAP_PLACEHOLDER}
   - name: APPMUX_LAKEBASE_DATABASE
     value: databricks_postgres
+  # Where the content store keeps its files.
+  # - name: APPMUX_CONTENT_STORE_FOLDER
+  #   value: /Workspace/Shared/appmux-store
 """
+STORE_FOLDER_TEMPLATE_LINES = (
+    "  # - name: APPMUX_CONTENT_STORE_FOLDER\n  #   value: /Workspace/Shared/appmux-store\n"
+)
+FIXED_STORE_FOLDER = "/Workspace/Shared/team-store/appmux"
 
 
 def synced_app_yaml(
@@ -788,6 +795,61 @@ def test_sync_deploy_refuses_a_bootstrap_admin_that_is_not_one_plain_address(
     assert "APPMUX_DEPLOY_BOOTSTRAP_ADMIN" in result.stderr
     assert "touch pwned" not in result.stdout + result.stderr, "the refused value is not echoed"
     assert not stub_cli.calls.exists(), "nothing may be uploaded after a refusal"
+
+
+def test_sync_deploy_turns_the_store_folder_template_into_an_entry_in_the_synced_copy_only(
+    tree: FakeTree, stub_cli: StubCli, tmp_path: Path
+) -> None:
+    result, kept = synced_app_yaml(
+        tree, stub_cli, tmp_path, APPMUX_DEPLOY_CONTENT_STORE_FOLDER=FIXED_STORE_FOLDER
+    )
+
+    assert result.returncode == 0, result.stderr
+    synced = kept.read_text()
+    assert f"  - name: APPMUX_CONTENT_STORE_FOLDER\n    value: {FIXED_STORE_FOLDER}\n" in synced
+    assert STORE_FOLDER_TEMPLATE_LINES not in synced
+    assert "value: databricks_postgres" in synced, "only the store entry may change"
+    assert FIXED_STORE_FOLDER not in (tree.root / "app.yaml").read_text()
+    assert FIXED_STORE_FOLDER not in (tree.deploy / "app.yaml").read_text()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Shared/appmux-store",
+        "/Users/someone/appmux-store",
+        "/Workspace",
+        "/Workspace/",
+        "/Workspace/Shared/../Users/someone/store",
+        "/Workspace/Shared/./store",
+        "/Workspace//Shared/store",
+        "/Workspace/has space/store",
+        "/Workspace/x; touch pwned",
+        "/Workspace/x\nvalue: injected",
+    ],
+)
+def test_sync_deploy_refuses_a_store_folder_that_is_not_a_plain_workspace_path(
+    tree: FakeTree, stub_cli: StubCli, tmp_path: Path, value: str
+) -> None:
+    result, _ = synced_app_yaml(tree, stub_cli, tmp_path, APPMUX_DEPLOY_CONTENT_STORE_FOLDER=value)
+
+    assert result.returncode != 0
+    assert "APPMUX_DEPLOY_CONTENT_STORE_FOLDER" in result.stderr
+    assert "touch pwned" not in result.stdout + result.stderr, "the refused value is not echoed"
+    assert not stub_cli.calls.exists(), "nothing may be uploaded after a refusal"
+
+
+def test_sync_deploy_refuses_a_store_folder_when_app_yaml_has_no_such_entry(
+    tree: FakeTree, stub_cli: StubCli
+) -> None:
+    environment = sync_environment(
+        tree, stub_cli, APPMUX_DEPLOY_CONTENT_STORE_FOLDER=FIXED_STORE_FOLDER
+    )
+
+    result = run_script(SYNC, environment)
+
+    assert result.returncode != 0
+    assert "APPMUX_CONTENT_STORE_FOLDER" in result.stderr
 
 
 def test_sync_deploy_refuses_to_substitute_when_app_yaml_has_no_admin_entry(

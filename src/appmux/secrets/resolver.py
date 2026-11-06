@@ -89,9 +89,16 @@ class SecretUnreadable(Exception):
     reconciler stores it as the release's ``status_reason``.
     """
 
-    def __init__(self, failures: Sequence[UnreadableSecret]) -> None:
+    def __init__(
+        self, failures: Sequence[UnreadableSecret], *, service_principal: str | None = None
+    ) -> None:
+        advice = dict(_ADVICE)
+        if service_principal is not None:
+            # The service principal is new after the App is deleted and created again, and the
+            # person who must grant READ has to find it by its application id (ADR 0022).
+            advice["denied"] = f"the appmux service principal {service_principal} needs READ on it"
         unique = list(dict.fromkeys((f.subject, f.scope, f.reason) for f in failures))
-        shown = [f"cannot read {subject} ({_ADVICE[reason]})" for subject, _, reason in unique]
+        shown = [f"cannot read {subject} ({advice[reason]})" for subject, _, reason in unique]
         hidden = len(shown) - _MAX_SHOWN_FAILURES
         text = "; ".join(shown[:_MAX_SHOWN_FAILURES])
         if hidden > 0:
@@ -236,9 +243,18 @@ class ResourceValueResolver:
     resource detached since the release was built is seen.
     """
 
-    def __init__(self, *, snapshot: Callable[[], RegistrySnapshot], reader: SecretReader) -> None:
+    def __init__(
+        self,
+        *,
+        snapshot: Callable[[], RegistrySnapshot],
+        reader: SecretReader,
+        service_principal: str | None = None,
+    ) -> None:
         self._snapshot = snapshot
         self._reader = reader
+        # The application id of the service principal whose token ``reader`` uses; the message of a
+        # denied read names it so the person knows who needs READ.
+        self._service_principal = service_principal
 
     async def resolve(self, app_slug: str, keys: Collection[str]) -> ResolvedResources:
         """A value for each of ``keys``.
@@ -277,7 +293,7 @@ class ResourceValueResolver:
             else:
                 values[key] = outcome
         if failures:
-            raise SecretUnreadable(failures)
+            raise SecretUnreadable(failures, service_principal=self._service_principal)
         return ResolvedResources(
             {key: values[key] for key in wanted}, secret_keys=references.keys()
         )
