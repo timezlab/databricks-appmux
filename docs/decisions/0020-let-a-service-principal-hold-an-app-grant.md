@@ -1,8 +1,11 @@
 # Let a service principal hold an app grant
 
-**Status:** proposed — built and covered by tests on 2026-11-03 (T188) and measured through the
-real Apps proxy on 2026-11-04 on the Free Edition workspace (see [Measured](#measured-on-2026-11-04));
-the owner has not reviewed the choice. Extends [ADR 0010](0010-mirror-databricks-permissions-and-give-platform-admins-implicit-access.md),
+**Status:** accepted 2026-11-06 on the owner's word to follow the builder's recommendation (it was
+proposed from 2026-11-03). It was built and covered by tests on 2026-11-03 (T188) and measured
+through the real Apps proxy on 2026-11-04 on the Free Edition workspace (see
+[Measured](#measured-on-2026-11-04)). The caveat of that measurement stands: taking back `CAN_USE`
+on appmux left the principal able to reach appmux for about an hour, so an admin removes the
+`service_principal` grant first. Extends [ADR 0010](0010-mirror-databricks-permissions-and-give-platform-admins-implicit-access.md),
 whose text is not changed.
 **Date:** 2026-11-03
 **Deciders:** Liam Lee
@@ -91,4 +94,5 @@ What this settles and what it does not:
 - One workspace, one day, one principal. The revoke time was inferred from the order of the calls
   (the platform reports none), so read "59 to 61 minutes" as the width of the probe interval, not
   as a platform guarantee. A paid workspace may differ and was not used.
-- The status stays `proposed`: the measurement does not replace the owner's review.
+- The status was `proposed` because the measurement does not replace the owner's review; the owner
+  accepted the ADR on 2026-11-06 (see Status).

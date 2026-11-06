@@ -98,8 +98,8 @@ A child has no SP of its own. To let one call the model or another App:
 An `everyone` grant admits every identity the proxy accepts, people included. That is the cost of
 letting an SP caller in with it.
 
-Since [ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md) (proposed,
-2026-11-03) a narrower grant exists: `{"type": "service_principal", "name": "<the SP's application
+Since [ADR 0020](../decisions/0020-let-a-service-principal-hold-an-app-grant.md) (accepted 2026-11-06,
+proposed 2026-11-03) a narrower grant exists: `{"type": "service_principal", "name": "<the SP's application
 ID, lower case>", "permission": "CAN_USE"}` admits that one SP and nobody else. It is in the code
 and its tests, and a call through the Apps proxy with it was measured on 2026-11-04 (one SP in, a
 different application id still `404`, removal closes the child within a second;

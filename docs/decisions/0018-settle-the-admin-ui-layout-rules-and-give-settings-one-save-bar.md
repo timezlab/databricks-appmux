@@ -1,9 +1,12 @@
 # Settle the admin UI's layout rules and give Settings one save bar
 
-**Status:** proposed — it carries out the owner's feedback on the second design round
-of 2026-10-31, but the owner has not yet reviewed the result or the choices the
-builder made inside it (the 8-app search threshold, the two red primaries on the
-app page, the direct Remove button in the egress list); extends [ADR 0017](0017-split-the-admin-ui-into-sub-pages-and-use-databricks-red.md),
+**Status:** accepted 2026-11-06 on the owner's word to follow the builder's recommendation
+(it was proposed from 2026-10-31). It carries out the owner's feedback on the second design
+round of 2026-10-31, and the owner hand-tested the result on the dev App on 2026-11-03. The
+choices the builder made inside it stay as built: the 8-app search threshold and the direct
+Remove button in the egress list. The two red primaries on the app page no longer exist, because
+[ADR 0019](0019-give-the-admin-ui-its-own-identity-and-a-theme-switch.md) replaced the red. This
+ADR extends [ADR 0017](0017-split-the-admin-ui-into-sub-pages-and-use-databricks-red.md),
 whose text is not changed except for one line this ADR replaces (settings cards
 sit two to a row, see Decision), and [ADR 0016](0016-build-the-admin-ui-with-tailwind-shadcn-and-tests-outside-src.md),
 which fixed the stack and the CSP guards and is not touched.

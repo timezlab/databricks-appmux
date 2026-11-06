@@ -1,6 +1,10 @@
 # Give the admin UI its own identity and a theme switch
 
-**Status:** proposed — accept after the owner has seen it on the dev App (T205). Its motion rule (a behaviour
+**Status:** accepted 2026-11-06 on the owner's word to follow the builder's recommendation (it was
+proposed from 2026-11-03). The recommendation was to keep what is built: the wordmark stays plain
+text with no glyph, and the default theme stays System. It was seen on the dev App in the T205
+hand run of 2026-11-05 (by the builder, as a platform admin, through the real proxy; see
+[Seen on the dev App](#seen-on-the-dev-app-2026-11-05)). Its motion rule (a behaviour
 for both values of `prefers-reduced-motion`) is superseded by [ADR 0021](0021-ignore-prefers-reduced-motion-in-the-admin-ui.md).
 Supersedes three parts of [ADR 0017](0017-split-the-admin-ui-into-sub-pages-and-use-databricks-red.md)
 (the Databricks red, the dark chrome band and the Databricks logo) and nothing
