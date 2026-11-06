@@ -5,8 +5,8 @@ share its slot.
 
 > **Status: pre-alpha.** Most of v1 is implemented, and its container tests have
 > passed on a Databricks Free Edition workspace (one development App, 2026-11-05).
-> It has not run on a paid workspace, the only release is the pre-alpha
-> [v0.1.0](https://github.com/timezlab/databricks-appmux/releases/tag/v0.1.0),
+> It has not run on a paid workspace, the latest release is the pre-alpha
+> [v0.1.1](https://github.com/timezlab/databricks-appmux/releases/tag/v0.1.1),
 > and some parts are only partly built or unseen on a container
 > ([ARCHITECTURE.md](ARCHITECTURE.md) marks which). *How it works* describes the design; the parts of it that have
 > not been seen running are listed there too.
