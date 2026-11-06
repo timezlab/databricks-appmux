@@ -69,6 +69,7 @@ An unsandboxed process of uid 1000 on the same container. Details and the mount 
 | Secrets from an App (spike 11) | The app's service principal (not a workspace admin) reads a secret value with `READ` on the scope (REST and SDK) and can create, write and delete a scope of its own. A never-granted scope answers HTTP 403. A grant shows at once; after a revocation the old answer persisted for 163 s on one scope and alternated for about 6 min on another |
 | Permission changes (spikes 11, 12, 16) | Eventually consistent: a removed secret `READ` or warehouse `CAN_USE` kept working for 1.5 to 6 min, with answers alternating before settling; group membership showed after 60 to 75 s |
 | Workspace read with an OBO token (spike 15) | Scope `workspace.workspace:read` lets the token get the status of, list and export the owner's folder, not write; with no access the API returns an empty listing or a 404, not an error |
+| Compute sizes (2026-11-06, dev App) | appmux read the container's cgroup memory limit at start and the admin page showed it: `MEDIUM` 8192 MB, `LARGE` 12288 MB, `XLARGE` 49152 MB. Free Edition accepts all three, although the Apps docs say "6 GB" for the default size (why the container shows 8 GiB is not known). Changing the size restarts the App (about 4 minutes each way, every hosted app down meanwhile) and needs `POST /api/2.0/apps/{name}/update` with `update_mask: compute_size`; the older `PATCH /api/2.0/apps/{name}` (what `databricks apps update` calls) answers "Compute size updates are not supported in this update API" to any body that carries `compute_size`, even the current value, and leaves the size alone when the body has none. appmux has no memory figure fixed in code (inputs: the limit, `memory_reserve_mb`, 256 MB per child), so free memory followed the size: 4608, 8704 and 45568 MB free with 2560 MB committed. The App was put back on `MEDIUM`. |
 
 ## What it means for appmux development
 
@@ -89,7 +90,7 @@ Neither documented nor measured. Check before depending on any of these.
 - Whether a human who is not a workspace admin can create a secret scope, add a scope to an App's `user_api_scopes`, or read a folder the admin cannot (the owner of this workspace is an admin; a service principal stood in as the principal with no access).
 - The full list of trusted egress domains, and egress from the Apps container to anything other than PyPI.
 - Service principal and secret-scope limits (the limits page does not mention them).
-- Sizes an Apps container can have other than the measured 8 GiB / 4 CPUs, and whether the CPU quota of about 2 CPUs is the same on a paid workspace (spike 7 ran on Free Edition only).
+- Whether the CPU quota of about 2 CPUs is the same on a paid workspace (spike 7 ran on Free Edition only), and the CPU count of the larger sizes (only memory was read, below).
 
 ## Re-checking
 
