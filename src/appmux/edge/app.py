@@ -28,7 +28,7 @@ from starlette.routing import Mount
 from starlette.types import ASGIApp
 
 from appmux.admin.api import RouteProvider, create_admin_app
-from appmux.admin.apps import AppRoutes
+from appmux.admin.apps import AppRoutes, RestartFailureReader, no_restart_failure
 from appmux.admin.authorizer import GroupSource, make_authorizer
 from appmux.admin.delegation import DelegationRoutes
 from appmux.admin.environment import ChildSetup, EnvironmentRoutes
@@ -189,6 +189,7 @@ def create_edge_app(
     metrics: MetricsSink | None = None,
     forward_token_policy: ForwardTokenPolicy | None = None,
     app_state: AppStateReader = state_from_desired,
+    restart_failure: RestartFailureReader = no_restart_failure,
     release_updater: ReleaseUpdater | None = None,
     on_release_created: Callable[[str], None] | None = None,
     attach_checker: AttachChecker | None = None,
@@ -268,6 +269,8 @@ def create_edge_app(
       forwarded.
     * ``app_state`` names the state shown on the page of an app that has no route. It is also
       what ``GET /apps`` reports, so a visitor reads one state in both places.
+    * ``restart_failure`` names why the last Restart (or rename) of an app did not come up; the
+      page of the app shows it (TD-028). Left out, nothing is reported as failed.
     """
     # Read once: the authorizer and the platform routes both need the list, and an iterator
     # given here would be empty for the second.
@@ -283,6 +286,7 @@ def create_edge_app(
         AppRoutes(
             egress=egress,
             app_state=app_state,
+            restart_failure=restart_failure,
             on_renamed=None if app_control is None else app_control.app_renamed,
         ),
         RequestRoutes(authorizer, rename=rename_cascade),

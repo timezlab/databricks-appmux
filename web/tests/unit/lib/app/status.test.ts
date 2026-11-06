@@ -39,6 +39,7 @@ function appWith(overrides: Partial<api.AppDetail>): api.AppDetail {
     ...EXAMPLE_APP,
     state: "running",
     restart_to_apply: false,
+    restart_failure: null,
     requirements: { ...EXAMPLE_APP.requirements, items: [] },
     ...overrides,
   };
@@ -150,6 +151,46 @@ describe("statusNotices", () => {
     assert.deepEqual(
       notices.map((notice) => [notice.id, notice.tone]),
       [["restart-to-apply", "warning"]],
+    );
+  });
+
+  it("names why the last restart did not come up and that the running copy keeps serving", () => {
+    const reason =
+      "health check did not pass within 60 s (last error: connection refused)";
+    const notices = statusNotices(
+      appWith({
+        restart_failure: reason,
+        releases: [release(7, { status: "active", is_target: true })],
+      }),
+    );
+    assert.deepEqual(
+      notices.map((notice) => [notice.id, notice.tone]),
+      [["restart-failed", "warning"]],
+    );
+    assert.match(notices[0]?.title ?? "", /last restart did not come up/i);
+    assert.ok((notices[0]?.detail ?? "").includes(reason));
+    assert.match(notices[0]?.detail ?? "", /keeps serving/i);
+    assert.deepEqual(notices[0]?.action, {
+      kind: "control",
+      control: "restart",
+    });
+  });
+
+  it("does not say a copy keeps serving when the app is not running", () => {
+    const notice = statusNotices(
+      appWith({
+        state: "crashed",
+        restart_failure: "the process exited before the health check passed",
+        releases: [release(7, { status: "active", is_target: true })],
+      }),
+    ).find((item) => item.id === "restart-failed");
+    assert.ok(notice);
+    assert.doesNotMatch(notice.detail ?? "", /keeps serving/i);
+  });
+
+  it("has no restart notice when no restart failed", () => {
+    assert.ok(
+      !ids(appWith({ restart_failure: null })).includes("restart-failed"),
     );
   });
 

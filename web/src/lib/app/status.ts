@@ -102,6 +102,23 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
     });
   }
 
+  if (app.restart_failure !== null) {
+    // The server keeps the copy that was running when the new one fails, so a running app is
+    // still served; after a crash there is no such copy and the sentence would be false.
+    const serving =
+      app.state === "running"
+        ? " The copy that was running keeps serving."
+        : "";
+    notices.push({
+      id: "restart-failed",
+      tone: "warning",
+      title: "The last restart did not come up",
+      detail: `${app.restart_failure}.${serving}`,
+      action: { kind: "control", control: "restart" },
+      releaseNo: null,
+    });
+  }
+
   if (app.restart_to_apply) {
     notices.push({
       id: "restart-to-apply",

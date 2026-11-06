@@ -419,6 +419,15 @@ class Service:
         if self._reconciler is not None:
             self._reconciler.request_restart(slug)
 
+    def last_restart_failure(self, slug: str) -> str | None:
+        """Why the last copy started beside the running one did not come up, if it did not.
+
+        Before the reconciler runs no copy was ever started, so nothing can have failed.
+        """
+        if self._reconciler is None:
+            return None
+        return self._reconciler.last_restart_failure(slug)
+
     def app_renamed(self, old_slug: str, new_slug: str) -> None:
         if self._reconciler is not None:
             self._reconciler.app_renamed(old_slug, new_slug)

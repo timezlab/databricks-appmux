@@ -845,6 +845,7 @@ class AppDetail(_Body):
     state: AppState
     runtime: Runtime | None
     restart_to_apply: bool
+    restart_failure: str | None
     version: int
     created_by: str
     created_at: UtcTime

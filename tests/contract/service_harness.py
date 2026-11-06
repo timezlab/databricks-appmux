@@ -74,6 +74,8 @@ class RecordingReconciler:
         # What the metrics sampler reads; a test sets them.
         self.children: list[tuple[str, Any]] = []
         self.app_count = 0
+        # Why the last copy started beside the running one did not come up, per app (T220).
+        self.restart_failures: dict[str, str] = {}
         RecordingReconciler.instances.append(self)
 
     async def start(self) -> None:
@@ -86,6 +88,10 @@ class RecordingReconciler:
     def run_state(self, slug: str, desired_state: str) -> str:
         self.calls.append(("run_state", (slug, desired_state)))
         return "crashed"
+
+    def last_restart_failure(self, slug: str) -> str | None:
+        self.calls.append(("last_restart_failure", slug))
+        return self.restart_failures.get(slug)
 
     def request_restart(self, slug: str) -> None:
         self.calls.append(("request_restart", slug))

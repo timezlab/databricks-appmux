@@ -280,6 +280,7 @@ def _load_wiring(
             open_mode_cookies=OpenModeCookies(),
             metrics=service.metrics,
             app_state=service.run_state,
+            restart_failure=service.last_restart_failure,
             app_control=service,
             rename_cascade=service,
             memory=service.memory_ledger,

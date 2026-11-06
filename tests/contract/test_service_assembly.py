@@ -181,6 +181,28 @@ async def test_a_restart_a_rename_and_the_state_reach_the_reconciler_once_it_run
     assert state == "crashed"
 
 
+async def test_before_the_reconciler_runs_no_restart_has_failed(tmp_path: Path) -> None:
+    service = make_service(tmp_path, is_self_check_passing=lambda: False)
+    await service.start_children(seeded_registry())
+
+    assert service.last_restart_failure("sales") is None
+
+
+async def test_the_reason_a_restart_failed_comes_from_the_reconciler_once_it_runs(
+    tmp_path: Path,
+) -> None:
+    service = make_service(tmp_path)
+    await service.start_children(seeded_registry())
+    (reconciler,) = RecordingReconciler.instances
+    reconciler.restart_failures["sales"] = "the process exited with status 3 before the check"
+
+    assert (
+        service.last_restart_failure("sales") == "the process exited with status 3 before the check"
+    )
+    assert service.last_restart_failure("billing") is None
+    assert ("last_restart_failure", "sales") in reconciler.calls
+
+
 async def test_stopping_an_app_reaches_the_reconciler_once_it_runs(tmp_path: Path) -> None:
     service = make_service(tmp_path)
     await service.start_children(seeded_registry())

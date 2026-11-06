@@ -135,6 +135,23 @@ describe("AppOverview", () => {
     );
   });
 
+  it("names the check a failed restart did not pass, with Restart beside it", () => {
+    const reason =
+      "health check did not pass within 60 s (last error: connection refused)";
+    setup(AppDetail.parse({ ...EXAMPLE_APP, restart_failure: reason }));
+    const notice = within(attention())
+      .getAllByRole("listitem")
+      .find((item) =>
+        item.textContent.includes("last restart did not come up"),
+      );
+    if (notice === undefined) throw new Error("no restart-failed notice");
+    expect(notice).toHaveTextContent(reason);
+    expect(notice).toHaveTextContent("keeps serving");
+    expect(
+      within(notice).getByRole("button", { name: "Restart now" }),
+    ).toBeEnabled();
+  });
+
   it("says nothing needs attention for a healthy app, and reads no release", () => {
     const healthy = AppDetail.parse({
       ...EXAMPLE_APP,

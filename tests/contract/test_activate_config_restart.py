@@ -70,11 +70,15 @@ class FakeControl:
         self.restarts: list[str] = []
         self.renames: list[tuple[str, str]] = []
         self.stopped: list[str] = []
+        self.restart_failures: dict[str, str] = {}
 
     def run_state(self, slug: str, desired_state: str) -> RunState:
         if desired_state == "stopped":
             return "stopped"
         return self.states.get(slug, "starting")
+
+    def last_restart_failure(self, slug: str) -> str | None:
+        return self.restart_failures.get(slug)
 
     def request_restart(self, slug: str) -> None:
         self.restarts.append(slug)
@@ -97,7 +101,11 @@ class Harness:
             registry=self.registry,
             authorizer=make_authorizer(self.registry, FakeGroups()),
             route_providers=[
-                AppRoutes(app_state=self.control.run_state, on_renamed=self.control.app_renamed),
+                AppRoutes(
+                    app_state=self.control.run_state,
+                    restart_failure=self.control.last_restart_failure,
+                    on_renamed=self.control.app_renamed,
+                ),
                 OperationRoutes(self.control),
             ],
         )
@@ -630,6 +638,32 @@ async def test_restart_of_a_stopped_app_starts_it() -> None:
     assert config_of(harness.registry, "sales").desired_state == "running"
     assert harness.control.restarts == []
     assert harness.control.woken == ["sales"]
+
+
+async def test_the_app_page_names_why_the_last_restart_did_not_come_up() -> None:
+    # Restart answers at once; the new copy is tried beside the running one afterwards. A person
+    # who pressed it learns the outcome by reading the app again (TD-028, FR-010).
+    harness = harness_with_releases()
+    reason = "health check did not pass within 60 s (last error: connection refused)"
+    harness.control.states["sales"] = "running"
+    await harness.operate("restart", CAROL)
+    harness.control.restart_failures["sales"] = reason
+
+    reply = await harness.request("GET", "/apps/sales", CAROL)
+
+    assert reply.status == 200, reply.body
+    detail = AppDetail.model_validate_json(reply.body)
+    assert detail.restart_failure == reason
+    assert detail.state == "running"  # the copy that was running keeps serving
+
+
+async def test_the_app_page_has_no_restart_failure_when_nothing_failed() -> None:
+    harness = harness_with_releases()
+
+    reply = await harness.request("GET", "/apps/sales", CAROL)
+
+    assert reply.status == 200, reply.body
+    assert reply.json()["restart_failure"] is None
 
 
 @pytest.mark.parametrize("operation", ["start", "stop", "restart"])

@@ -372,6 +372,27 @@ async def test_the_detail_of_an_app_shows_the_state_the_reconciler_reports(
     await entry.stop_background(task)
 
 
+async def test_the_detail_of_an_app_names_why_its_last_restart_did_not_come_up(
+    monkeypatch: pytest.MonkeyPatch, doubles: ServiceDoubles
+) -> None:
+    script_canary(monkeypatch, doubles)
+    registry = managed_registry(doubles.log)
+    runnable_sales(registry)
+    gate = Gate()
+    task = await start_like_serve(monkeypatch, registry, gate)
+    (reconciler,) = doubles.reconcilers
+    reason = "health check did not pass within 60 s (last error: connection refused)"
+
+    before = await call(gate, "GET", f"{MOUNT}/apps/sales", email=DANA)
+    reconciler.restart_failures["sales"] = reason
+    after = await call(gate, "GET", f"{MOUNT}/apps/sales", email=DANA)
+
+    assert before.status == after.status == 200, after.body
+    assert before.json()["restart_failure"] is None
+    assert after.json()["restart_failure"] == reason
+    await entry.stop_background(task)
+
+
 async def test_an_approved_rename_request_moves_the_running_app_through_the_real_wiring(
     monkeypatch: pytest.MonkeyPatch, doubles: ServiceDoubles
 ) -> None:

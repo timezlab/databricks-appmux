@@ -22,8 +22,10 @@ Rows tested elsewhere (T180 added the ones marked *):
 * 4  ``unit/test_reconciler.py::test_a_child_that_never_answers_fails_the_release_with_the_reason_
      and_a_log_tail`` and ``integration/test_host_a_child.py``
 * 5  ``unit/test_config_release.py::test_a_new_copy_that_is_not_healthy_leaves_the_first_one_
-     serving``. Not covered: the app page showing the failed check; nothing in the admin API
-     reads ``Reconciler.last_restart_failure`` (``docs/tech-debt.md`` TD-028)
+     serving``. The app page showing the failed check (TD-028, closed 2026-11-06):
+     ``unit/test_config_release.py::test_the_app_page_of_a_renamed_app_names_the_check_its_new_
+     copy_failed``, ``contract/test_activate_config_restart.py::test_the_app_page_names_why_the_
+     last_restart_did_not_come_up`` and ``contract/test_service_wiring.py``
 * 6  ``unit/test_attach_check.py`` and ``contract/test_resources.py``
 * 7  ``contract/test_requests_api.py::test_the_rules_of_a_new_request_answer_with_their_codes``
 * 8  *``contract/test_requests_api.py::test_a_request_of_someone_who_lost_can_manage_is_not_

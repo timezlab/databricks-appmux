@@ -68,6 +68,7 @@ export const AppDetail = z.object({
   state: AppState,
   runtime: Runtime.nullable(),
   restart_to_apply: z.boolean(),
+  restart_failure: z.string().nullable(),
   version: z.int(),
   created_by: z.string(),
   created_at: Time,

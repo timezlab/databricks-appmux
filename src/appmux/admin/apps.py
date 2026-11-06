@@ -135,12 +135,22 @@ def _shared_sp_delegation_allowed(snapshot: RegistrySnapshot) -> bool:
     return PlatformSettings().shared_sp_delegation_allowed
 
 
+RestartFailureReader = Callable[[str], str | None]
+"""Why the last restart of an app did not come up, by slug; ``None`` when nothing failed."""
+
+
+def no_restart_failure(slug: str) -> str | None:
+    """The reader when no reconciler runs: no copy was started, so none can have failed."""
+    return None
+
+
 def build_app_detail(
     snapshot: RegistrySnapshot,
     app: App,
     config: AppConfig,
     *,
     app_state: AppStateReader = state_from_desired,
+    restart_failure: RestartFailureReader = no_restart_failure,
 ) -> AppDetail:
     """The contract's ``AppDetail`` for ``app``, from ``snapshot`` and the app's own rows.
 
@@ -150,6 +160,8 @@ def build_app_detail(
     knows when the app last started) and the requirements panel (which reads the release's
     ``databricks.yml``) are later tasks. ``state`` comes from ``app_state``: by default the one the
     registry alone supports (``state_from_desired``), in the server the reconciler's.
+    ``restart_failure`` comes from ``restart_failure``: in the server, why the copy the last
+    Restart started beside the running one did not come up (TD-028); by default nothing failed.
     """
     live = sorted(
         (release for release in snapshot.releases_for(app.slug) if release.deleted_at is None),
@@ -169,6 +181,7 @@ def build_app_detail(
         state=app_state(app.slug, config.desired_state),
         runtime=_runtime_of(active),
         restart_to_apply=False,
+        restart_failure=restart_failure(app.slug),
         version=app.version,
         created_by=app.created_by,
         created_at=app.created_at,
@@ -319,8 +332,9 @@ class AppRoutes:
     """The route provider of the app routes: register, the app page, egress, rename and owner.
 
     ``egress`` is shared with ``PlatformRoutes``; the default has no closed targets, so the route
-    answers ``503`` until a real one is given. ``app_state`` answers ``AppDetail.state`` (the
-    reconciler's in the server). ``on_renamed`` receives the old and the new slug after a rename
+    answers ``503`` until a real one is given. ``app_state`` answers ``AppDetail.state`` and
+    ``restart_failure`` answers ``AppDetail.restart_failure`` (the reconciler's in the server).
+    ``on_renamed`` receives the old and the new slug after a rename
     was written (the server wires it to ``Reconciler.app_renamed``); by default nobody is told.
     """
 
@@ -329,11 +343,22 @@ class AppRoutes:
         *,
         egress: EgressEditor | None = None,
         app_state: AppStateReader = state_from_desired,
+        restart_failure: RestartFailureReader = no_restart_failure,
         on_renamed: Callable[[str, str], None] | None = None,
     ) -> None:
         self._egress = egress if egress is not None else EgressEditor()
         self._app_state = app_state
+        self._restart_failure = restart_failure
         self._on_renamed = on_renamed
+
+    def _detail(self, snapshot: RegistrySnapshot, app: App, config: AppConfig) -> AppDetail:
+        return build_app_detail(
+            snapshot,
+            app,
+            config,
+            app_state=self._app_state,
+            restart_failure=self._restart_failure,
+        )
 
     def routes(self, context: AdminContext) -> Sequence[Route]:
         async def register(request: Request) -> Response:
@@ -369,9 +394,7 @@ class AppRoutes:
             app, config = rows
             if not isinstance(app, App) or not isinstance(config, AppConfig):
                 raise RuntimeError("the registry did not return the stored app")
-            detail = build_app_detail(
-                context.registry.snapshot, app, config, app_state=self._app_state
-            )
+            detail = self._detail(context.registry.snapshot, app, config)
             return JSONResponse(detail.model_dump(mode="json"))
 
         async def get_app(request: Request) -> Response:
@@ -379,7 +402,7 @@ class AppRoutes:
             await context.require(request, Action.APP_VIEW, slug)
             snapshot = context.registry.snapshot
             app, config = _stored_app(snapshot, slug)
-            detail = build_app_detail(snapshot, app, config, app_state=self._app_state)
+            detail = self._detail(snapshot, app, config)
             return JSONResponse(detail.model_dump(mode="json"))
 
         async def put_egress(request: Request) -> Response:
@@ -405,9 +428,7 @@ class AppRoutes:
             if not isinstance(row, App):
                 raise RuntimeError("the registry did not return the stored app")
             await self._egress.apply(slug)
-            detail = build_app_detail(
-                context.registry.snapshot, row, config, app_state=self._app_state
-            )
+            detail = self._detail(context.registry.snapshot, row, config)
             return JSONResponse(detail.model_dump(mode="json"))
 
         async def patch_app(request: Request) -> Response:
@@ -427,7 +448,7 @@ class AppRoutes:
             memory_budget_mb = _if_different(body.memory_budget_mb, app.memory_budget_mb)
             if (new_slug, display_name, source_path, memory_budget_mb) == (None,) * 4:
                 context.skip_audit(request, "every field sent already has that value")
-                detail = build_app_detail(snapshot, app, config, app_state=self._app_state)
+                detail = self._detail(snapshot, app, config)
                 return JSONResponse(detail.model_dump(mode="json"))
             if new_slug is not None:
                 try:
@@ -486,7 +507,7 @@ class AppRoutes:
             stored_config = snapshot.app_config(row.slug) or config.model_copy(
                 update={"app_slug": row.slug}
             )
-            detail = build_app_detail(snapshot, row, stored_config, app_state=self._app_state)
+            detail = self._detail(snapshot, row, stored_config)
             return JSONResponse(detail.model_dump(mode="json"))
 
         async def put_owner(request: Request) -> Response:
@@ -501,7 +522,7 @@ class AppRoutes:
             context.require_version(app.version, body.version)
             if body.owner == app.owner:
                 context.skip_audit(request, "the app already has that owner")
-                detail = build_app_detail(snapshot, app, config, app_state=self._app_state)
+                detail = self._detail(snapshot, app, config)
                 return JSONResponse(detail.model_dump(mode="json"))
 
             actor = context.actor(request)
@@ -519,9 +540,7 @@ class AppRoutes:
             )
             if not isinstance(row, App):
                 raise RuntimeError("the registry did not return the stored app")
-            detail = build_app_detail(
-                context.registry.snapshot, row, config, app_state=self._app_state
-            )
+            detail = self._detail(context.registry.snapshot, row, config)
             return JSONResponse(detail.model_dump(mode="json"))
 
         return [

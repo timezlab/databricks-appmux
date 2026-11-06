@@ -387,6 +387,7 @@ Returned by `GET /apps/{app}` and by every write that changes the `apps` row (`P
 | `state` | string | always | One of `stopped`, `starting`, `running`, `crashed`, `no_release` (the app is meant to run, but no release is active and none is being built, so its route stays closed until a person updates it or activates a release) |
 | `runtime` | string or null | always | The runtime detected in the active release, `python` or `node`; `null` while no release is active |
 | `restart_to_apply` | boolean | always | `true` when a resource or an own-SP key changed after the app last started ("restart to apply") |
+| `restart_failure` | string or null | always | Why the copy that the last Restart (or rename) started beside the running one did not come up, named by the check that failed (for example `health check did not pass within 60 s (last error: connection refused)`); `null` when the last attempt came up or none was made. The running copy keeps serving and the registry is unchanged. Kept in memory only: a restart of appmux clears it, and the next Restart clears it first |
 | `version` | integer | always | Version of the app row; `UpdateAppRequest.version` |
 | `created_by` | string | always | Who registered it, or approved the request for it |
 | `created_at` | time | always | |

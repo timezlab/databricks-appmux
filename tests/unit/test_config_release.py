@@ -21,6 +21,7 @@ from pydantic import SecretStr
 from reconciler_fakes import NOW, digest_of
 from reconciler_world import World, socket_of
 
+from appmux.admin.apps import build_app_detail
 from appmux.reconciler.health import ProbeFailed
 from appmux.reconciler.rename import SlugTaken, check_new_slug, under_new_slug
 from appmux.registry.apps import platform_fields_change
@@ -428,6 +429,43 @@ async def test_a_new_copy_that_is_not_healthy_leaves_the_first_one_serving() -> 
     assert world.status(3, "billing") == "active"
     assert world.reconciler.last_restart_failure("billing") is not None
     assert not world.launcher.children[-1].is_running
+
+
+async def test_the_app_page_of_a_renamed_app_names_the_check_its_new_copy_failed() -> None:
+    # TD-028: the reason was kept in memory and no screen showed it. The detail of the app, which
+    # the app's Overview reads, now carries it.
+    world = await serving()
+    world.probe = Unhealthy()
+    await rename(world)
+    snapshot = world.registry.snapshot
+    app, config = snapshot.app("billing"), snapshot.app_config("billing")
+    assert app is not None and config is not None
+
+    detail = build_app_detail(
+        snapshot, app, config, restart_failure=world.reconciler.last_restart_failure
+    )
+
+    assert detail.restart_failure is not None
+    assert "health check did not pass" in detail.restart_failure
+    assert "connection refused" in detail.restart_failure
+
+
+async def test_the_app_page_shows_no_restart_failure_after_the_restart_succeeds() -> None:
+    world = await serving()
+    world.probe = Unhealthy()
+    await rename(world)
+    world.probe = World().probe
+    world.reconciler.request_restart("billing")
+    await world.settle()
+    snapshot = world.registry.snapshot
+    app, config = snapshot.app("billing"), snapshot.app_config("billing")
+    assert app is not None and config is not None
+
+    detail = build_app_detail(
+        snapshot, app, config, restart_failure=world.reconciler.last_restart_failure
+    )
+
+    assert detail.restart_failure is None
 
 
 async def test_a_new_copy_that_cannot_start_leaves_the_first_one_serving() -> None:
