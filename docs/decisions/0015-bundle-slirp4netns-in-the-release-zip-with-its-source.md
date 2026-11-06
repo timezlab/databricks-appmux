@@ -132,3 +132,14 @@ URL pinned in `scripts/fetch-slirp4netns.sh` and names the release tag.
 The owner or counsel declines the duty, the library review finds a condition
 the zip cannot meet, upstream stops publishing a static binary, or a build of
 `slirp4netns` that is not GPL becomes available.
+
+
+## Update 2026-11-06: the first release carried the binary
+
+The Decision is unchanged and the status stays `accepted`. The first release tag, `v0.1.0`, was
+pushed on 2026-11-06 and its zip, with `bin/slirp4netns` v1.3.6 and `licenses/slirp4netns/`, is
+published as a GitHub Release. The release job found this ADR accepted. The contact URL of the
+written offer (the issue tracker of `timezlab/databricks-appmux`) answered an unauthenticated
+request with `200` just before the tag, which is the condition under "Before the first release
+tag". The three-year offer therefore runs from this release, and the contact URL has to stay
+reachable until then.
