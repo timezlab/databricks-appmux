@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "appmux"
-version = "0.0.0"
+version = "0.1.0"
 description = "A reverse proxy that runs as one Databricks App and hosts many child apps in that single slot."
 readme = "README.md"
 license = "Apache-2.0"
