@@ -22,9 +22,15 @@ retry below is not measured yet.
 
 * SQL warehouses: ``/api/2.0/sql/warehouses`` (``sql``).
 * Serving endpoints: ``/api/2.0/serving-endpoints`` (``serving.serving-endpoints:read``).
-* Secrets: ``/api/2.0/secrets/scopes/list``, then ``/api/2.0/secrets/list`` for the key names
-  (``secrets``, which an App refuses).
-* MLflow experiments: ``POST /api/2.0/mlflow/experiments/search`` (``mlflow``, refused).
+* Secrets: ``/api/2.0/secrets/scopes/list``, then the key names. These come first from
+  ``SELECT key FROM list_secrets() WHERE scope = :scope`` run as the person on the
+  ``attach_check_warehouse_id`` warehouse (``POST /api/2.0/sql/statements``, ``sql``), so they are
+  the keys the person can read; when no warehouse is set or the statement does not succeed,
+  ``/api/2.0/secrets/list`` (``secrets``, which an App refuses).
+* MLflow experiments: ``POST /api/2.0/mlflow/experiments/search`` (``mlflow``, refused), and
+  beside it, always with the person's own token, the experiments directly in their home folder
+  (``/api/2.0/workspace/list`` of ``/Users/<email>``, ``workspace.workspace:read``), where the
+  Experiments tab puts a new one.
 * Jobs: ``/api/2.2/jobs/list`` (``jobs``, refused).
 * Tables: ``/api/2.1/unity-catalog/catalogs``, ``schemas``, ``tables``
   (``catalog.catalogs:read``, ``catalog.schemas:read``, ``catalog.tables:read``).
@@ -47,9 +53,10 @@ attach form takes (``is_valid_target`` refuses them), so the field can go on: ``
 catalogs (target ``main.``), ``main.`` lists schemas (``main.sales.``), ``main.sales.`` lists the
 objects. Volumes are the same under ``/Volumes/``, a vector search index is ``<endpoint>/`` then
 the index, a secret is ``<scope>/`` then the key, and a Lakebase database is
-``projects/<project>/`` then ``branches/<branch>/`` then the endpoint (Provisioned instances are
-offered beside the projects). The text after the last separator filters the names at that level,
-by name alone where the target would match every item.
+``projects/<project>/`` then the branch, which is a target as in the console (the attach stores
+its read-write endpoint); typing ``branches/<branch>/`` still lists the endpoints (Provisioned
+instances are offered beside the projects). The text after the last separator filters the names
+at that level, by name alone where the target would match every item.
 
 **Whose access.** The person's own token is tried first. An App's ``user_api_scopes`` cannot hold
 ``secrets``, ``mlflow``, ``jobs``, ``workspace``, ``unity-catalog`` or ``catalog.volumes`` (spikes
@@ -76,6 +83,7 @@ and the answer says so.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import unicodedata
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -92,6 +100,7 @@ from starlette.routing import Route
 from appmux.admin.api import AdminContext
 from appmux.admin.errors import BadRequest
 from appmux.admin.resources import (
+    STATEMENTS_PATH,
     missing_scope_names,
     names_a_missing_scope,
     send_with_token,
@@ -104,7 +113,12 @@ from appmux.admin.schemas import (
     ResourceTypeList,
 )
 from appmux.authz.actions import Action
-from appmux.registry.resources import RESOURCE_TYPES, SECRET_TYPE, is_valid_target
+from appmux.registry.resources import (
+    RESOURCE_TYPES,
+    SECRET_TYPE,
+    check_warehouse_id,
+    is_valid_target,
+)
 
 DEFAULT_LIMIT: Final = 20
 MAX_LIMIT: Final = 50
@@ -114,6 +128,11 @@ LIST_MAX_PAGES: Final = 5  # pages followed for one list; at 200 a page, 1000 ob
 logger = logging.getLogger(__name__)
 
 _LIST_TIMEOUT_S: Final = 15.0
+# A statement waits at most this long on the warehouse, then is cancelled and the REST list is read
+# instead: a picker cannot wait the minutes a stopped classic warehouse takes to start.
+_STATEMENT_WAIT: Final = "10s"
+_SECRET_KEYS_ROW_LIMIT: Final = 1000
+_SCOPE_KEYS_QUERY: Final = "SELECT key FROM list_secrets() WHERE scope = :scope"
 _JOBS_PAGE_SIZE: Final = 100  # the most the jobs list takes in one page
 _EXPERIMENTS_PAGE_SIZE: Final = 1000  # below the 3000 the search takes
 _UNITY_CATALOG_PAGE_SIZE: Final = 200  # a page of Unity Catalog names; more are paged
@@ -156,6 +175,7 @@ GENIE_SPACES_PATH: Final = "/api/2.0/genie/spaces"
 VECTOR_ENDPOINTS_PATH: Final = "/api/2.0/vector-search/endpoints"
 VECTOR_INDEXES_PATH: Final = "/api/2.0/vector-search/indexes"
 APPS_PATH: Final = "/api/2.0/apps"
+WORKSPACE_LIST_PATH: Final = "/api/2.0/workspace/list"
 LAKEBASE_PROJECTS_PATH: Final = "/api/2.0/postgres/projects"  # also the parent of branches
 LAKEBASE_INSTANCES_PATH: Final = "/api/2.0/database/instances"
 
@@ -165,10 +185,16 @@ LAKEBASE_INSTANCES_PATH: Final = "/api/2.0/database/instances"
 
 @dataclass(frozen=True, slots=True)
 class TypePresentation:
-    """The words the form shows for one catalogue type (the rest is read from the catalogue)."""
+    """The words the form shows for one catalogue type (the rest is read from the catalogue).
+
+    ``default_key`` is the resource key the Databricks Apps console fills in for the type (docs
+    "Add resources" and the per-type pages, read 2026-11-18): one word per type, not the chosen
+    object's name, so a child's ``valueFrom`` written for a standalone App finds it.
+    """
 
     description: str
     target_hint: str
+    default_key: str
 
 
 TYPE_PRESENTATION: Final[Mapping[str, TypePresentation]] = MappingProxyType(
@@ -176,47 +202,69 @@ TYPE_PRESENTATION: Final[Mapping[str, TypePresentation]] = MappingProxyType(
         "secret": TypePresentation(
             "One key of a secret scope; the app reads its value as an environment variable.",
             "my-scope/my-key",
+            default_key="secret",
         ),
         "sql_warehouse": TypePresentation(
-            "A SQL warehouse the app runs statements on.", "1234567890abcdef"
+            "A SQL warehouse the app runs statements on.",
+            "1234567890abcdef",
+            default_key="sql-warehouse",
         ),
         "mlflow_experiment": TypePresentation(
-            "An MLflow experiment the app logs runs to; the target is its id.", "1234567890123456"
+            "An MLflow experiment the app logs runs to; the target is its id.",
+            "1234567890123456",
+            default_key="experiment",
         ),
         "serving_endpoint": TypePresentation(
-            "A model serving endpoint the app queries; the target is its name.", "my-endpoint"
+            "A model serving endpoint the app queries; the target is its name.",
+            "my-endpoint",
+            default_key="model",
         ),
         "lakebase_database": TypePresentation(
-            "A Lakebase database the app connects to; the target is the endpoint path of an "
-            "Autoscaling database or the host of a Provisioned one.",
-            "my-lakebase-host",
+            "A Lakebase database the app connects to; pick the Autoscaling branch, whose "
+            "read-write endpoint is stored, or a Provisioned instance's host.",
+            "projects/my-project/branches/production",
+            default_key="postgres",
         ),
-        "job": TypePresentation("A job the app runs or reads; the target is its id.", "123456789"),
+        "job": TypePresentation(
+            "A job the app runs or reads; the target is its id.", "123456789", default_key="job"
+        ),
         "uc_table": TypePresentation(
-            "A Unity Catalog table the app reads or writes.", "main.sales.orders"
+            "A Unity Catalog table the app reads or writes.",
+            "main.sales.orders",
+            default_key="table",
         ),
         "uc_volume": TypePresentation(
-            "A Unity Catalog volume the app reads or writes files in.", "/Volumes/main/sales/files"
+            "A Unity Catalog volume the app reads or writes files in.",
+            "/Volumes/main/sales/files",
+            default_key="volume",
         ),
         "uc_function": TypePresentation(
-            "A Unity Catalog function the app calls.", "main.sales.score"
+            "A Unity Catalog function the app calls.", "main.sales.score", default_key="function"
         ),
         "uc_connection": TypePresentation(
-            "A Unity Catalog connection to an outside system.", "my_connection"
+            "A Unity Catalog connection to an outside system.",
+            "my_connection",
+            default_key="connection",
         ),
         "genie_space": TypePresentation(
             "A Genie space the app asks questions of; the target is its id.",
             "01ef1234567890abcdef1234567890ab",
+            default_key="genie-space",
         ),
         "vector_search_index": TypePresentation(
-            "An AI Search (vector search) index the app queries.", "main.sales.docs_index"
+            "An AI Search (vector search) index the app queries.",
+            "main.sales.docs_index",
+            default_key="vector-search-index",
         ),
         "databricks_app": TypePresentation(
-            "Another Databricks app this app calls; the target is its name.", "my-other-app"
+            "Another Databricks app this app calls; the target is its name.",
+            "my-other-app",
+            default_key="app",
         ),
         "gateway_model_service": TypePresentation(
             "A model service behind the Unity AI gateway that this app calls.",
             "main.sales.chat_service",
+            default_key="model",
         ),
     }
 )
@@ -237,6 +285,7 @@ def _entry_of(type_name: str) -> ResourceTypeEntry:
         permissions=list(catalogue.levels),
         access_as=_access_modes_of(type_name),
         target_hint=words.target_hint,
+        default_key=words.default_key,
         can_suggest=type_name in SUGGESTABLE_TYPES,
     )
 
@@ -326,6 +375,8 @@ class _Reader:
 
     ``viewer`` says whose token it is, the person's or appmux's own, so that "no such object" is
     said about the right reader: one the person cannot see may be visible to appmux, and back.
+    ``warehouse_id`` is the ``attach_check_warehouse_id`` warehouse, given to the person's reader
+    only: a list read with a statement (the secret keys) is worth running as the person alone.
     """
 
     def __init__(
@@ -334,10 +385,67 @@ class _Reader:
         token: str,
         *,
         viewer: Literal["caller_token", "platform_token"],
+        warehouse_id: str | None = None,
     ) -> None:
         self._client = client
         self._token = token
         self._viewer = viewer
+        self.warehouse_id = warehouse_id
+
+    async def query_rows(
+        self, statement: str, parameters: Mapping[str, str]
+    ) -> tuple[list[list[Any]], bool] | None:
+        """The rows of one statement on ``warehouse_id`` and whether they were cut, or ``None``.
+
+        ``None`` is any way the statement did not succeed (no warehouse, a refusal, a failure, a
+        warehouse that did not answer in time): the caller then reads the list another way, so the
+        reason is logged, not shown. Values go in as named parameters, never into the text.
+        """
+        if self.warehouse_id is None:
+            return None
+        response = await send_with_token(
+            self._client,
+            self._token,
+            "POST",
+            STATEMENTS_PATH,
+            timeout_s=_LIST_TIMEOUT_S,
+            json={
+                "warehouse_id": self.warehouse_id,
+                "statement": statement,
+                "parameters": [
+                    {"name": name, "value": value} for name, value in parameters.items()
+                ],
+                "wait_timeout": _STATEMENT_WAIT,
+                "on_wait_timeout": "CANCEL",
+                "row_limit": _SECRET_KEYS_ROW_LIMIT,
+                "format": "JSON_ARRAY",
+                "disposition": "INLINE",
+            },
+        )
+        if response is None or response.status_code != httpx.codes.OK:
+            logger.info(
+                "a list statement got %s", "no answer" if response is None else response.status_code
+            )
+            return None
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            return None
+        status = body.get("status")
+        if not isinstance(status, dict) or status.get("state") != "SUCCEEDED":
+            logger.info("a list statement did not succeed")
+            return None
+        result = body.get("result")
+        rows = result.get("data_array") if isinstance(result, dict) else None
+        manifest = body.get("manifest")
+        is_cut = isinstance(manifest, dict) and manifest.get("truncated") is True
+        if rows is None:
+            return [], is_cut  # Databricks leaves `data_array` out when no row matched
+        if not isinstance(rows, list):
+            return None
+        return [row for row in rows if isinstance(row, list)], is_cut
 
     async def read(
         self,
@@ -604,6 +712,9 @@ async def _list_secrets(reader: _Reader, query: str) -> _Page:
             "then comes one slash and the start of a key",
         )
     noun = "secret keys"
+    by_statement = await _secret_keys_by_statement(reader, scope, key_query)
+    if by_statement is not None:
+        return by_statement
     body = await reader.read(
         "GET",
         KEYS_PATH,
@@ -620,6 +731,34 @@ async def _list_secrets(reader: _Reader, query: str) -> _Page:
         for entry in _objects_of(body, "secrets", noun)
     )
     return _Page(candidates, key_query, noun, _is_partial(body), is_label_only=True)
+
+
+async def _secret_keys_by_statement(reader: _Reader, scope: str, key_query: str) -> _Page | None:
+    """The keys of ``scope`` the person can read, from ``list_secrets()``, or ``None``.
+
+    An App's token cannot hold ``secrets``, so the REST list of keys is read with appmux's own
+    token and shows what appmux may read: a key only the person could read was missing (owner's
+    report, 2026-11-18). ``list_secrets()`` lists the secrets the caller may read and needs only
+    ``sql``, which an App declares; it runs on the warehouse the secret attach check uses, which
+    must be set for a secret to be attached at all. ``None`` sends the caller to the REST list.
+    """
+    answer = await reader.query_rows(_SCOPE_KEYS_QUERY, {"scope": scope})
+    if answer is None:
+        return None
+    rows, is_cut = answer
+    if not rows:
+        raise _NoItems(
+            "caller_token",
+            "you can read no secret in a scope with that name; check the name, or ask the "
+            "scope's owner for READ on it",
+        )
+    noun = "secret keys"
+    candidates = _present(
+        _suggestion(SECRET_TYPE, f"{scope}/{row[0]}", row[0])
+        for row in rows
+        if row and isinstance(row[0], str)
+    )
+    return _Page(candidates, key_query, noun, is_cut, is_label_only=True)
 
 
 async def _list_scopes(reader: _Reader, query: str) -> _Page:
@@ -654,6 +793,42 @@ async def _list_experiments(reader: _Reader, query: str) -> _Page:
         if entry.get("lifecycle_stage") != "deleted"
     )
     return _Page(candidates, query, noun, _is_partial(body))
+
+
+async def _home_experiments(reader: _Reader, email: str) -> list[ResourceSuggestion]:
+    """The MLflow experiments directly in the person's home folder, read with their own token.
+
+    The search needs ``mlflow``, which an App cannot declare, so it is read with appmux's token and
+    misses what only the person can read, such as an experiment made from the Experiments tab,
+    which lands in ``/Users/<email>`` (owner's report, 2026-11-18). The workspace list needs only
+    ``workspace.workspace:read``, which the Deploy needs too. Its ``resource_id`` (else
+    ``object_id``) is taken as the experiment id; that the two are the same number is what the
+    console's links show, not a measured fact. Subfolders are not read: one call, not one per
+    folder. A failure leaves the search as it was, so it is logged and gives nothing.
+    """
+    home = f"/Users/{email}"
+    try:
+        body = await reader.read(
+            "GET", WORKSPACE_LIST_PATH, "your home folder", params={"path": home}
+        )
+        objects = _objects_of(body, "objects", "your home folder")
+    except _NoItems:
+        logger.info("the home folder could not be listed for its experiments")
+        return []
+    found: list[ResourceSuggestion | None] = []
+    for entry in objects:
+        if entry.get("object_type") != "MLFLOW_EXPERIMENT":
+            continue
+        resource_id = entry.get("resource_id")
+        object_id = entry.get("object_id")
+        if isinstance(resource_id, str) and resource_id.strip():
+            experiment_id: str | None = resource_id.strip()
+        elif isinstance(object_id, int) and not isinstance(object_id, bool):
+            experiment_id = str(object_id)
+        else:
+            experiment_id = None
+        found.append(_suggestion("mlflow_experiment", experiment_id, entry.get("path")))
+    return _present(found)
 
 
 async def _list_jobs(reader: _Reader, query: str) -> _Page:
@@ -933,8 +1108,9 @@ async def _list_vector_endpoints(reader: _Reader, query: str) -> _Page:
 def _lakebase_shape() -> _NoItems:
     return _NoItems(
         "caller_token",
-        "that is not projects/<project>/branches/<branch>/endpoints/<endpoint>: each name has "
-        "letters, digits, _ and -; a Provisioned instance is typed as its host",
+        "that is not projects/<project>/branches/<branch>, which may go on with "
+        "/endpoints/<endpoint>: each name has letters, digits, _ and -; a Provisioned instance "
+        "is typed as its host",
     )
 
 
@@ -1037,9 +1213,10 @@ async def _list_lakebase_branches(reader: _Reader, project: str, name_filter: st
     for entry in objects:
         branch = _tail_of(entry.get("name"), parent)
         if branch is not None and _is_name_part(branch):
-            candidates.append(
-                _prefix_suggestion("lakebase_database", f"{parent}{branch}/", branch, "branch")
-            )
+            # A branch is a target, as in the console: the attach stores its read-write endpoint.
+            suggestion = _suggestion("lakebase_database", f"{parent}{branch}", branch, "branch")
+            if suggestion is not None:
+                candidates.append(suggestion)
     return _Page(candidates, name_filter, noun, is_partial, is_label_only=True)
 
 
@@ -1091,6 +1268,18 @@ _LISTERS: Final[Mapping[str, Lister]] = MappingProxyType(
 )
 SUGGESTABLE_TYPES: Final = frozenset(_LISTERS)
 
+PersonalLister = Callable[[_Reader, str], Awaitable[list[ResourceSuggestion]]]
+# Objects only the person's own token reaches, added to whichever token read the type's list.
+_PERSONAL_LISTERS: Final[Mapping[str, PersonalLister]] = MappingProxyType(
+    {"mlflow_experiment": _home_experiments}
+)
+_HOME_NOTE_BESIDE: Final = (
+    "Your own experiments are read from your home folder; the others are those appmux can read"
+)
+_HOME_NOTE_ALONE: Final = (
+    "Only the experiments in your home folder could be listed; type the id of any other"
+)
+
 
 # --- the routes -----------------------------------------------------------------------------
 
@@ -1132,6 +1321,8 @@ class ResourceSuggestionRoutes:
                 query,
                 limit,
                 None if actor.visitor_token is None else actor.visitor_token.get_secret_value(),
+                warehouse_id=check_warehouse_id(context.registry.snapshot),
+                email=actor.email,
             )
             return JSONResponse(answer.model_dump(mode="json"))
 
@@ -1141,7 +1332,14 @@ class ResourceSuggestionRoutes:
         ]
 
     async def _suggest(
-        self, type_name: str, query: str, limit: int, token: str | None
+        self,
+        type_name: str,
+        query: str,
+        limit: int,
+        token: str | None,
+        *,
+        warehouse_id: str | None,
+        email: str,
     ) -> ResourceSuggestionList:
         lister = _LISTERS.get(type_name)
         if lister is None:
@@ -1150,16 +1348,41 @@ class ResourceSuggestionRoutes:
                 "appmux has no list to pick from for this type; type the target, for example "
                 f"{TYPE_PRESENTATION[type_name].target_hint}",
             )
+        personal = _PERSONAL_LISTERS.get(type_name)
+        own: list[ResourceSuggestion] = []
+        if personal is not None and token is not None:
+            own = await personal(_Reader(self._workspace, token, viewer="caller_token"), email)
+        answer = await self._list(type_name, lister, query, limit, token, warehouse_id, own)
+        if own and not answer.items and answer.source not in ("caller_token", "platform_token"):
+            # The type's list could not be read at all; what the person's own token found stands.
+            return _answer(
+                _Page(own, query, type_name, False, note=_HOME_NOTE_ALONE), "caller_token", limit
+            )
+        return answer
+
+    async def _list(
+        self,
+        type_name: str,
+        lister: Lister,
+        query: str,
+        limit: int,
+        token: str | None,
+        warehouse_id: str | None,
+        own: list[ResourceSuggestion],
+    ) -> ResourceSuggestionList:
         refusal = _NoItems("unavailable", _NOT_RECEIVED_NOTE)
         if token is not None:
             try:
-                page = await lister(_Reader(self._workspace, token, viewer="caller_token"), query)
+                reader = _Reader(
+                    self._workspace, token, viewer="caller_token", warehouse_id=warehouse_id
+                )
+                page = await lister(reader, query)
             except _NoItems as nothing:
                 if not nothing.retry_with_platform_token:
                     return _nothing(nothing.source, nothing.note)
                 refusal = nothing
             else:
-                return _answer(page, "caller_token", limit)
+                return _answer(_with_own(page, own), "caller_token", limit)
         platform = await self._platform_bearer()
         if platform is not None:
             try:
@@ -1176,7 +1399,7 @@ class ResourceSuggestionRoutes:
                 # why their token could not list it.
                 logger.info("listing %s with the platform token failed", type_name)
             else:
-                return _answer(page, "platform_token", limit)
+                return _answer(_with_own(page, own), "platform_token", limit)
         return _nothing(refusal.source, refusal.note)
 
     async def _platform_bearer(self) -> str | None:
@@ -1192,6 +1415,17 @@ class ResourceSuggestionRoutes:
             return None
         value = token.get_secret_value()
         return value if value.strip() else None
+
+
+def _with_own(page: _Page, own: list[ResourceSuggestion]) -> _Page:
+    """The page with the objects the person's own token found added, each target once."""
+    if not own:
+        return page
+    listed = {candidate.target for candidate in page.candidates}
+    added = [candidate for candidate in own if candidate.target not in listed]
+    return dataclasses.replace(
+        page, candidates=[*page.candidates, *added], note=page.note or _HOME_NOTE_BESIDE
+    )
 
 
 def _answer(

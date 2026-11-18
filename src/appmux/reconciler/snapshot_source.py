@@ -24,8 +24,11 @@ What the workspace does that this module has to work around (spikes 4 and 15):
 * Parallel writes get 429s, so files are read one at a time.
 * A user's token can end during a long snapshot; that is reported as something to try again.
 
-Notebooks and any object that is not a file or a folder are refused by name: their export is a
-different format and they are not part of a Databricks App's source.
+Notebooks and any other object that is not a file or a folder (an experiment, a dashboard, a
+library) are left out and named in ``skipped``: they are not files of the app, and a folder that
+holds them next to the code still deploys as a Databricks App (owner's report, 2026-11-18; the
+Databricks docs say nothing either way). Their export is a different format, so they are never read
+and never change the digest. A folder with nothing but such objects is refused as empty.
 """
 
 from __future__ import annotations
@@ -91,6 +94,7 @@ class BuiltArchive:
     digest: str
     file_count: int
     size_bytes: int  # the sum of the files' sizes, not the archive's
+    skipped: tuple[str, ...] = ()  # objects left out (notebooks...), relative paths, sorted
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +103,7 @@ class Snapshot:
     file_count: int
     size_bytes: int
     already_up_to_date: bool
+    skipped: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +122,7 @@ async def build_archive(
     max_file_count: int = MAX_FILE_COUNT,
 ) -> BuiltArchive:
     """Write the archive of ``source_path`` to ``work_dir``; raise ``SnapshotRefused`` if unable."""
-    files = await _list_files(
+    files, skipped = await _list_files(
         reader, token, source_path.rstrip("/"), max_file_bytes, max_file_count
     )
     if not files:
@@ -134,7 +139,7 @@ async def build_archive(
         await asyncio.to_thread(archive_path.unlink, missing_ok=True)
         await asyncio.to_thread(download_path.unlink, missing_ok=True)
         raise
-    return BuiltArchive(archive_path, digest, len(files), size_bytes)
+    return BuiltArchive(archive_path, digest, len(files), size_bytes, tuple(sorted(skipped)))
 
 
 class SnapshotSource:
@@ -164,6 +169,7 @@ class SnapshotSource:
             file_count=archive.file_count,
             size_bytes=archive.size_bytes,
             already_up_to_date=archive.digest in live_digests,
+            skipped=archive.skipped,
         )
 
     async def _ensure_stored(self, archive: BuiltArchive) -> None:
@@ -181,8 +187,9 @@ class SnapshotSource:
 
 async def _list_files(
     reader: FolderReader, token: str, root: str, max_file_bytes: int, max_file_count: int
-) -> list[_SourceFile]:
+) -> tuple[list[_SourceFile], list[str]]:
     files: list[_SourceFile] = []
+    skipped: list[str] = []
     pending = [root]
     while pending:
         folder = pending.pop()
@@ -195,17 +202,14 @@ async def _list_files(
             if item.object_type == _DIRECTORY:
                 pending.append(item.path)
             elif item.object_type != _FILE:
-                raise SnapshotRefused(
-                    f"'{relative}' is a {item.object_type}, not a file; only files and folders "
-                    "can be part of an app"
-                )
+                skipped.append(relative)
             elif item.size_bytes is not None and item.size_bytes > max_file_bytes:
                 raise SnapshotRefused(_too_large_text(relative, max_file_bytes))
             else:
                 files.append(_SourceFile(relative, item.path))
                 if len(files) > max_file_count:
                     raise SnapshotRefused(f"the folder holds more than {max_file_count} files")
-    return files
+    return files, skipped
 
 
 def _relative_path(root: str, listed_path: str) -> str:

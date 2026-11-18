@@ -131,7 +131,7 @@ class UpdateService:
             return UpdateResult(release_no=same_folder.release_no, is_up_to_date=True)
 
         async with self._stored_archive(taken.digest) as archive:
-            detected = await self._manifest_of(archive, taken.digest)
+            detected = _with_skipped(await self._manifest_of(archive, taken.digest), taken.skipped)
             session = await self._packages_of(archive, user_token)
             for _ in range(MAX_WRITE_ATTEMPTS):
                 snapshot = self._registry.snapshot
@@ -290,6 +290,25 @@ def _release_with_digest(releases: list[Release], digest: str) -> Release | None
     if not matching:
         return None
     return max(matching, key=lambda release: (release.status == "active", release.release_no))
+
+
+# The release page lists the warnings; a folder of many notebooks names the first few only.
+_SKIPPED_NAMED_MAX: Final = 5
+
+
+def _with_skipped(detected: DetectedManifest, skipped: Sequence[str]) -> DetectedManifest:
+    """The manifest with one warning naming the objects the snapshot left out (notebooks...)."""
+    if not skipped:
+        return detected
+    named = ", ".join(skipped[:_SKIPPED_NAMED_MAX])
+    rest = len(skipped) - _SKIPPED_NAMED_MAX
+    more = f" and {rest} more" if rest > 0 else ""
+    noun = "object that is" if len(skipped) == 1 else "objects that are"
+    warning = (
+        f"left out {len(skipped)} {noun} not files (notebooks and the like are not part "
+        f"of the app): {named}{more}"
+    )
+    return detected.model_copy(update={"warnings": [*detected.warnings, warning]})
 
 
 def _with_notes(detected: DetectedManifest, plan: PackagePlan) -> DetectedManifest:

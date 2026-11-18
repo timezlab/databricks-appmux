@@ -46,10 +46,10 @@ describe("deployProgress", () => {
   });
 
   it.each([
-    ["pending", "Pending", 0],
-    ["building", "Building", 1],
-    ["starting", "Starting", 2],
-    ["healthy", "Healthy", 3],
+    ["pending", "Pending", 1],
+    ["building", "Building", 2],
+    ["starting", "Starting", 3],
+    ["healthy", "Healthy", 4],
   ] as const)(
     "puts a %s release on step %i of the way to active",
     (status, label, index) => {
@@ -65,7 +65,14 @@ describe("deployProgress", () => {
       assert.equal(progress.currentLabel, label);
       assert.deepEqual(
         progress.steps.map((step) => step.label),
-        ["Pending", "Building", "Starting", "Healthy", "Active"],
+        [
+          "Reading the folder",
+          "Pending",
+          "Building",
+          "Starting",
+          "Healthy",
+          "Active",
+        ],
       );
       assert.deepEqual(
         progress.steps.map((step) => step.state),
@@ -75,6 +82,42 @@ describe("deployProgress", () => {
       );
     },
   );
+
+  it("shows a Deploy still reading its folder, before any release exists", () => {
+    const app = appWith({
+      releases: [release(7, { status: "active" })],
+      deploy_preparing: {
+        started_at: "2026-11-18T09:00:00Z",
+        started_by: "carol@example.com",
+      },
+    });
+    const progress = deployProgress(app);
+    assert.ok(progress);
+    assert.equal(progress.releaseNo, null);
+    assert.equal(progress.currentLabel, "Reading the folder");
+    assert.deepEqual(
+      progress.steps.map((step) => step.state),
+      ["current", "todo", "todo", "todo", "todo", "todo"],
+    );
+    assert.equal(progress.servingReleaseNo, 7);
+    assert.equal(progress.isBuildOutputRecorded, false);
+  });
+
+  it("follows the release once it exists, even while the flow is still answering", () => {
+    const app = appWith({
+      releases: [
+        release(9, { status: "pending", is_target: true }),
+        release(7, { status: "active" }),
+      ],
+      deploy_preparing: {
+        started_at: "2026-11-18T09:00:00Z",
+        started_by: "carol@example.com",
+      },
+    });
+    const progress = deployProgress(app);
+    assert.equal(progress?.releaseNo, 9);
+    assert.equal(progress?.currentLabel, "Pending");
+  });
 
   it("says the running release keeps serving until the new one is healthy", () => {
     const app = appWith({

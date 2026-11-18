@@ -24,6 +24,7 @@ Starting data: see ``edge_harness`` (``sales`` owned by alice, bob ``CAN_USE``, 
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Final, Literal
 
 import pytest
@@ -46,6 +47,7 @@ from stub_registry import StubRegistry
 from appmux.admin.api import create_admin_app
 from appmux.admin.apps import AppRoutes
 from appmux.admin.authorizer import make_authorizer
+from appmux.admin.deploys import DeploysUnderWay
 from appmux.admin.releases import ReleaseRoutes
 from appmux.admin.schemas import AppDetail, ReleaseCreated, ReleaseDetail, ReleaseUnchanged
 from appmux.identity.actor import Actor
@@ -109,11 +111,15 @@ class StubUpdater:
         self.refusal = UpdateRefused("refused", UNREADABLE_FOLDER)
         self.live_release_no = 1
         self.calls: list[tuple[str, str, str]] = []  # (presser, app, the token as given)
+        # Run at the start of the flow, while it reads the folder: what a reload sees then.
+        self.during: Callable[[], Awaitable[None]] | None = None
 
     async def update(
         self, *, actor: Actor, app_slug: str, user_token: SecretStr, write: ChangeWriter
     ) -> UpdateResult:
         self.calls.append((actor.email, app_slug, user_token.get_secret_value()))
+        if self.during is not None:
+            await self.during()
         if self.mode == "refuse":
             raise self.refusal
         if self.mode == "up_to_date":
@@ -164,12 +170,13 @@ class Harness:
         self.registry = registry if registry is not None else seeded_registry()
         self.updater = StubUpdater(self.registry)
         self.woken: list[str] = []
+        deploys = DeploysUnderWay(now=lambda: NOW)
         self.app = create_admin_app(
             registry=self.registry,
             authorizer=make_authorizer(self.registry, FakeGroups()),
             route_providers=[
-                AppRoutes(service_principal=service_principal),
-                ReleaseRoutes(self.updater, on_release_created=self.woken.append),
+                AppRoutes(service_principal=service_principal, deploys=deploys),
+                ReleaseRoutes(self.updater, on_release_created=self.woken.append, deploys=deploys),
             ],
         )
 
@@ -678,6 +685,53 @@ async def test_the_reconciler_is_woken_once_for_the_app_after_the_release_exists
     await harness.update(CAROL)
 
     assert harness.woken == ["sales"]
+
+
+async def app_page_during_the_flow(harness: Harness) -> list[AppDetail]:
+    """Press Deploy as carol and read the app page as alice while the flow runs (a reload)."""
+    seen: list[AppDetail] = []
+
+    async def read_the_page() -> None:
+        reply = await harness.request("GET", "/apps/sales", ALICE)
+        seen.append(AppDetail.model_validate_json(reply.body))
+
+    harness.updater.during = read_the_page
+    await harness.update(CAROL)
+    return seen
+
+
+async def test_the_app_page_says_a_deploy_is_reading_the_folder_before_its_release_exists() -> None:
+    harness = Harness()
+
+    (during,) = await app_page_during_the_flow(harness)
+
+    assert during.releases == []
+    assert during.deploy_preparing is not None
+    assert (during.deploy_preparing.started_by, during.deploy_preparing.started_at) == (
+        CAROL,
+        NOW,
+    )
+
+
+@pytest.mark.parametrize("mode", ["create", "up_to_date", "refuse"])
+async def test_the_app_page_drops_the_preparing_deploy_once_the_flow_has_answered(
+    mode: UpdaterMode,
+) -> None:
+    harness = Harness()
+    harness.updater.mode = mode
+
+    await app_page_during_the_flow(harness)
+    after = AppDetail.model_validate_json((await harness.request("GET", "/apps/sales", ALICE)).body)
+
+    assert after.deploy_preparing is None
+
+
+async def test_an_app_with_no_deploy_under_way_shows_none_preparing() -> None:
+    harness = Harness()
+
+    reply = await harness.request("GET", "/apps/sales", ALICE)
+
+    assert AppDetail.model_validate_json(reply.body).deploy_preparing is None
 
 
 async def test_each_update_that_finds_a_change_makes_the_next_release_number() -> None:

@@ -515,7 +515,7 @@ Types follow the Databricks list ([reference](../reference/databricks-apps-platf
 | `sql_warehouse` | SQL warehouse | warehouse id | `CAN_USE`, `CAN_MANAGE` | `sql_warehouse` |
 | `mlflow_experiment` | MLflow experiment | experiment id | `CAN_READ`, `CAN_EDIT`, `CAN_MANAGE` | `experiment` |
 | `serving_endpoint` | Model serving endpoint | endpoint name | `CAN_VIEW`, `CAN_QUERY`, `CAN_MANAGE` | `serving_endpoint` |
-| `lakebase_database` | Lakebase database | endpoint path (Autoscaling) or host (Provisioned) | `CAN_CONNECT_AND_CREATE` | `database` or `postgres` |
+| `lakebase_database` | Lakebase database | endpoint path (Autoscaling; a branch path sent to attach is stored as its read-write endpoint) or host (Provisioned) | `CAN_CONNECT_AND_CREATE` | `database` or `postgres` |
 | `job` | Lakeflow job | job id | `CAN_VIEW`, `CAN_MANAGE_RUN`, `CAN_MANAGE` | `job` |
 | `uc_table` | Unity Catalog table | `catalog.schema.table` | `SELECT`, `MODIFY` | `uc_securable`, `securable_type: TABLE` |
 | `uc_volume` | Unity Catalog volume | `/Volumes/catalog/schema/volume` | `READ_VOLUME`, `WRITE_VOLUME` | `uc_securable`, `securable_type: VOLUME` |

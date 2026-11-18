@@ -9,6 +9,7 @@
       ],
       "access_as": [],
       "target_hint": "my-scope/my-key",
+      "default_key": "secret",
       "can_suggest": true
     },
     {
@@ -25,6 +26,7 @@
         "shared_sp"
       ],
       "target_hint": "1234567890abcdef",
+      "default_key": "sql-warehouse",
       "can_suggest": true
     }
   ]

@@ -207,33 +207,19 @@ export function checkResultLabel(result: ResourceView["check_result"]): string {
 
 const KEY_MAX_LENGTH = 63;
 
-/** Text as a resource key: lower case, accents dropped, every other run of characters a `-`. */
-function keySlug(text: string): string {
-  return text
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9.]+/g, "-")
-    .replace(/^[^a-z0-9]+/, "")
-    .slice(0, KEY_MAX_LENGTH)
-    .replace(/[-.]+$/, "");
-}
-
 /**
- * The key a new resource is filled with: the object's name, or the type when
- * no object is chosen yet, made unique among the keys the app has (`-2`,
- * `-3`, …) and kept to the contract's form.
+ * The key a new resource is filled with: the type's `default_key`, the word
+ * the Databricks console fills in (`experiment`, `secret`, `sql-warehouse`),
+ * made unique among the keys the app has (`-2`, `-3`, …) and kept to 63.
  */
 export function deriveResourceKey(
-  type: string,
-  objectName: string | null,
+  defaultKey: string,
   takenKeys: readonly string[],
 ): string {
-  const base = keySlug(objectName ?? "") || keySlug(type) || "resource";
-  if (!takenKeys.includes(base)) return base;
+  if (!takenKeys.includes(defaultKey)) return defaultKey;
   for (let counter = 2; ; counter += 1) {
     const suffix = `-${counter}`;
-    const stem = base
+    const stem = defaultKey
       .slice(0, KEY_MAX_LENGTH - suffix.length)
       .replace(/[-.]+$/, "");
     const candidate = `${stem}${suffix}`;
@@ -246,11 +232,11 @@ export function deriveResourceKey(
 /** What the Add panel holds, as typed (`type`, `permission` and `accessAs` are `""` until chosen). */
 export interface AttachDraft {
   key: string;
-  /** The person typed the key, so it no longer follows the type and the object. */
+  /** The person typed the key, so it no longer follows the type. */
   isKeyEdited: boolean;
   type: string;
   target: string;
-  /** What the key is filled from: the chosen object's name, or a typed secret's key. */
+  /** The chosen object's name, shown beside its target; `null` for a typed target. */
   objectName: string | null;
   permission: string;
   accessAs: AccessAs | "";
@@ -273,17 +259,6 @@ export function emptyAttachDraft(): AttachDraft {
     permission: "",
     accessAs: "",
     fromBundle: false,
-  };
-}
-
-function withDerivedKey(
-  draft: AttachDraft,
-  takenKeys: readonly string[],
-): AttachDraft {
-  if (draft.isKeyEdited || draft.type === "") return draft;
-  return {
-    ...draft,
-    key: deriveResourceKey(draft.type, draft.objectName, takenKeys),
   };
 }
 
@@ -332,69 +307,50 @@ export function attachDraftFromRequirement(
   };
 }
 
-/** A new type starts the object again, takes its first level, and keeps an access mode it allows. */
+/** A new type starts the object again, takes its first level and its key, and keeps an access mode it allows. */
 export function chooseDraftType(
   draft: AttachDraft,
   entry: ResourceTypeEntry,
   takenKeys: readonly string[],
 ): AttachDraft {
-  return withDerivedKey(
-    {
-      ...draft,
-      type: entry.type,
-      target: "",
-      objectName: null,
-      permission: entry.permissions[0] ?? "",
-      accessAs:
-        draft.accessAs !== "" && entry.access_as.includes(draft.accessAs)
-          ? draft.accessAs
-          : "",
-      fromBundle: false,
-    },
-    takenKeys,
-  );
+  return {
+    ...draft,
+    key: draft.isKeyEdited
+      ? draft.key
+      : deriveResourceKey(entry.default_key, takenKeys),
+    type: entry.type,
+    target: "",
+    objectName: null,
+    permission: entry.permissions[0] ?? "",
+    accessAs:
+      draft.accessAs !== "" && entry.access_as.includes(draft.accessAs)
+        ? draft.accessAs
+        : "",
+    fromBundle: false,
+  };
 }
 
-/** An object picked from the suggestions: its target, and its name for the key. */
+/** An object picked from the suggestions: its target, and its name to show beside it. */
 export function chooseDraftObject(
   draft: AttachDraft,
   suggestion: ResourceSuggestion,
-  takenKeys: readonly string[],
 ): AttachDraft {
-  return withDerivedKey(
-    {
-      ...draft,
-      target: suggestion.target,
-      objectName: suggestion.label,
-      permission: suggestion.permissions.includes(draft.permission)
-        ? draft.permission
-        : (suggestion.permissions[0] ?? draft.permission),
-    },
-    takenKeys,
-  );
+  return {
+    ...draft,
+    target: suggestion.target,
+    objectName: suggestion.label,
+    permission: suggestion.permissions.includes(draft.permission)
+      ? draft.permission
+      : (suggestion.permissions[0] ?? draft.permission),
+  };
 }
 
-/** The key part of a typed `scope/key`, or `null`. */
-function typedSecretKey(target: string): string | null {
-  const slash = target.indexOf("/");
-  const key = slash === -1 ? "" : target.slice(slash + 1).trim();
-  return key === "" ? null : key;
-}
-
-/** A target typed by hand: a secret's key still names the resource; any other text does not. */
+/** A target typed by hand: it has no name to show. */
 export function typeDraftTarget(
   draft: AttachDraft,
   target: string,
-  takenKeys: readonly string[],
 ): AttachDraft {
-  return withDerivedKey(
-    {
-      ...draft,
-      target,
-      objectName: draft.type === "secret" ? typedSecretKey(target) : null,
-    },
-    takenKeys,
-  );
+  return { ...draft, target, objectName: null };
 }
 
 export function editDraftKey(draft: AttachDraft, key: string): AttachDraft {

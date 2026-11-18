@@ -29,6 +29,7 @@ from appmux.registry.writers import WriteKind
 from appmux.settings import PlatformSettings
 
 SECRET_TYPE: Final = "secret"  # noqa: S105 - the resource type's name, not a credential
+LAKEBASE_TYPE: Final = "lakebase_database"
 SECRET_LEVEL: Final = "READ"  # noqa: S105 - a permission level, not a credential
 
 _RESOURCE_KEY: Final = re.compile(SCOPE_KEY_PATTERN)
@@ -79,7 +80,7 @@ RESOURCE_TYPES: Final[Mapping[str, ResourceType]] = _types(
         is_verifiable=True,
     ),
     ResourceType(
-        "lakebase_database",
+        LAKEBASE_TYPE,
         "Lakebase database",
         ("CAN_CONNECT_AND_CREATE",),
         is_verifiable=False,
@@ -170,6 +171,17 @@ _TARGET_FORMS: Final[Mapping[str, tuple[re.Pattern[str], str]]] = MappingProxyTy
 )
 
 
+_LAKEBASE_BRANCH: Final = re.compile(rf"projects/({_NAME_PART})/branches/({_NAME_PART})")
+
+
+def lakebase_branch_of(type_name: str, target: str) -> tuple[str, str] | None:
+    """``(project, branch)`` when ``target`` names a Lakebase branch, not one of its endpoints."""
+    if type_name != LAKEBASE_TYPE:
+        return None
+    match = _LAKEBASE_BRANCH.fullmatch(target)
+    return None if match is None else (match.group(1), match.group(2))
+
+
 class CheckVerdict(StrEnum):
     """What the attacher's own token could do: the answer of one attach check."""
 
@@ -223,6 +235,16 @@ class AttachChecker(Protocol):
     """
 
     async def check(self, probe: AttachProbe) -> CheckVerdict: ...
+
+    async def lakebase_primary_endpoint(self, token: SecretStr, project: str, branch: str) -> str:
+        """The path of the branch's read-write endpoint, found with the attacher's token.
+
+        A Lakebase database is picked down to its branch, as in the Databricks Apps console; the
+        stored target is the endpoint a child reaches it through. Raises ``AttachRefused`` when the
+        branch cannot be seen or has no read-write endpoint, ``AttachCheckUnavailable`` when the
+        list could not be read.
+        """
+        ...
 
 
 def no_access_message(type_name: str, target: str) -> str:

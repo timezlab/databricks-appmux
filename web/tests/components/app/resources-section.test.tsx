@@ -209,7 +209,7 @@ describe("ResourcesSection", () => {
 describe("ResourceArea", () => {
   const NEW_RESOURCE: ResourceView = {
     ...ResourceView.parse(readExample("ResourceView")),
-    key: "shared-serverless",
+    key: "sql-warehouse-2",
     target: "1234567890abcdef",
   };
   const onChanged = vi.fn();
@@ -271,7 +271,7 @@ describe("ResourceArea", () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getByText("shared-serverless")).toHaveFocus();
+      expect(screen.getByText("sql-warehouse-2")).toHaveFocus();
     });
   });
 });

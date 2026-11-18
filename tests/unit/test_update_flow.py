@@ -50,6 +50,7 @@ class FakeSnapshots:
 
     def __init__(self, digest: str = NEW_DIGEST) -> None:
         self.digest = digest
+        self.skipped: tuple[str, ...] = ()
         self.error: Exception | None = None
         self.calls: list[tuple[str, str, frozenset[str]]] = []
 
@@ -64,6 +65,7 @@ class FakeSnapshots:
             file_count=2,
             size_bytes=100,
             already_up_to_date=self.digest in live_digests,
+            skipped=self.skipped,
         )
 
 
@@ -148,6 +150,39 @@ async def test_the_manifest_of_the_snapshot_is_stored_with_the_release() -> None
     assert detected.command == ["python", "main.py"]
     assert [(entry.name, entry.value) for entry in detected.env] == [("MODE", "demo")]
     assert flow.store.gets == [NEW_DIGEST]
+
+
+async def test_the_release_names_the_notebooks_the_snapshot_left_out() -> None:
+    flow = Flow()
+    flow.snapshots.skipped = ("analysis", "notebooks/explore")
+
+    await flow.press()
+
+    (warning,) = flow.release(1).detected.warnings
+    assert "2 objects" in warning
+    assert "analysis" in warning
+    assert "notebooks/explore" in warning
+
+
+async def test_a_long_list_of_left_out_objects_is_cut_and_counted() -> None:
+    flow = Flow()
+    flow.snapshots.skipped = tuple(f"nb{number}" for number in range(8))
+
+    await flow.press()
+
+    (warning,) = flow.release(1).detected.warnings
+    assert "8 objects" in warning
+    assert "nb4" in warning
+    assert "nb5" not in warning
+    assert "3 more" in warning
+
+
+async def test_a_folder_with_only_files_has_no_left_out_warning() -> None:
+    flow = Flow()
+
+    await flow.press()
+
+    assert flow.release(1).detected.warnings == []
 
 
 async def test_an_update_starts_a_stopped_app() -> None:

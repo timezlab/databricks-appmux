@@ -181,7 +181,10 @@ export function appActionAvailability(
   const isMeantToRun = app.config.desired_state === "running";
   switch (action) {
     case "update":
-      return ALLOWED;
+      // A second press would read the same folder again beside the first.
+      return app.deploy_preparing === null
+        ? ALLOWED
+        : refused("A Deploy is already reading the folder; wait for it.");
     case "stop":
       return isMeantToRun ? ALLOWED : refused("The app is already stopped.");
     case "start":

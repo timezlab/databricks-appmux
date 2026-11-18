@@ -426,6 +426,129 @@ def test_a_query_whose_scope_part_cannot_be_a_scope_name_calls_nothing(q: str) -
     assert suggester.workspace.requests == []
 
 
+# --- secret keys as the person: list_secrets() on the check warehouse ----------------------------
+# The person's App token cannot hold the `secrets` scope, so the REST list of keys is always read
+# with appmux's own token and shows what appmux may read, which missed a key only the person could
+# (owner's report, 2026-11-18). `list_secrets()` needs only `sql`, which the App declares.
+
+STATEMENTS_PATH = "/api/2.0/sql/statements"
+CHECK_WAREHOUSE = "a1b2c3d4e5f67890"
+
+
+def statement_answer(
+    rows: list[list[object]] | None, *, state: str = "SUCCEEDED", truncated: bool = False
+) -> tuple[int, object]:
+    body: dict[str, object] = {"status": {"state": state}, "manifest": {"truncated": truncated}}
+    if rows is not None:
+        body["result"] = {"data_array": rows}
+    return 200, body
+
+
+def test_the_keys_of_a_scope_are_read_as_the_person_with_list_secrets_on_the_check_warehouse() -> (
+    None
+):
+    answers = {
+        ("POST", STATEMENTS_PATH): statement_answer([["system-token"], ["db-password"]]),
+        ("GET", KEYS_PATH): (200, {"secrets": [{"key": "only-appmux-sees-this"}]}),
+    }
+    suggester = Suggester(Workspace(answers), check_warehouse=CHECK_WAREHOUSE)
+
+    response = suggester.suggest("secret", "askez-plus/")
+
+    assert targets_of(response) == ["askez-plus/db-password", "askez-plus/system-token"]
+    assert response.json()["source"] == "caller_token"
+    [call] = suggester.workspace.requests
+    assert (call.method, call.url.path) == ("POST", STATEMENTS_PATH)
+    assert call.headers["Authorization"] == f"Bearer {VISITOR_TOKEN}"
+    sent = json.loads(call.content)
+    assert sent["warehouse_id"] == CHECK_WAREHOUSE
+    # The scope is a parameter, never text in the statement; and no value is asked for.
+    assert "askez-plus" not in sent["statement"]
+    assert "secret(" not in sent["statement"].replace("list_secrets(", "")
+    assert sent["parameters"] == [{"name": "scope", "value": "askez-plus"}]
+    assert sent["on_wait_timeout"] == "CANCEL"
+
+
+def test_the_keys_read_with_list_secrets_are_filtered_by_what_follows_the_slash() -> None:
+    answers = {("POST", STATEMENTS_PATH): statement_answer([["system-token"], ["api"]])}
+    suggester = Suggester(Workspace(answers), check_warehouse=CHECK_WAREHOUSE)
+
+    response = suggester.suggest("secret", "askez-plus/SYS")
+
+    assert targets_of(response) == ["askez-plus/system-token"]
+
+
+def test_a_cut_list_secrets_answer_is_truncated_and_says_so() -> None:
+    answers = {("POST", STATEMENTS_PATH): statement_answer([["a"]], truncated=True)}
+    suggester = Suggester(Workspace(answers), check_warehouse=CHECK_WAREHOUSE)
+
+    body = suggester.suggest("secret", "askez-plus/").json()
+
+    assert body["truncated"] is True
+    assert body["note"]
+
+
+def test_a_scope_in_which_the_person_reads_no_key_is_an_empty_answer_with_a_note() -> None:
+    answers = {
+        ("POST", STATEMENTS_PATH): statement_answer(None),  # no rows: no `data_array` at all
+        ("GET", KEYS_PATH): (200, {"secrets": [{"key": "only-appmux-sees-this"}]}),
+    }
+    suggester = Suggester(Workspace(answers), check_warehouse=CHECK_WAREHOUSE)
+
+    body = suggester.suggest("secret", "askez-plus/").json()
+
+    assert (body["items"], body["source"]) == ([], "caller_token")
+    assert "READ" in body["note"]
+    assert suggester.workspace.calls == [("POST", STATEMENTS_PATH)]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        statement_answer(None, state="FAILED"),
+        statement_answer(None, state="CANCELED"),  # the warehouse did not answer in time
+        (403, {"error_code": "PERMISSION_DENIED", "message": DENIED_TEXT}),
+        (500, {"error_code": "INTERNAL_ERROR"}),
+    ],
+)
+def test_a_statement_that_does_not_succeed_falls_back_to_the_rest_list(
+    answer: tuple[int, object],
+) -> None:
+    answers = {
+        ("POST", STATEMENTS_PATH): answer,
+        ("GET", KEYS_PATH): (200, {"secrets": [{"key": "db-password"}]}),
+    }
+    suggester = Suggester(Workspace(answers), check_warehouse=CHECK_WAREHOUSE)
+
+    response = suggester.suggest("secret", "askez-plus/")
+
+    assert targets_of(response) == ["askez-plus/db-password"]
+    assert suggester.workspace.calls == [("POST", STATEMENTS_PATH), ("GET", KEYS_PATH)]
+    assert DENIED_TEXT not in response.text
+
+
+def test_without_a_check_warehouse_the_keys_come_from_the_rest_list_alone() -> None:
+    answers = {("GET", KEYS_PATH): (200, {"secrets": [{"key": "db-password"}]})}
+    suggester = Suggester(Workspace(answers))
+
+    response = suggester.suggest("secret", "askez-plus/")
+
+    assert targets_of(response) == ["askez-plus/db-password"]
+    assert suggester.workspace.calls == [("GET", KEYS_PATH)]
+
+
+def test_the_scope_list_does_not_run_a_statement() -> None:
+    body = {"scopes": [{"name": "askez-plus"}]}
+    suggester = Suggester(
+        Workspace({("GET", SCOPES_PATH): (200, body)}), check_warehouse=CHECK_WAREHOUSE
+    )
+
+    response = suggester.suggest("secret", "")
+
+    assert targets_of(response) == ["askez-plus/"]
+    assert suggester.workspace.calls == [("GET", SCOPES_PATH)]
+
+
 def test_mlflow_experiments_are_searched_with_a_post_and_mapped_to_id_and_name() -> None:
     body = {
         "experiments": [
@@ -453,8 +576,8 @@ def test_mlflow_experiments_are_searched_with_a_post_and_mapped_to_id_and_name()
             "permissions": ["CAN_READ", "CAN_EDIT", "CAN_MANAGE"],
         },
     ]
-    [call] = suggester.workspace.requests
-    assert (call.method, call.url.path) == ("POST", EXPERIMENTS_PATH)
+    [call] = [r for r in suggester.workspace.requests if r.url.path == EXPERIMENTS_PATH]
+    assert call.method == "POST"
     assert json.loads(call.read()) == {"max_results": 1000, "view_type": "ACTIVE_ONLY"}
     assert call.headers["Authorization"] == f"Bearer {VISITOR_TOKEN}"
 
@@ -666,8 +789,12 @@ def test_any_other_failure_is_unavailable_with_a_note_that_repeats_nothing(
     assert (body["items"], body["source"]) == ([], "unavailable")
     assert words in body["note"]
     assert_leaks_nothing(response)
-    # A redirect is not followed: one request per list the type reads (Lakebase reads two).
-    assert len(suggester.workspace.requests) == 1 + len(SECOND_ROOT_CALLS.get(type_name, []))
+    # A redirect is not followed: one request per list the type reads (Lakebase reads two, and an
+    # experiment list also reads the person's home folder).
+    home_folder = 1 if type_name == "mlflow_experiment" else 0
+    assert len(suggester.workspace.requests) == (
+        1 + len(SECOND_ROOT_CALLS.get(type_name, [])) + home_folder
+    )
 
 
 @pytest.mark.parametrize("type_name", sorted(SUGGESTABLE_TYPES))

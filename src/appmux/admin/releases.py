@@ -61,6 +61,7 @@ from starlette.routing import Route
 
 from appmux.admin.api import AdminContext, parse_body
 from appmux.admin.apps import env_entries, release_summary
+from appmux.admin.deploys import DeploysUnderWay
 from appmux.admin.errors import (
     AdminError,
     BadRequest,
@@ -255,7 +256,9 @@ class ReleaseRoutes:
     ``updater`` is the Update flow. ``on_release_created`` receives the app's slug after a release
     was written, or after a Deploy of an unchanged folder asked a stopped app to run (the parent
     wires it to ``Reconciler.wake``); by default nothing is signalled and the reconciler finds the
-    change on its next pass. ``now`` stamps locks and deletions.
+    change on its next pass. ``deploys`` is the book of Deploys still reading their folder, shared
+    with ``AppRoutes`` so the app page shows a Deploy before its release exists; by default a book
+    nobody reads. ``now`` stamps locks and deletions.
     """
 
     def __init__(
@@ -263,10 +266,12 @@ class ReleaseRoutes:
         updater: ReleaseUpdater,
         *,
         on_release_created: Callable[[str], None] = _no_wake_up,
+        deploys: DeploysUnderWay | None = None,
         now: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._updater = updater
         self._on_release_created = on_release_created
+        self._deploys = deploys if deploys is not None else DeploysUnderWay()
         self._now = now
 
     async def _start_if_stopped(self, context: AdminContext, request: Request, slug: str) -> bool:
@@ -317,9 +322,10 @@ class ReleaseRoutes:
                 return rows
 
             try:
-                result = await self._updater.update(
-                    actor=actor, app_slug=slug, user_token=actor.visitor_token, write=write
-                )
+                with self._deploys.preparing(slug, started_by=actor.email):
+                    result = await self._updater.update(
+                        actor=actor, app_slug=slug, user_token=actor.visitor_token, write=write
+                    )
             except UpdateRefused as exc:
                 raise _REFUSAL_ERRORS[exc.kind](exc.message) from exc
 

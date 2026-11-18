@@ -173,6 +173,7 @@ describe("AppView", () => {
         .getAllByRole("listitem")
         .map((item) => item.textContent),
     ).toEqual([
+      "● Reading the folder, done",
       "● Pending, done",
       "◐ Building, in progress",
       "○ Starting, not yet",

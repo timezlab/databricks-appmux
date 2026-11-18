@@ -34,7 +34,14 @@ export interface DeployBannerProps {
  */
 export function DeployBanner({ slug, progress, section }: DeployBannerProps) {
   return (
-    <Notice tone="info" title={`Deploying release ${progress.releaseNo}`}>
+    <Notice
+      tone="info"
+      title={
+        progress.releaseNo === null
+          ? "Deploying: reading the source folder"
+          : `Deploying release ${progress.releaseNo}`
+      }
+    >
       <div className="flex flex-col gap-2">
         <ol
           aria-label="Steps of the deploy"

@@ -529,7 +529,9 @@ def test_lakebase_lists_autoscaling_projects_as_prefixes_and_provisioned_instanc
     ]
 
 
-def test_a_project_and_a_slash_lists_its_branches_as_prefixes() -> None:
+def test_a_project_and_a_slash_lists_its_branches_as_targets_to_pick() -> None:
+    # A branch is as far as the Databricks Apps console goes (owner's report, 2026-11-18); the
+    # attach stores its read-write endpoint.
     body = {
         "branches": [
             {"name": "projects/my-project/branches/production", "branch_id": "production"},
@@ -542,9 +544,9 @@ def test_a_project_and_a_slash_lists_its_branches_as_prefixes() -> None:
     response = suggester.suggest("lakebase_database", "projects/my-project/")
 
     assert items_of(response) == [
-        item("lakebase_database", "projects/my-project/branches/dev/", "dev", "branch"),
+        item("lakebase_database", "projects/my-project/branches/dev", "dev", "branch"),
         item(
-            "lakebase_database", "projects/my-project/branches/production/", "production", "branch"
+            "lakebase_database", "projects/my-project/branches/production", "production", "branch"
         ),
     ]
     [call] = suggester.workspace.requests
@@ -563,7 +565,7 @@ def test_the_text_after_the_project_filters_the_branches_by_name(q: str) -> None
     suggester = suggester_with({("GET", BRANCHES): ok(body)})
 
     assert targets_of(suggester.suggest("lakebase_database", q)) == [
-        "projects/my-project/branches/production/"
+        "projects/my-project/branches/production"
     ]
 
 

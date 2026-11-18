@@ -94,6 +94,10 @@ export const AppDetail = z.object({
   delegation: DelegationStatus,
   egress: z.array(EgressRule),
   grants: z.array(AppGrant),
+  /** A Deploy still reading its folder: pressed, with no release written yet. */
+  deploy_preparing: z
+    .object({ started_at: Time, started_by: z.string() })
+    .nullable(),
 });
 
 export type AppDetail = z.infer<typeof AppDetail>;

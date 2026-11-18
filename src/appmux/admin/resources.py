@@ -33,7 +33,7 @@ from typing import Any, Final
 from urllib.parse import quote
 
 import httpx
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -64,6 +64,7 @@ from appmux.registry.resources import (
     delete_resource_change,
     is_resource_key,
     is_valid_target,
+    lakebase_branch_of,
     own_sp_key_in_use,
     put_resource_change,
     shared_sp_delegation_allowed,
@@ -97,6 +98,12 @@ _REST_PATHS: Final = {
     "genie_space": "/api/2.0/genie/spaces/",
 }
 _VOLUME_PATH: Final = "/api/2.0/fs/directories"
+_LAKEBASE_PROJECTS_PATH: Final = "/api/2.0/postgres/projects"
+_READ_WRITE_ENDPOINT: Final = "ENDPOINT_TYPE_READ_WRITE"
+_BRANCH_UNRESOLVED: Final = "lakebase_branch_unresolved"
+_TYPE_THE_ENDPOINT: Final = (
+    "; pick the endpoint itself (type the branch followed by a slash) or type its path"
+)
 
 
 class DatabricksAttachChecker:
@@ -131,6 +138,44 @@ class DatabricksAttachChecker:
                 )
             case _:  # a verifiable type this match does not list: the catalogue grew
                 raise ValueError("no attach check exists for this resource type")
+
+    async def lakebase_primary_endpoint(self, token: SecretStr, project: str, branch: str) -> str:
+        # One page: a branch has a read-write endpoint and a few read replicas, not hundreds.
+        parent = f"projects/{project}/branches/{branch}/endpoints/"
+        response = await self._send(
+            token.get_secret_value(),
+            "GET",
+            f"{_LAKEBASE_PROJECTS_PATH}/{project}/branches/{branch}/endpoints",
+            timeout_s=_REST_TIMEOUT_S,
+        )
+        if response.status_code in (400, 403, 404):
+            raise AttachRefused(
+                _BRANCH_UNRESOLVED,
+                "your Databricks account cannot see that Lakebase branch's endpoints"
+                + _TYPE_THE_ENDPOINT,
+            )
+        if response.status_code != 200:
+            raise AttachCheckUnavailable(CHECK_UNAVAILABLE_MESSAGE)
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise AttachCheckUnavailable(CHECK_UNAVAILABLE_MESSAGE) from exc
+        endpoints = body.get("endpoints") if isinstance(body, dict) else None
+        for entry in endpoints if isinstance(endpoints, list) else []:
+            name = entry.get("name") if isinstance(entry, dict) else None
+            status = entry.get("status") if isinstance(entry, dict) else None
+            kind = status.get("endpoint_type") if isinstance(status, dict) else None
+            if (
+                isinstance(name, str)
+                and name.startswith(parent)
+                and "/" not in name.removeprefix(parent)
+                and kind == _READ_WRITE_ENDPOINT
+            ):
+                return name
+        raise AttachRefused(
+            _BRANCH_UNRESOLVED,
+            "that Lakebase branch has no read-write endpoint" + _TYPE_THE_ENDPOINT,
+        )
 
     # --- the statement checks: the answer is in ``status.state``, whatever the HTTP status says
 
@@ -424,6 +469,22 @@ class ResourceRoutes:
         self._checker = checker
         self._clock = clock
 
+    async def _stored_target(self, body: AttachResourceRequest, token: SecretStr | None) -> str:
+        """The target to store: as sent, except a Lakebase branch, stored as its endpoint.
+
+        It runs after the attach rules, so a request they refuse makes no call.
+        """
+        branch = lakebase_branch_of(body.type, body.target)
+        if branch is None:
+            return body.target
+        if token is None:
+            raise AttachRefused(
+                "lakebase_branch_unresolved",
+                "appmux did not receive your Databricks access token, so it cannot find that "
+                "Lakebase branch's endpoint; reload the page, or type the endpoint's path",
+            )
+        return await self._checker.lakebase_primary_endpoint(token, *branch)
+
     def routes(self, context: AdminContext) -> Sequence[Route]:
         async def get_requirements(request: Request) -> Response:
             slug = request.path_params["app"]
@@ -468,6 +529,7 @@ class ResourceRoutes:
                     token=actor.visitor_token,
                     checker=self._checker,
                 )
+                target = await self._stored_target(body, actor.visitor_token)
             except AttachRefused as exc:
                 raise BadRequest(exc.message, code=exc.code) from exc
             except AttachCheckUnavailable as exc:
@@ -478,7 +540,7 @@ class ResourceRoutes:
                 app_slug=slug,
                 key=key,
                 type_name=body.type,
-                target=body.target,
+                target=target,
                 permission=body.permission,
                 access_as=body.access_as,
                 check_result=check,

@@ -17,6 +17,8 @@ export const ResourceTypeEntry = z.object({
   access_as: z.array(AccessAs),
   /** An example target, for the field's placeholder. */
   target_hint: z.string(),
+  /** The key the Databricks Apps console fills in for the type. */
+  default_key: z.string(),
   can_suggest: z.boolean(),
 });
 

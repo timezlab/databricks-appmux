@@ -120,8 +120,9 @@ appmux's.
 ```
 
 - **The top bar** (`TopBar`) is the wordmark, then on the pages of one app the breadcrumb `/ <app> ▾`, then the theme
-  switch at the right, with the main navigation on the line below. The wordmark is the plain text "appmux"; a glyph
-  is the owner's decision. The breadcrumb shows the app's display name once the switcher has loaded the list, and its
+  switch at the right, with the main navigation on the line below. The logo is lucide's `Waypoints` glyph, drawn in
+  `primary-foreground` on a `primary` rounded tile (so it follows the theme), then the plain text "appmux"; the glyph
+  is decoration and hidden from screen readers, the link's name is the wordmark. The breadcrumb shows the app's display name once the switcher has loaded the list, and its
   route strip until then; the `▾` opens the switcher (`AppSwitcher`): a `Popover` with a `Command` list of the apps,
   fetched when it opens (and every 30 s while open), filtered by name or slug as one types, each row the name, the
   route strip and the lamp. Choosing one goes to the same section of that app, or to its Overview from a page that is
@@ -219,7 +220,8 @@ notice.
   serving endpoints, secret scopes and keys, experiments, jobs), loaded as they type; choose the permission from
   the levels that type allows; choose how the app uses it (as the visitor, as the app's own service principal, as the
   shared one), where an unavailable mode is disabled with the reason and the way to ask for it; then the resource
-  key, filled from the type and the object and editable. **Add** attaches it, the list shows it, and a refusal shows
+  key, filled as the console fills it, from the type alone (`experiment`, `secret`, `sql-warehouse`; `-2` when the app
+  has that key), and editable. **Add** attaches it, the list shows it, and a refusal shows
   the server's reason in words. Detach is a row action that asks first.
 - **Environment (Variables and Packages).** Variables come from three places and say which: the release's config, the
   attached resources (`valueFrom`, secret values never shown), and what the platform sets for every child (the port,

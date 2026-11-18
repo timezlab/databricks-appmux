@@ -197,6 +197,18 @@ describe("appActionAvailability", () => {
     );
   });
 
+  it("refuses a second Deploy while one is still reading the folder", () => {
+    const preparing = app({
+      deploy_preparing: {
+        started_at: "2026-11-18T09:00:00Z",
+        started_by: "carol@example.com",
+      },
+    });
+    const availability = appActionAvailability("update", preparing, MANAGER);
+    assert.equal(availability.isAllowed, false);
+    assert.match(availability.reason ?? "", /already reading the folder/);
+  });
+
   it("allows Stop and Restart while the app is meant to run, Start only when it is meant to be stopped", () => {
     const running = appWithDesiredState("running", "running");
     assertAllowed(appActionAvailability("stop", running, MANAGER));

@@ -51,6 +51,7 @@ function entry(
     permissions: ["CAN_VIEW", "CAN_QUERY", "CAN_MANAGE"],
     access_as: ["obo", "own_sp"],
     target_hint: "my-object",
+    default_key: type.replaceAll("_", "-"),
     can_suggest: false,
     ...overrides,
   };
@@ -247,43 +248,18 @@ describe("access modes per type", () => {
 });
 
 describe("deriveResourceKey", () => {
-  it("makes a key of the object's name, else of the type", () => {
-    assert.equal(
-      deriveResourceKey("sql_warehouse", "Shared Serverless", []),
-      "shared-serverless",
-    );
-    assert.equal(deriveResourceKey("sql_warehouse", null, []), "sql-warehouse");
-    assert.equal(
-      deriveResourceKey("secret", "openai-api-key", []),
-      "openai-api-key",
-    );
-  });
-
-  it("keeps to the contract's form: lower case, no accents, starting with a letter or digit, at most 63", () => {
-    assert.equal(
-      deriveResourceKey("job", "  Café Report (v2)! ", []),
-      "cafe-report-v2",
-    );
-    assert.equal(deriveResourceKey("job", "__nightly", []), "nightly");
-    const long = deriveResourceKey("job", "x".repeat(80), []);
-    assert.equal(long.length, 63);
-    for (const key of ["shared-serverless", "cafe-report-v2", long]) {
-      assert.ok(api.ResourceKey.safeParse(key).success, key);
-    }
-    // Nothing usable in the name: the type stands in.
-    assert.equal(deriveResourceKey("uc_table", "***", []), "uc-table");
+  it("starts from the key the Databricks console fills in for the type", () => {
+    assert.equal(deriveResourceKey("experiment", []), "experiment");
+    assert.equal(deriveResourceKey("secret", []), "secret");
   });
 
   it("is unique among the app's keys", () => {
+    assert.equal(deriveResourceKey("sql-warehouse", TAKEN), "sql-warehouse-2");
     assert.equal(
-      deriveResourceKey("sql_warehouse", null, TAKEN),
-      "sql-warehouse-2",
-    );
-    assert.equal(
-      deriveResourceKey("sql_warehouse", null, [...TAKEN, "sql-warehouse-2"]),
+      deriveResourceKey("sql-warehouse", [...TAKEN, "sql-warehouse-2"]),
       "sql-warehouse-3",
     );
-    const long = deriveResourceKey("job", "y".repeat(80), ["y".repeat(63)]);
+    const long = deriveResourceKey("y".repeat(63), ["y".repeat(63)]);
     assert.equal(long, `${"y".repeat(61)}-2`);
     assert.ok(api.ResourceKey.safeParse(long).success);
   });
@@ -321,7 +297,9 @@ describe("the Add draft", () => {
     assert.equal(secret.target, "");
   });
 
-  it("fills the target and the key from a chosen object, keeping a level the object allows", () => {
+  it("fills the target from a chosen object and keeps the type's key, keeping a level the object allows", () => {
+    // The Databricks console names a resource after its type, not the object (owner's report,
+    // 2026-11-18: an experiment came out as `mlflow-experiment` or its own name, not `experiment`).
     const typed = chooseDraftType(emptyAttachDraft(), WAREHOUSE, TAKEN);
     const draft = chooseDraftObject(
       { ...typed, permission: "CAN_MANAGE" },
@@ -331,43 +309,47 @@ describe("the Add draft", () => {
         detail: "RUNNING",
         permissions: ["CAN_USE", "CAN_MANAGE"],
       },
-      TAKEN,
     );
     assert.equal(draft.target, "1234567890abcdef");
-    assert.equal(draft.key, "shared-serverless");
+    assert.equal(draft.objectName, "Shared Serverless");
+    assert.equal(draft.key, "sql-warehouse-2");
     assert.equal(draft.permission, "CAN_MANAGE");
   });
 
-  it("names a typed secret by its key, and any other typed target by the type", () => {
+  it("keeps the type's key for a typed target too, a secret's included", () => {
     const secret = typeDraftTarget(
       chooseDraftType(emptyAttachDraft(), SECRET, TAKEN),
       "sales-secrets/Stripe Key",
-      TAKEN,
     );
-    assert.equal(secret.key, "stripe-key");
+    assert.equal(secret.key, "secret");
+    assert.equal(secret.objectName, null);
     const warehouse = typeDraftTarget(
       chooseDraftType(emptyAttachDraft(), WAREHOUSE, []),
       "a1b2c3",
-      [],
     );
     assert.equal(warehouse.key, "sql-warehouse");
   });
 
-  it("stops following the type and the object once the key is typed", () => {
+  it("takes each type's own key: an experiment is `experiment`", () => {
+    const draft = chooseDraftType(
+      emptyAttachDraft(),
+      entry("mlflow_experiment", { default_key: "experiment" }),
+      [],
+    );
+    assert.equal(draft.key, "experiment");
+  });
+
+  it("stops following the type once the key is typed", () => {
     const edited = editDraftKey(
       chooseDraftType(emptyAttachDraft(), WAREHOUSE, TAKEN),
       "main-warehouse",
     );
-    const next = chooseDraftObject(
-      edited,
-      {
-        target: "fedcba0987654321",
-        label: "Reporting",
-        detail: null,
-        permissions: ["CAN_USE", "CAN_MANAGE"],
-      },
-      TAKEN,
-    );
+    const next = chooseDraftObject(edited, {
+      target: "fedcba0987654321",
+      label: "Reporting",
+      detail: null,
+      permissions: ["CAN_USE", "CAN_MANAGE"],
+    });
     assert.equal(next.key, "main-warehouse");
     assert.equal(next.isKeyEdited, true);
   });

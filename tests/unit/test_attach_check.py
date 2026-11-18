@@ -966,3 +966,81 @@ async def test_a_type_without_a_check_is_not_something_the_adapter_can_answer() 
     with pytest.raises(ValueError, match="no attach check"):
         await checker.check(probe)
     assert seen == []
+
+
+# --- the Lakebase branch: its read-write endpoint, found with the attacher's token ----------------
+
+BRANCH_ENDPOINTS: Final = "/api/2.0/postgres/projects/sales/branches/main/endpoints"
+PRIMARY: Final = "projects/sales/branches/main/endpoints/primary"
+
+
+def endpoint(name: str, kind: str) -> dict[str, Any]:
+    return {"name": name, "status": {"endpoint_type": kind}}
+
+
+async def test_a_lakebase_branch_resolves_to_its_read_write_endpoint() -> None:
+    seen: list[httpx.Request] = []
+    listing = {
+        "endpoints": [
+            endpoint("projects/sales/branches/main/endpoints/replica", "ENDPOINT_TYPE_READ_ONLY"),
+            endpoint(PRIMARY, "ENDPOINT_TYPE_READ_WRITE"),
+        ]
+    }
+    checker = checker_for(json_reply(200, listing), seen)
+
+    assert await checker.lakebase_primary_endpoint(TOKEN, "sales", "main") == PRIMARY
+    assert [(r.method, r.url.path) for r in seen] == [("GET", BRANCH_ENDPOINTS)]
+    assert seen[0].headers["Authorization"] == "Bearer tok-test"
+
+
+async def test_an_endpoint_of_another_branch_is_never_taken() -> None:
+    listing = {
+        "endpoints": [
+            endpoint("projects/sales/branches/dev/endpoints/x", "ENDPOINT_TYPE_READ_WRITE")
+        ]
+    }
+    checker = checker_for(json_reply(200, listing))
+
+    with pytest.raises(AttachRefused) as caught:
+        await checker.lakebase_primary_endpoint(TOKEN, "sales", "main")
+    assert caught.value.code == "lakebase_branch_unresolved"
+
+
+async def test_a_branch_with_no_read_write_endpoint_is_refused_saying_to_type_one() -> None:
+    listing = {
+        "endpoints": [
+            endpoint("projects/sales/branches/main/endpoints/replica", "ENDPOINT_TYPE_READ_ONLY")
+        ]
+    }
+    checker = checker_for(json_reply(200, listing))
+
+    with pytest.raises(AttachRefused) as caught:
+        await checker.lakebase_primary_endpoint(TOKEN, "sales", "main")
+    assert caught.value.code == "lakebase_branch_unresolved"
+    assert "endpoint" in caught.value.message
+
+
+@pytest.mark.parametrize("status", [400, 403, 404])
+async def test_a_branch_the_attacher_cannot_see_is_refused_and_repeats_nothing(status: int) -> None:
+    checker = checker_for(json_reply(status, {"message": "internal-branch-detail"}))
+
+    with pytest.raises(AttachRefused) as caught:
+        await checker.lakebase_primary_endpoint(TOKEN, "sales", "main")
+    assert caught.value.code == "lakebase_branch_unresolved"
+    assert "internal-branch-detail" not in caught.value.message
+    assert "tok-test" not in caught.value.message
+
+
+@pytest.mark.parametrize("status", [401, 429, 500, 503])
+async def test_a_branch_lookup_that_got_no_usable_answer_could_not_run(status: int) -> None:
+    checker = checker_for(json_reply(status))
+
+    with pytest.raises(AttachCheckUnavailable):
+        await checker.lakebase_primary_endpoint(TOKEN, "sales", "main")
+
+
+async def test_an_unreadable_endpoint_list_could_not_run() -> None:
+    checker = checker_for(lambda _request: httpx.Response(200, content=b"not json"))
+
+    with pytest.raises(AttachCheckUnavailable):
+        await checker.lakebase_primary_endpoint(TOKEN, "sales", "main")

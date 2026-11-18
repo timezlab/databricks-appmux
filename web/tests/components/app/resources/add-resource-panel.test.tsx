@@ -36,6 +36,7 @@ const UC_TABLE: ResourceTypeEntry = {
   permissions: ["SELECT", "MODIFY"],
   access_as: ["obo", "own_sp"],
   target_hint: "main.sales.orders",
+  default_key: "table",
   can_suggest: false,
 };
 
@@ -115,7 +116,7 @@ describe("AddResourcePanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("adds an object chosen from the suggestions, with the key filled from its name", async () => {
+  it("adds an object chosen from the suggestions, with the key the type gives", async () => {
     const { suggestions, attaches } = stubCalls();
     const { user, onAdded, onChanged } = renderPanel();
 
@@ -135,7 +136,7 @@ describe("AddResourcePanel", () => {
 
     expect(object).toHaveTextContent("Shared Serverless");
     expect(object).toHaveTextContent("1234567890abcdef");
-    expect(keyField()).toHaveValue("shared-serverless");
+    expect(keyField()).toHaveValue("sql-warehouse-2");
     expect(
       screen.getByRole("combobox", { name: /^Permission/ }),
     ).toHaveTextContent("Can use");
@@ -144,12 +145,12 @@ describe("AddResourcePanel", () => {
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => {
-      expect(onAdded).toHaveBeenCalledExactlyOnceWith("shared-serverless");
+      expect(onAdded).toHaveBeenCalledExactlyOnceWith("sql-warehouse-2");
     });
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(describeCall(attaches[0])).toEqual({
       method: "PUT",
-      path: "/apps/sales/resources/shared-serverless",
+      path: "/apps/sales/resources/sql-warehouse-2",
       body: {
         type: "sql_warehouse",
         target: "1234567890abcdef",
@@ -242,12 +243,12 @@ describe("AddResourcePanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => {
-      expect(onAdded).toHaveBeenCalledExactlyOnceWith("shared-serverless");
+      expect(onAdded).toHaveBeenCalledExactlyOnceWith("sql-warehouse-2");
     });
     expect(describeCall(attaches[0]).body).toMatchObject({ access_as: "obo" });
   });
 
-  it("goes from a secret scope on to its keys, and fills the key from the secret's", async () => {
+  it("goes from a secret scope on to its keys, and keeps the key `secret`", async () => {
     const { attaches } = stubCalls({
       suggest: (url) => {
         const query = url.searchParams.get("q");
@@ -307,10 +308,10 @@ describe("AddResourcePanel", () => {
       await screen.findByRole("option", { name: "db-password" }),
     );
 
-    expect(keyField()).toHaveValue("db-password");
+    expect(keyField()).toHaveValue("secret");
     await user.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => {
-      expect(onAdded).toHaveBeenCalledExactlyOnceWith("db-password");
+      expect(onAdded).toHaveBeenCalledExactlyOnceWith("secret");
     });
     expect(describeCall(attaches[0]).body).toEqual({
       type: "secret",
@@ -421,6 +422,6 @@ describe("AddResourcePanel", () => {
     expect(
       within(form).getByRole("combobox", { name: /^SQL warehouse/ }),
     ).toHaveTextContent("Shared Serverless");
-    expect(keyField()).toHaveValue("shared-serverless");
+    expect(keyField()).toHaveValue("sql-warehouse-2");
   });
 });

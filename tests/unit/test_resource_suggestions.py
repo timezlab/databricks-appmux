@@ -29,6 +29,7 @@ from appmux.registry.resources import (
     ACCESS_AS_VALUES,
     RESOURCE_TYPES,
     SECRET_TYPE,
+    is_resource_key,
     is_valid_target,
 )
 
@@ -59,6 +60,34 @@ def test_an_entry_repeats_the_label_and_the_levels_of_the_catalogue(name: str) -
     assert entry.permissions == list(catalogue.levels)
     assert entry.description.strip()
     assert entry.target_hint.strip()
+
+
+# The keys the Databricks Apps console fills in (docs "Add resources" and the per-type pages,
+# read 2026-11-18): one word per type, not the chosen object's name. A serving endpoint and a
+# gateway model service are both "model"; Lakebase Autoscaling is "postgres".
+DATABRICKS_DEFAULT_KEYS = {
+    "secret": "secret",
+    "sql_warehouse": "sql-warehouse",
+    "mlflow_experiment": "experiment",
+    "serving_endpoint": "model",
+    "lakebase_database": "postgres",
+    "job": "job",
+    "uc_table": "table",
+    "uc_volume": "volume",
+    "uc_function": "function",
+    "uc_connection": "connection",
+    "genie_space": "genie-space",
+    "vector_search_index": "vector-search-index",
+    "databricks_app": "app",
+    "gateway_model_service": "model",
+}
+
+
+def test_each_type_offers_the_key_the_databricks_console_fills_in() -> None:
+    entries = resource_type_list().items
+
+    assert {entry.type: entry.default_key for entry in entries} == DATABRICKS_DEFAULT_KEYS
+    assert all(is_resource_key(entry.default_key) for entry in entries)
 
 
 @pytest.mark.parametrize("name", list(RESOURCE_TYPES))

@@ -131,7 +131,10 @@ async def test_an_empty_folder_is_refused_and_nothing_is_stored() -> None:
 async def test_a_refused_folder_stores_nothing() -> None:
     books = Books()
     books.add_source(app__py=b"x")
-    books.source.add_other_object(f"{SOURCE_FOLDER}/nb", "NOTEBOOK")
+    # A file the listing says is over the 500 MB limit refuses the whole folder.
+    books.source.add_file(
+        f"{SOURCE_FOLDER}/weights.bin", b"stand-in", claimed_size=500 * 1024 * 1024 + 1
+    )
     with pytest.raises(SnapshotRefused):
         await books.take()
     assert books.store_workspace.files == {}

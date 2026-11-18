@@ -244,13 +244,29 @@ async def test_a_file_the_listing_says_is_over_500_mb_is_refused_before_it_is_re
     assert [op for op, path, _ in workspace.calls if path.endswith("weights.bin")] == []
 
 
-async def test_a_notebook_or_other_object_is_refused_by_name_and_type(tmp_path: Path) -> None:
+async def test_a_notebook_or_other_object_is_left_out_and_named(tmp_path: Path) -> None:
+    # A Databricks App deployed from a folder that holds notebooks still deploys (owner's
+    # report, 2026-11-18): they are not part of the app's files, so they are left out.
+    plain = await archive_of(workspace_with(SOURCE), tmp_path / "plain")
     workspace = workspace_with(SOURCE)
+    workspace.add_other_object(f"{FOLDER}/analysis", "NOTEBOOK")
+    workspace.add_other_object(f"{FOLDER}/static/explore", "NOTEBOOK")
+    workspace.add_other_object(f"{FOLDER}/runs", "MLFLOW_EXPERIMENT")
+
+    archive = await archive_of(workspace, tmp_path / "with-notebooks")
+
+    assert members_of(archive) == SOURCE
+    assert archive.digest == plain.digest
+    assert archive.skipped == ("analysis", "runs", "static/explore")
+    assert [op for op, path, _ in workspace.calls if path.endswith("analysis")] == []
+
+
+async def test_a_folder_of_notebooks_only_is_refused_as_empty(tmp_path: Path) -> None:
+    workspace = workspace_with({})
     workspace.add_other_object(f"{FOLDER}/analysis", "NOTEBOOK")
     with pytest.raises(SnapshotRefused) as caught:
         await archive_of(workspace, tmp_path)
-    assert "analysis" in str(caught.value)
-    assert "NOTEBOOK" in str(caught.value)
+    assert str(caught.value) == EMPTY_FOLDER_REASON
 
 
 async def test_too_many_files_are_refused_before_they_are_all_read(tmp_path: Path) -> None:

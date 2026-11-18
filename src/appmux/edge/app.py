@@ -31,6 +31,7 @@ from appmux.admin.api import RouteProvider, create_admin_app
 from appmux.admin.apps import AppRoutes, RestartFailureReader, no_restart_failure
 from appmux.admin.authorizer import GroupSource, make_authorizer
 from appmux.admin.delegation import DelegationRoutes
+from appmux.admin.deploys import DeploysUnderWay
 from appmux.admin.environment import ChildSetup, EnvironmentRoutes
 from appmux.admin.grants import GrantRoutes
 from appmux.admin.identity import AppStateReader, IdentityRoutes, state_from_desired
@@ -280,6 +281,9 @@ def create_edge_app(
     admins = tuple(bootstrap_admins)
     authorizer = make_authorizer(registry, group_source, bootstrap_admins=admins)
     egress = EgressEditor(closed_targets=closed_targets, reloader=egress_reloader)
+    # One book for both: the release routes fill it while a Deploy reads its folder, the app page
+    # reads it, so a reload before the release row exists still shows the Deploy.
+    deploys = DeploysUnderWay()
     providers: list[RouteProvider] = [
         IdentityRoutes(authorizer, app_state=app_state, open_mode_cookies=open_mode_cookies),
         GrantRoutes(),
@@ -291,6 +295,7 @@ def create_edge_app(
             app_state=app_state,
             restart_failure=restart_failure,
             service_principal=service_principal,
+            deploys=deploys,
             on_renamed=None if app_control is None else app_control.app_renamed,
         ),
         RequestRoutes(authorizer, rename=rename_cascade),
@@ -301,9 +306,11 @@ def create_edge_app(
         providers.append(OperationRoutes(app_control))
     if release_updater is not None:
         providers.append(
-            ReleaseRoutes(release_updater)
+            ReleaseRoutes(release_updater, deploys=deploys)
             if on_release_created is None
-            else ReleaseRoutes(release_updater, on_release_created=on_release_created)
+            else ReleaseRoutes(
+                release_updater, on_release_created=on_release_created, deploys=deploys
+            )
         )
     if attach_checker is not None:
         providers.append(ResourceRoutes(checker=attach_checker))

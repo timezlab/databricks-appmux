@@ -25,6 +25,7 @@ from typing import Final
 
 import httpx
 import pytest
+from pydantic import SecretStr
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.testclient import TestClient
@@ -38,6 +39,7 @@ from appmux.identity.actor import Actor
 from appmux.registry.resources import (
     AttachCheckUnavailable,
     AttachProbe,
+    AttachRefused,
     CheckVerdict,
 )
 
@@ -69,17 +71,29 @@ class StubChecker:
     """Answers with a fixed verdict (or raises) and remembers every probe it was given."""
 
     def __init__(
-        self, verdict: CheckVerdict = CheckVerdict.OK, *, raises: Exception | None = None
+        self,
+        verdict: CheckVerdict = CheckVerdict.OK,
+        *,
+        raises: Exception | None = None,
+        branch_raises: Exception | None = None,
     ) -> None:
         self.verdict = verdict
         self.raises = raises
+        self.branch_raises = branch_raises
         self.probes: list[AttachProbe] = []
+        self.branches: list[tuple[str, str, str]] = []  # (token, project, branch) asked
 
     async def check(self, probe: AttachProbe) -> CheckVerdict:
         self.probes.append(probe)
         if self.raises is not None:
             raise self.raises
         return self.verdict
+
+    async def lakebase_primary_endpoint(self, token: SecretStr, project: str, branch: str) -> str:
+        self.branches.append((token.get_secret_value(), project, branch))
+        if self.branch_raises is not None:
+            raise self.branch_raises
+        return f"projects/{project}/branches/{branch}/endpoints/primary"
 
 
 class FakeGroups:
@@ -565,6 +579,85 @@ def test_a_type_with_no_check_is_stored_unverified_and_the_checker_is_not_asked(
     assert harness.checker.probes == []
     (row,) = harness.registry.audit_rows
     assert row.detail["check"] == "unverified"
+
+
+# --- Lakebase: a branch is picked, its read-write endpoint is stored -----------------------------
+# The Databricks Apps console picks a Lakebase database down to the branch; appmux made the person
+# pick an endpoint as well (owner's report, 2026-11-18). A branch is now a target of the attach
+# form, and the route stores the branch's read-write endpoint, so the child sees what it saw.
+
+LAKEBASE_BRANCH_BODY: Final = {
+    "type": "lakebase_database",
+    "target": "projects/orders/branches/production",
+    "permission": "CAN_CONNECT_AND_CREATE",
+    "access_as": "obo",
+}
+
+
+def test_a_lakebase_branch_is_stored_as_its_read_write_endpoint(harness: Harness) -> None:
+    response = harness.attach("sales", "postgres", LAKEBASE_BRANCH_BODY)
+
+    assert response.status_code == 200, response.text
+    endpoint = "projects/orders/branches/production/endpoints/primary"
+    assert ResourceView.model_validate_json(response.text).target == endpoint
+    assert harness.stored("sales") == {
+        "postgres": ("lakebase_database", endpoint, "obo", "unverified")
+    }
+    assert harness.checker.branches == [(VISITOR_TOKEN, "orders", "production")]
+
+
+def test_a_lakebase_endpoint_path_is_stored_as_typed_and_nothing_is_asked(
+    harness: Harness,
+) -> None:
+    endpoint = "projects/orders/branches/production/endpoints/replica"
+    response = harness.attach("sales", "postgres", {**LAKEBASE_BRANCH_BODY, "target": endpoint})
+
+    assert response.status_code == 200, response.text
+    assert harness.stored("sales")["postgres"][1] == endpoint
+    assert harness.checker.branches == []
+
+
+def test_a_branch_whose_endpoint_cannot_be_found_is_refused_and_nothing_is_written() -> None:
+    refusal = AttachRefused("lakebase_branch_unresolved", "no read-write endpoint")
+    harness = Harness(checker=StubChecker(branch_raises=refusal))
+
+    response = harness.attach("sales", "postgres", LAKEBASE_BRANCH_BODY)
+
+    assert response.status_code == 400
+    assert error_code(response) == "lakebase_branch_unresolved"
+    assert harness.stored("sales") == {}
+    assert not harness.registry.audit_rows
+
+
+def test_a_branch_lookup_that_could_not_run_is_unavailable_and_nothing_is_written() -> None:
+    harness = Harness(checker=StubChecker(branch_raises=AttachCheckUnavailable("no answer")))
+
+    response = harness.attach("sales", "postgres", LAKEBASE_BRANCH_BODY)
+
+    assert response.status_code == 503
+    assert error_code(response) == "check_unavailable"
+    assert harness.stored("sales") == {}
+
+
+def test_a_branch_attached_without_a_token_is_refused_before_anything_is_asked(
+    harness: Harness,
+) -> None:
+    response = harness.attach("sales", "postgres", LAKEBASE_BRANCH_BODY, send_token=False)
+
+    assert response.status_code == 400
+    assert error_code(response) == "lakebase_branch_unresolved"
+    assert harness.checker.branches == []
+    assert harness.stored("sales") == {}
+
+
+def test_a_lakebase_rule_refusal_comes_before_the_branch_lookup(harness: Harness) -> None:
+    response = harness.attach(
+        "sales", "postgres", {**LAKEBASE_BRANCH_BODY, "permission": "CAN_MANAGE"}
+    )
+
+    assert response.status_code == 400
+    assert error_code(response) == "bad_permission"
+    assert harness.checker.branches == []
 
 
 def test_a_checker_that_cannot_tell_leaves_an_obo_resource_unverified() -> None:

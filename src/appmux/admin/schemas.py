@@ -787,6 +787,7 @@ class ResourceTypeEntry(_Body):
     permissions: list[str]
     access_as: list[AccessAs]
     target_hint: str
+    default_key: str
     can_suggest: bool
 
 
@@ -838,6 +839,13 @@ class AppConfigView(_Body):
     updated_at: UtcTime
 
 
+class DeployPreparing(_Body):
+    """A Deploy still reading its folder: pressed, with no release written yet."""
+
+    started_at: UtcTime
+    started_by: str
+
+
 class AppDetail(_Body):
     slug: str
     display_name: str
@@ -861,6 +869,7 @@ class AppDetail(_Body):
     delegation: DelegationStatus
     egress: list[EgressRule]
     grants: list[AppGrant]
+    deploy_preparing: DeployPreparing | None
 
 
 class RequestRow(_Body):

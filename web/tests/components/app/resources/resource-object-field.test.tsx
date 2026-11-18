@@ -25,6 +25,7 @@ const UC_TABLE: ResourceTypeEntry = {
   permissions: ["SELECT", "MODIFY"],
   access_as: ["obo", "own_sp"],
   target_hint: "main.sales.orders",
+  default_key: "table",
   can_suggest: true,
 };
 
@@ -35,6 +36,7 @@ const SECRET: ResourceTypeEntry = {
   permissions: ["READ"],
   access_as: [],
   target_hint: "my-scope/my-key",
+  default_key: "secret",
   can_suggest: true,
 };
 

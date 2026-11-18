@@ -222,13 +222,10 @@ export function AddResourcePanel({
                   target={draft.target}
                   objectName={draft.objectName}
                   onPick={(suggestion) => {
-                    update(
-                      "target",
-                      chooseDraftObject(draft, suggestion, takenKeys),
-                    );
+                    update("target", chooseDraftObject(draft, suggestion));
                   }}
                   onType={(target) => {
-                    update("target", typeDraftTarget(draft, target, takenKeys));
+                    update("target", typeDraftTarget(draft, target));
                   }}
                 />
               )}

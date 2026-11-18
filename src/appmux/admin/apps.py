@@ -52,6 +52,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from appmux.admin.api import AdminContext, parse_body
+from appmux.admin.deploys import DeploysUnderWay, DeployUnderWay, no_deploy_under_way
 from appmux.admin.errors import (
     BadRequest,
     Conflict,
@@ -67,6 +68,7 @@ from appmux.admin.schemas import (
     AppDetail,
     AppGrant,
     DelegationStatus,
+    DeployPreparing,
     EnvEntry,
     PutAppEgressBody,
     RegisterAppRequest,
@@ -135,6 +137,9 @@ def _shared_sp_delegation_allowed(snapshot: RegistrySnapshot) -> bool:
     return PlatformSettings().shared_sp_delegation_allowed
 
 
+DeployReader = Callable[[str], DeployUnderWay | None]
+"""The Deploy of an app still reading its folder, by slug; ``None`` when none is."""
+
 RestartFailureReader = Callable[[str], str | None]
 """Why the last restart of an app did not come up, by slug; ``None`` when nothing failed."""
 
@@ -152,6 +157,7 @@ def build_app_detail(
     app_state: AppStateReader = state_from_desired,
     restart_failure: RestartFailureReader = no_restart_failure,
     service_principal: str | None = None,
+    deploy_preparing: DeployReader = no_deploy_under_way,
 ) -> AppDetail:
     """The contract's ``AppDetail`` for ``app``, from ``snapshot`` and the app's own rows.
 
@@ -165,6 +171,8 @@ def build_app_detail(
     Restart started beside the running one did not come up (TD-028); by default nothing failed.
     ``service_principal`` is the application id appmux runs as, which the page of an app stopped
     because that changed shows (ADR 0022); ``None`` when the server was not told it.
+    ``deploy_preparing`` names a Deploy that was pressed and has not written its release yet (it
+    is still reading the folder), so a page reloaded meanwhile still shows it.
     """
     live = sorted(
         (release for release in snapshot.releases_for(app.slug) if release.deleted_at is None),
@@ -175,6 +183,7 @@ def build_app_detail(
         (release for release in live if release.release_no == config.target_release_no), None
     )
     active = next((release for release in live if release.status == "active"), None)
+    preparing = deploy_preparing(app.slug)
     return AppDetail(
         slug=app.slug,
         display_name=app.display_name,
@@ -240,6 +249,9 @@ def build_app_detail(
             )
             for grant in snapshot.grants_for(app.slug)
         ],
+        deploy_preparing=None
+        if preparing is None
+        else DeployPreparing(started_at=preparing.started_at, started_by=preparing.started_by),
     )
 
 
@@ -338,7 +350,9 @@ class AppRoutes:
     ``egress`` is shared with ``PlatformRoutes``; the default has no closed targets, so the route
     answers ``503`` until a real one is given. ``app_state`` answers ``AppDetail.state`` and
     ``restart_failure`` answers ``AppDetail.restart_failure`` (the reconciler's in the server) and
-    ``service_principal`` is ``AppDetail.service_principal``. ``on_renamed`` receives the old and
+    ``service_principal`` is ``AppDetail.service_principal``; ``deploys`` is the book of Deploys
+    still reading their folder, shared with ``ReleaseRoutes`` (``AppDetail.deploy_preparing``;
+    by default none is). ``on_renamed`` receives the old and
     the new slug after a rename was written (the server wires it to ``Reconciler.app_renamed``); by
     default nobody is told.
     """
@@ -350,12 +364,14 @@ class AppRoutes:
         app_state: AppStateReader = state_from_desired,
         restart_failure: RestartFailureReader = no_restart_failure,
         service_principal: str | None = None,
+        deploys: DeploysUnderWay | None = None,
         on_renamed: Callable[[str, str], None] | None = None,
     ) -> None:
         self._egress = egress if egress is not None else EgressEditor()
         self._app_state = app_state
         self._restart_failure = restart_failure
         self._service_principal = service_principal
+        self._deploy_preparing = no_deploy_under_way if deploys is None else deploys.of
         self._on_renamed = on_renamed
 
     def _detail(self, snapshot: RegistrySnapshot, app: App, config: AppConfig) -> AppDetail:
@@ -366,6 +382,7 @@ class AppRoutes:
             app_state=self._app_state,
             restart_failure=self._restart_failure,
             service_principal=self._service_principal,
+            deploy_preparing=self._deploy_preparing,
         )
 
     def routes(self, context: AdminContext) -> Sequence[Route]:

@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Final
 
 import httpx
-from edge_harness import ALICE, AdminApi, seeded_registry
+from edge_harness import ALICE, NOW, AdminApi, seeded_registry
 from pydantic import SecretStr
 from stub_registry import StubRegistry
 
@@ -108,9 +108,20 @@ class Suggester:
         workspace: Workspace | None = None,
         *,
         platform_token: Callable[[], Awaitable[SecretStr]] | None = None,
+        check_warehouse: str | None = None,
     ) -> None:
         self.workspace = workspace if workspace is not None else Workspace()
         self.registry: StubRegistry = seeded_registry()
+        if check_warehouse is not None:
+            self.registry.seed(
+                "platform_settings",
+                {
+                    "key": "attach_check_warehouse_id",
+                    "value": check_warehouse,
+                    "updated_by": ALICE,
+                    "updated_at": NOW,
+                },
+            )
         client = httpx.AsyncClient(
             base_url="https://workspace.example.invalid",
             transport=httpx.MockTransport(self.workspace.handle),

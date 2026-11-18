@@ -233,5 +233,6 @@
       "granted_by": "alice@example.com",
       "granted_at": "2026-10-30T08:52:00Z"
     }
-  ]
+  ],
+  "deploy_preparing": null
 }
