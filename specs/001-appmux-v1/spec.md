@@ -47,19 +47,19 @@ Roles: a **platform admin** (listed in the `platform_admins` setting) runs the s
 
 ### User Story 1 - Host a child safely and open it only after it is healthy (Priority: P1)
 
-A platform admin registers an app, an app admin presses Update, and visitors open the child at `/<slug>/`. The route exists only once the new release has been fetched, built, started and has answered its health check ([design §5.2](../../docs/product/v1-design.md#52-register-update-roll-back-and-keep-releases), [§5.5](../../docs/product/v1-design.md#55-health-and-swap)).
+A platform admin registers an app, an app admin presses Deploy, and visitors open the child at `/<slug>/`. The route exists only once the new release has been fetched, built, started and has answered its health check ([design §5.2](../../docs/product/v1-design.md#52-register-update-roll-back-and-keep-releases), [§5.5](../../docs/product/v1-design.md#55-health-and-swap)).
 
 **Why this priority**: it is the product. Without it nothing else has a subject, and the health gate is constitution principle II.
 
-**Independent Test**: register one fixture app, press Update, and request `/<slug>/` before and after the health check passes.
+**Independent Test**: register one fixture app, press Deploy, and request `/<slug>/` before and after the health check passes.
 
 **Acceptance Scenarios**:
 
 1. **Given** an app `sales` registered with no release, **When** a visitor with `CAN_USE` requests `/sales/`, **Then** no child receives the request, because no route is open.
-2. **Given** an app admin presses Update on a folder they can read, **When** the snapshot, the requirements check, the build and the start finish and the child answers a status below 500 within `health_deadline_s`, **Then** the route opens and the release becomes `active`.
+2. **Given** an app admin presses Deploy on a folder they can read, **When** the snapshot, the requirements check, the build and the start finish and the child answers a status below 500 within `health_deadline_s`, **Then** the route opens and the release becomes `active`.
 3. **Given** a release whose child never answers a status below 500 within the deadline, **When** the deadline passes, **Then** the release is `failed` with the last error and a log tail, and no route was opened.
-4. **Given** the folder cannot be read with the presser's own token, or the token expires during the snapshot, **When** Update runs, **Then** it fails with a message that says why, and nothing changes.
-5. **Given** the folder's digest equals a live release's digest, **When** Update runs, **Then** appmux reports "already up to date" and creates no release.
+4. **Given** the folder cannot be read with the presser's own token, or the token expires during the snapshot, **When** Deploy runs, **Then** it fails with a message that says why, and nothing changes.
+5. **Given** the folder's digest equals a live release's digest, **When** Deploy runs, **Then** appmux reports "nothing to deploy" and creates no release; if the app was stopped, it is started, because pressing Deploy asks for the app to run.
 
 ---
 
@@ -131,8 +131,8 @@ An app admin keeps the versions that matter by naming, tagging, locking and dele
 
 1. **Given** a release is active, **When** an app admin tries to delete it, **Then** it is refused; the active release carries a lock with no action.
 2. **Given** an app already holds `max_locked_releases` manual locks, **When** an app admin locks another, **Then** it is refused with `app 'sales' already has 3 locked releases; unlock one first`.
-3. **Given** an app is at its release cap and an unprotected release exists, **When** an Update is accepted, **Then** the oldest unprotected release is deleted and `release.delete` is recorded by `appmux`.
-4. **Given** every release is protected, **When** an Update is accepted, **Then** it is refused with a message naming how to free one.
+3. **Given** an app is at its release cap and an unprotected release exists, **When** a Deploy is accepted, **Then** the oldest unprotected release is deleted and `release.delete` is recorded by `appmux`.
+4. **Given** every release is protected, **When** a Deploy is accepted, **Then** it is refused with a message naming how to free one.
 5. **Given** a release has a tag and no lock, **When** it stops being active, **Then** it may be deleted; tags protect nothing. A deleted release's number is never reused and it cannot be activated.
 
 ---
@@ -148,10 +148,10 @@ A child brings its own `app.yaml` (and optionally a `databricks.yml`); an app ad
 **Acceptance Scenarios**:
 
 1. **Given** the snapshot's `app.yaml` uses `valueFrom` keys that are not resources of the app, **When** the release is reconciled, **Then** it fails before any build, listing every missing key at once; after the keys are attached and the release is activated, it starts with no source read.
-2. **Given** the snapshot has a `databricks.yml`, **When** an Update completes, **Then** its resources are shown as offers and nothing is attached until the app admin confirms each one.
+2. **Given** the snapshot has a `databricks.yml`, **When** a Deploy completes, **Then** its resources are shown as offers and nothing is attached until the app admin confirms each one.
 3. **Given** an app admin attaches a resource, **When** their own token lacks access to it, **Then** the attach is refused and nothing is written.
 4. **Given** a `secret` resource is a reference `scope/key`, **When** the child starts, **Then** the value reaches only that child's environment and is never logged or stored; an unreadable secret fails the release naming the scope.
-5. **Given** both `app.yaml` and `app.yml`, or an `env` entry with both or neither of `value` and `valueFrom`, **When** Update runs, **Then** it is refused, naming the problem.
+5. **Given** both `app.yaml` and `app.yml`, or an `env` entry with both or neither of `value` and `valueFrom`, **When** Deploy runs, **Then** it is refused, naming the problem.
 
 ---
 
@@ -167,7 +167,7 @@ Packages come first from the environment the platform already provides, then fro
 
 1. **Given** an app fully covered by the environment, **When** it is built, **Then** no wheel is fetched.
 2. **Given** an app needs a newer version of a package the environment has, **When** it is built with a hashed wheel, **Then** the overlay's version wins for that release only.
-3. **Given** requirements the environment cannot satisfy and no wheel covers, **When** the Update runs in a wheel mode, **Then** it fails listing every unresolved requirement at once.
+3. **Given** requirements the environment cannot satisfy and no wheel covers, **When** the Deploy runs in a wheel mode, **Then** it fails listing every unresolved requirement at once.
 4. **Given** a wheel already in the content store by sha256, **When** a second app needs it, **Then** it is not fetched again.
 5. **Given** a redeploy changed what the environment provides, **When** a release starts, **Then** it fails before starting if a requirement the environment used to satisfy no longer holds.
 
@@ -223,7 +223,7 @@ Each app has a memory budget; appmux refuses to start or update an app that woul
 **Acceptance Scenarios**:
 
 1. **Given** 10 apps whose budgets plus per-child overhead and appmux's reserve fit the limit, **When** an 11th is started, **Then** it is refused with `needs <n> MB, <m> MB free`.
-2. **Given** an update needs memory for both copies during the swap, **When** the second copy does not fit, **Then** the Update is refused with the same kind of reason and the running release is untouched.
+2. **Given** an update needs memory for both copies during the swap, **When** the second copy does not fit, **Then** the Deploy is refused with the same kind of reason and the running release is untouched.
 3. **Given** a child exceeds its budget, **When** the best-effort watchdog fires, **Then** only that app is stopped.
 
 ---
@@ -259,7 +259,7 @@ Every row of the failure table in [design §11](../../docs/product/v1-design.md#
 | A client sends `X-Forwarded-Email` or another identity header | the edge discards it and sets its own | FR-018 |
 | A child sets a cookie with `Path=/` and a `Domain` | the edge forces `Path` to `/<slug>/` and drops `Domain`; the body is untouched | FR-019 |
 | A request exceeds the app's concurrency, body-size or timeout cap | `429` or `413` for that app only; other apps are unaffected | FR-020 |
-| The source folder is edited after an Update | the running app is unaffected; only a new Update reads the folder | FR-003 |
+| The source folder is edited after a Deploy | the running app is unaffected; only a new Deploy reads the folder | FR-003 |
 | A request that grants nothing is forged by a child holding the shared SP | no effect on authorization or the reconciler | FR-045 |
 | A renamed app's new copy fails its health check | the old copy and route keep serving; Restart retries | FR-010 |
 | `self_check()` fails | no route opens for any app; the status page explains | FR-013 |
@@ -277,7 +277,7 @@ Each requirement is testable. The cited document gives the detail and the number
 
 - **FR-001**: A route MUST open for a release only after its health check passes: a GET on `health_path` (default `/`) that answers a status below 500 within `health_deadline_s` (default 60, 5 to 600). ([ADR 0005](../../docs/decisions/0005-run-releases-from-immutable-snapshots-and-swap-after-health.md), [§5.5](../../docs/product/v1-design.md#55-health-and-swap))
 - **FR-002**: A failure at any step before the health check MUST leave the route table and the running release untouched and mark the new release `failed` with its reason and log tail.
-- **FR-003**: Update MUST read `source_path` and wheel folders with the OBO token of the person who pressed it, store an immutable snapshot with a digest, and never follow the folder afterwards; a folder that lists no files MUST be refused as `empty, or you cannot read it`, because the workspace API answers a caller with no access with an empty listing or a 404 (spike 15). ([§5.2](../../docs/product/v1-design.md#52-register-update-roll-back-and-keep-releases))
+- **FR-003**: Deploy MUST read `source_path` and wheel folders with the OBO token of the person who pressed it, store an immutable snapshot with a digest, and never follow the folder afterwards; a folder that lists no files MUST be refused as `empty, or you cannot read it`, because the workspace API answers a caller with no access with an empty listing or a 404 (spike 15). ([§5.2](../../docs/product/v1-design.md#52-register-update-roll-back-and-keep-releases))
 - **FR-004**: The route swap MUST be atomic and, in one transaction, make the new release `active` and the old one `superseded`; in-flight requests MUST get 30 s to finish and WebSockets still open then MUST be closed before the old copy stops.
 - **FR-005**: Releases MUST follow `pending → building → starting → healthy → active`, plus `failed` and `superseded`; a `failed` release MUST never be retried automatically and MUST be activatable by hand.
 - **FR-006**: Rollback MUST activate any live release from its stored snapshot, wheels and config with no source read and no token, against the current resources.
@@ -316,14 +316,14 @@ Each requirement is testable. The cited document gives the detail and the number
 
 **Releases**
 
-- **FR-030**: Live releases per app MUST be capped by `max_releases_per_app` (default 10); the active release is locked by default; manual locks are capped by `max_locked_releases` (default 3, at most the release cap minus 4); the target and in-progress releases are protected; tags and labels protect nothing; an Update at the cap MUST delete the oldest unprotected release or be refused; release numbers MUST never be reused. ([§5.2](../../docs/product/v1-design.md#52-register-update-roll-back-and-keep-releases))
+- **FR-030**: Live releases per app MUST be capped by `max_releases_per_app` (default 10); the active release is locked by default; manual locks are capped by `max_locked_releases` (default 3, at most the release cap minus 4); the target and in-progress releases are protected; tags and labels protect nothing; a Deploy at the cap MUST delete the oldest unprotected release or be refused; release numbers MUST never be reused. ([§5.2](../../docs/product/v1-design.md#52-register-update-roll-back-and-keep-releases))
 
 **Packages and contract**
 
-- **FR-031**: Package resolution MUST follow environment first, then a hashed wheel into the release's overlay (which wins), then the index only in an index mode; an Update MUST list every unresolved requirement at once; at every start appmux MUST re-check what the environment was providing. ([ADR 0007](../../docs/decisions/0007-resolve-packages-environment-first-with-a-wheel-overlay.md))
+- **FR-031**: Package resolution MUST follow environment first, then a hashed wheel into the release's overlay (which wins), then the index only in an index mode; a Deploy MUST list every unresolved requirement at once; at every start appmux MUST re-check what the environment was providing. ([ADR 0007](../../docs/decisions/0007-resolve-packages-environment-first-with-a-wheel-overlay.md))
 - **FR-032**: Builds MUST run inside the sandbox with the app's egress rules; `wheelhouse` mode MUST install wheels only and give the build an all-deny egress list.
-- **FR-033**: Update MUST parse the snapshot's `app.yaml` (`command`, `env`) per [design §5.4](../../docs/product/v1-design.md#54-appyaml-requirements-and-start): refuse on both file names or an invalid `env` entry, warn on unknown keys, run `command` as an argument list without a shell. ([ADR 0008](../../docs/decisions/0008-follow-the-standalone-app-yaml-contract.md))
-- **FR-034**: A `databricks.yml` MUST be read only to offer resources; reading it MUST attach nothing and an invalid file MUST never refuse an Update.
+- **FR-033**: Deploy MUST parse the snapshot's `app.yaml` (`command`, `env`) per [design §5.4](../../docs/product/v1-design.md#54-appyaml-requirements-and-start): refuse on both file names or an invalid `env` entry, warn on unknown keys, run `command` as an argument list without a shell. ([ADR 0008](../../docs/decisions/0008-follow-the-standalone-app-yaml-contract.md))
+- **FR-034**: A `databricks.yml` MUST be read only to offer resources; reading it MUST attach nothing and an invalid file MUST never refuse a Deploy.
 - **FR-035**: The requirements check MUST run before any build and MUST list all missing resource keys at once.
 
 **Credentials and resources**
@@ -332,6 +332,7 @@ Each requirement is testable. The cited document gives the detail and the number
 - **FR-037**: Attaching a resource MUST run an attach check with the attacher's own token and record who attached it; a type with no verifiable check MUST stay `unverified` and MUST NOT be usable with `shared_sp`; the check proves the attacher can reach the object, and a permission level only where the response reports one. ([ADR 0009](../../docs/decisions/0009-attach-resources-with-the-attachers-own-token-and-reference-secrets.md))
 - **FR-038**: A secret MUST be a reference `scope/key` read by the appmux SP at child start and never logged or stored; a start that cannot read it MUST fail naming the scope. The attach check runs as the attacher with the `sql` scope (spike 11).
 - **FR-039**: `shared_sp` delegation MUST be refused while `shared_sp_delegation_allowed` is off.
+- **FR-056**: A child delegated the shared SP MUST get appmux's own `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET` and no other credential variable (no `DATABRICKS_AUTH_TYPE`, `DATABRICKS_CLI_PATH` or `DATABRICKS_TOKEN`), so its environment is that of the same app deployed alone; a child with an own SP MUST get its own two values under the same two names instead, and when they cannot be given the start MUST be refused and the shared pair MUST NOT stand in. Revoking the delegation or turning the master switch off MUST take effect at the child's next start. ([ADR 0023](../../docs/decisions/0023-give-a-shared-sp-child-the-appmux-service-principal-pair.md))
 
 **Requests**
 
@@ -579,10 +580,10 @@ Spikes with no shared dependency may run in parallel, subject to the 3-app limit
 ### Spike 15 — Workspace file read with the presser's OBO token (Gate)
 
 - **Question.** Which OAuth scope lets appmux list and export a workspace folder as the visitor, and does the workspace's scope allowlist include it?
-- **Why, and what it gates.** [ADR 0005](../../docs/decisions/0005-run-releases-from-immutable-snapshots-and-swap-after-health.md) and FR-003: the confused-deputy rule that Update reads with the presser's token.
+- **Why, and what it gates.** [ADR 0005](../../docs/decisions/0005-run-releases-from-immutable-snapshots-and-swap-after-health.md) and FR-003: the confused-deputy rule that Deploy reads with the presser's token.
 - **Method.** On `appmux-probe` with user authorization on, request `workspace.workspace:read` (the candidate) and list and export a folder the owner can read, then one the owner cannot (a folder owned by the SP); try a scope-less token.
 - **Pass.** The first call succeeds, the second returns an access error, and the scope name is recorded.
-- **If not.** Assumption 11 applies: the folder owner grants the appmux SP read access to the registered folder; the Update flow and ADR 0005 are revised and the confused-deputy trade-off is stated.
+- **If not.** Assumption 11 applies: the folder owner grants the appmux SP read access to the registered folder; the Deploy flow and ADR 0005 are revised and the confused-deputy trade-off is stated.
 - **Record.** The scope is added to the operator steps of [design §13.1](../../docs/product/v1-design.md#131-what-the-operator-sets-up).
 
 ### Spike 11 — Secrets API from an App (Gate)

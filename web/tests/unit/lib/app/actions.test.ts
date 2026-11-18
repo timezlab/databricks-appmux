@@ -177,7 +177,7 @@ describe("appActionAvailability", () => {
     }
   });
 
-  it("allows Update to a manager in every state", () => {
+  it("allows Deploy to a manager in every state", () => {
     for (const state of [
       "stopped",
       "starting",
@@ -224,18 +224,18 @@ describe("appActionAvailability", () => {
     assertAllowed(appActionAvailability("stop", crashed, MANAGER));
   });
 
-  it("cannot start or restart an app that has no active release, and points to Update", () => {
+  it("cannot start or restart an app that has no active release, and points to Deploy", () => {
     const noRelease = appWithDesiredState("stopped", "stopped", []);
     assert.match(
       reasonOf(appActionAvailability("start", noRelease, MANAGER)),
-      /Update/,
+      /Deploy/,
     );
     const failedOnly = appWithDesiredState("running", "stopped", [
       release(1, { status: "failed", is_target: true }),
     ]);
     assert.match(
       reasonOf(appActionAvailability("restart", failedOnly, MANAGER)),
-      /Update/,
+      /Deploy/,
     );
   });
 });

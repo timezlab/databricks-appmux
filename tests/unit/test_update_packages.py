@@ -478,7 +478,7 @@ async def test_every_unresolved_requirement_is_listed_in_one_refusal(tmp_path: P
     assert "no wheel for 'beta==2.0.0'" in message
     assert "no wheel for 'gamma==3.0.0'" in message
     assert "delta" in message
-    assert "press Update again" in message
+    assert "press Deploy again" in message
     assert PRESSER_TOKEN not in message
 
 
@@ -592,7 +592,7 @@ async def test_a_session_that_ends_while_wheels_are_read_asks_to_press_again(
 
     assert refused.value.kind == "unavailable"
     assert "session expired" in refused.value.message
-    assert "press Update again" in refused.value.message
+    assert "press Deploy again" in refused.value.message
     assert PRESSER_TOKEN not in refused.value.message
     assert flow.writer.calls == []
 

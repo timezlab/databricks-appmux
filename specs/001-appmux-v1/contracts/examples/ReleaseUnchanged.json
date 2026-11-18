@@ -1,4 +1,5 @@
 {
   "status": "up_to_date",
-  "release_no": 7
+  "release_no": 7,
+  "started": false
 }

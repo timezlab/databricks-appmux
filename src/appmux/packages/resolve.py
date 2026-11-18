@@ -301,7 +301,7 @@ class Recheck:
     def failure_reason(self) -> str | None:
         if not self.unmet:
             return None
-        return f"the environment no longer provides {', '.join(self.unmet)}; add a wheel and Update"
+        return f"the environment no longer provides {', '.join(self.unmet)}; add a wheel and Deploy"
 
 
 def recheck_environment(

@@ -535,7 +535,7 @@ async def test_env_entries_for_an_app_with_no_release_are_refused_with_a_next_st
     reply = await harness.put_config(CAROL, env=[{"name": "MODE", "value": "fast"}])
 
     assert (reply.status, error_of(reply)[0]) == (409, "no_release")
-    assert "Update" in error_of(reply)[1]
+    assert "Deploy" in error_of(reply)[1]
     assert harness.is_untouched()
 
 
@@ -599,7 +599,7 @@ async def test_start_with_nothing_to_run_is_refused_and_says_what_to_do() -> Non
     reply = await harness.operate("start", CAROL)
 
     assert (reply.status, error_of(reply)[0]) == (409, "no_release")
-    assert "Update" in error_of(reply)[1]
+    assert "Deploy" in error_of(reply)[1]
     assert harness.is_untouched()
 
 

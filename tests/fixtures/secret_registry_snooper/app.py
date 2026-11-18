@@ -16,9 +16,9 @@ containment flags below then read false.
 
 Every attempt is made twice. **Without a token** it sends no credential: no Authorization header,
 an empty registry password. **With the token** it uses the credential appmux delivered to this
-child, through the unmodified Databricks SDK (``DATABRICKS_AUTH_TYPE=databricks-cli`` and
-``DATABRICKS_CLI_PATH``, or a static ``DATABRICKS_TOKEN``); the second case runs only when such a
-credential exists, which is the case for a shared-SP or own-SP child and not for a plain one.
+child, through the unmodified Databricks SDK (``DATABRICKS_CLIENT_ID`` and
+``DATABRICKS_CLIENT_SECRET``, or a static ``DATABRICKS_TOKEN``); the second case runs only when such
+a credential exists, which is the case for a shared-SP or own-SP child and not for a plain one.
 
 The attempts, per case (their names in the report)
     list_scopes        ``GET /api/2.0/secrets/scopes/list``.

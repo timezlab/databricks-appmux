@@ -80,14 +80,12 @@ from appmux.reconciler.admission import (
 from appmux.reconciler.app_control import RunState
 from appmux.reconciler.build import PackageStep, StoreReleaseBuilder, package_policy_from
 from appmux.reconciler.child_env import EnvironmentRefused, PlatformIdentity, ReleaseEnvironment
-from appmux.reconciler.children import ChildStartError
 from appmux.reconciler.clock import SystemClock
 from appmux.reconciler.health import UnixSocketHealthProbe
 from appmux.reconciler.output import OutputRing
 from appmux.reconciler.reconciler import Reconciler
 from appmux.reconciler.route_table import RouteTable
 from appmux.reconciler.sandbox_adapter import (
-    RunDirKeeper,
     SandboxChildLauncher,
     SandboxRunningChild,
 )
@@ -113,12 +111,6 @@ from appmux.secrets.resolver import (
     MissingResourceKeys,
     ResourceValueResolver,
     SecretUnreadable,
-)
-from appmux.secrets.shared_sp_token import (
-    ClientCredentialsMinter,
-    SharedSpTokenFiles,
-    SharedSpTokens,
-    TokenMintFailed,
 )
 from appmux.settings import EnvironmentSettings, PlatformSettings
 from appmux.upstream.client import UpstreamClient
@@ -205,27 +197,6 @@ class ChildCredentialsAdapter:
             return await self._credentials.credentials_for(app_slug)
         except CredentialsRefused as exc:
             raise EnvironmentRefused(exc.message) from exc
-
-
-class _RunDirTokenFiles:
-    """``SharedSpTokenFiles`` seen from the launcher: a token that cannot be had stops the start.
-
-    The check at the reconciler already minted once, so this fails only when Databricks stops
-    answering between that check and the start. The child must not start with a variable that
-    points at a token file nobody wrote.
-    """
-
-    def __init__(self, files: SharedSpTokenFiles) -> None:
-        self._files = files
-
-    def needed_by(self, environment: Mapping[str, str]) -> bool:
-        return self._files.needed_by(environment)
-
-    async def attach(self, directory: Path) -> RunDirKeeper:
-        try:
-            return await self._files.attach(directory)
-        except TokenMintFailed as exc:
-            raise ChildStartError(f"{exc}; {exc.advice}") from exc
 
 
 def platform_identity(settings: EnvironmentSettings) -> PlatformIdentity:
@@ -622,14 +593,6 @@ class Service:
             ),
             service_principal=self._settings.databricks_client_id,
         )
-        # One cache for both uses: the check that refuses a release and the files the child reads.
-        shared_sp_tokens = SharedSpTokens(
-            ClientCredentialsMinter(
-                self._workspace,
-                client_id=self._settings.databricks_client_id,
-                client_secret=self._settings.databricks_client_secret,
-            )
-        )
         app_environment = Path(sys.prefix)
         appmux_port = self._settings.databricks_app_port
 
@@ -663,7 +626,6 @@ class Service:
                 container_ip=container_ip,
                 appmux_port=appmux_port,
                 global_rules=global_rules,
-                run_dir_files=_RunDirTokenFiles(SharedSpTokenFiles(shared_sp_tokens)),
             ),
             builder=StoreReleaseBuilder(self.content_store, self._releases_dir, packages),
             environments=ReleaseEnvironment(
@@ -673,7 +635,8 @@ class Service:
                     ChildCredentials(
                         snapshot=lambda: registry.snapshot,
                         resources=resolver,
-                        tokens=shared_sp_tokens,
+                        appmux_client_id=self._settings.databricks_client_id,
+                        appmux_client_secret=self._settings.databricks_client_secret,
                     )
                 ),
             ),

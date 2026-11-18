@@ -20,7 +20,7 @@ with a redirect. It is the example for the two things appmux rewrites on a respo
   (an absolute path, as an app that believes it lives at `/` would write it). appmux makes it
   `/<slug>/`. The forms post to relative URLs (`nickname`, `forget`), so they work under the prefix.
 - **State that dies with the process**: the signing key is random per process and gunicorn runs one
-  worker (`--workers 1`), so an Update, an Activate, a config change or a Restart invalidates every
+  worker (`--workers 1`), so a Deploy, an Activate, a config change or a Restart invalidates every
   session: the visit count and nickname reset.
 - **Health**: `GET /` and `GET /healthz` answer 200.
 
@@ -72,7 +72,7 @@ databricks workspace import-dir examples/flask-session \
 
 Then **Platform** > **Register an app**: Slug `session`, Display name `Session (Flask)`, Source
 folder `/Workspace/Users/<your-email>/appmux-examples/flask-session`, Memory budget (MB) `128`,
-Owner `<your-email>`; then open the app and press **Update**.
+Owner `<your-email>`; then open the app and press **Deploy**.
 
 The memory suggestion comes from a local run: the gunicorn master and its one worker peaked at 33 MB
 and 177 MB virtual and 23 MB and 30 MB resident, and the app started under an address-space limit of
@@ -80,8 +80,8 @@ and 177 MB virtual and 23 MB and 30 MB resident, and the app started under an ad
 
 ## As an admin, try
 
-1. **Update** with the folder unchanged: "already up to date", no new release.
-2. Load the page twice, then set `VERSION = "2.0.0"`, `import-dir` again and **Update**. Reload: the
+1. **Deploy** with the folder unchanged: "nothing to deploy", no new release.
+2. Load the page twice, then set `VERSION = "2.0.0"`, `import-dir` again and **Deploy**. Reload: the
    version moves and the visit count and nickname start over.
 3. **Activate** release 1: version `1.0.0`, sessions reset again (a new process, a new key).
 4. Override `APP_GREETING` with the config call in the

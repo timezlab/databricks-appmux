@@ -35,7 +35,7 @@ interface Selection {
 
 /**
  * Which apps may receive the visitor's token (OBO) or the appmux service
- * principal's token (shared SP). A grant or a revoke asks for a reason, which
+ * principal's client ID and secret (shared SP). A grant or a revoke asks for a reason, which
  * the audit log keeps.
  */
 export function DelegationsSection({ view }: { view: PlatformView }) {
@@ -52,8 +52,8 @@ export function DelegationsSection({ view }: { view: PlatformView }) {
     <Section title="Delegations">
       <div className="flex flex-col gap-4">
         <p className="text-muted-foreground">
-          A delegation lets an app receive a token it could not otherwise have.
-          Granting the shared service principal is possible only while the
+          A delegation lets an app receive a credential it could not otherwise
+          have. Granting the shared service principal is possible only while the
           shared_sp_delegation_allowed setting is on
           {isSharedSpAllowed ? " (it is on now)" : " (it is off now)"}; revoking
           is always possible.

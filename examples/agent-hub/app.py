@@ -191,9 +191,10 @@ class DatabricksCredentials:
     """The App's own identity, found by the Databricks SDK the way it finds it for any App.
 
     Standalone: the App's service principal (``DATABRICKS_CLIENT_ID`` and ``..._SECRET``). Under
-    appmux: the shared service principal's token command, only when it was delegated. On a laptop:
-    ``DATABRICKS_CONFIG_PROFILE`` or ``DATABRICKS_HOST`` with ``DATABRICKS_TOKEN``. The SDK renews
-    a token itself; this class only asks it for the headers at the moment of each call.
+    appmux: the appmux service principal's client id and secret, only when the shared one was
+    delegated. On a laptop: ``DATABRICKS_CONFIG_PROFILE`` or ``DATABRICKS_HOST`` with
+    ``DATABRICKS_TOKEN``. The SDK renews a token itself; this class only asks it for the headers at
+    the moment of each call.
     """
 
     def __init__(self) -> None:
@@ -205,7 +206,7 @@ class DatabricksCredentials:
             from databricks.sdk.core import Config
 
             try:
-                # Config() resolves the credentials at once and may run the token command.
+                # Config() resolves the credentials at once.
                 self._config = await asyncio.to_thread(Config)
             except ValueError as problem:
                 # The SDK's message lists the settings it saw, including the workspace address.

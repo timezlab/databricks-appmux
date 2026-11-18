@@ -277,24 +277,21 @@ describe("statusNotices", () => {
     assert.match(notice?.detail ?? "", /no release is serving/i);
   });
 
-  it("tells that the current release keeps serving while a new one is built", () => {
+  it("does not list a Deploy under way as something to attend to", () => {
+    // The deploy banner (deployProgress) shows it on every section instead.
     const app = appWith({
       releases: [
         release(9, { status: "building", is_target: true }),
         release(7, { status: "active" }),
       ],
     });
-    const notice = statusNotices(app).find((item) => item.id === "in-progress");
-    assert.equal(notice?.tone, "info");
-    assert.match(notice?.title ?? "", /Release 9/);
-    assert.match(notice?.title ?? "", /building/i);
-    assert.match(notice?.detail ?? "", /keeps serving/i);
+    assert.deepEqual(ids(app), []);
   });
 
-  it("invites the first Update when there is no release", () => {
+  it("invites the first Deploy when there is no release", () => {
     const app = appWith({ releases: [], state: "stopped" });
     assert.deepEqual(ids(app), ["no-release"]);
-    assert.match(statusNotices(app)[0]?.detail ?? "", /Update/);
+    assert.match(statusNotices(app)[0]?.detail ?? "", /Deploy/);
   });
 
   it("counts the missing requirements", () => {

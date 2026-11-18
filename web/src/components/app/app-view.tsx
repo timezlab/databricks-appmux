@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 
 import { getApp, getMe, listApps, listRequests } from "@/lib/api";
 import { resolveActor } from "@/lib/app/actions";
+import { deployProgress } from "@/lib/app/deploy-progress";
 import { appPagePath, appSectionAt } from "@/lib/app/params";
 import { appNavItems } from "@/lib/app/sections";
 import { appLoadView, pollData } from "@/lib/app/view";
@@ -22,6 +23,7 @@ import { SectionPanel } from "@/components/section-panel";
 import { AppPageProvider } from "./app-context";
 import { AppTitle } from "./app-header";
 import { AppProblem } from "./app-problem";
+import { DeployBanner } from "./deploy-banner";
 import { useAppActions } from "./use-app-actions";
 
 /** The app moves while people watch it build and start; the poll shows it. */
@@ -131,6 +133,8 @@ export function AppView({ slug, children }: AppViewProps) {
       break;
   }
 
+  const progress = deployProgress(view.app);
+
   return (
     <AppPageProvider
       value={{
@@ -163,6 +167,13 @@ export function AppView({ slug, children }: AppViewProps) {
               <LiveRegion message={notice?.text ?? null} />
               {notice === null ? null : (
                 <Notice tone={notice.tone} title={notice.text} />
+              )}
+              {progress === null ? null : (
+                <DeployBanner
+                  slug={slug}
+                  progress={progress}
+                  section={section}
+                />
               )}
               {view.refreshError === null ? null : (
                 <ErrorNotice

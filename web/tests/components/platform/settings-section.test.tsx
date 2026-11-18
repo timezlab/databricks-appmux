@@ -387,7 +387,7 @@ describe("SettingsGroups", () => {
     ]);
   });
 
-  it("asks for a second look before lending the platform's own token, and saves only on yes", async () => {
+  it("asks for a second look before giving out the platform's own secret, and saves only on yes", async () => {
     vi.mocked(putSetting).mockResolvedValue(
       saved("shared_sp_delegation_allowed", true),
     );
@@ -397,7 +397,7 @@ describe("SettingsGroups", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(
       within(bar()!).getByRole("group", {
-        name: /lend the appmux service principal/,
+        name: /give the appmux service principal/,
       }),
     ).toBeInTheDocument();
     expect(putSetting).not.toHaveBeenCalled();

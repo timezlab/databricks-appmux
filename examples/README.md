@@ -54,7 +54,7 @@ every app shows the same three things so you can tell a release from a config ch
 
 - **who is calling**: `X-Forwarded-Email`, `X-Forwarded-User`, `X-Forwarded-Preferred-Username`, and
   whether `X-Forwarded-Access-Token` is present (never its value);
-- **which release is running**: a `VERSION` constant in the source (change it, Update, see it change)
+- **which release is running**: a `VERSION` constant in the source (change it, Deploy, see it change)
   and the `APP_GREETING` environment variable (declared in `app.yaml`, overridable from the release
   config without touching the source);
 - **health**: `GET /` answers 200 (appmux's default health path) and each app has its own
@@ -116,7 +116,7 @@ configures one app; a **user** holds `CAN_USE`. With one account you play the fi
 visitor in turn. To see what a plain `CAN_USE` visitor sees, share an app with a second account or a
 colleague (step 8) and open it from there.
 
-The appmux App must be allowed to read your folder with your token on Update (it needs
+The appmux App must be allowed to read your folder with your token on Deploy (it needs
 `workspace.workspace:read` among its `user_api_scopes`; see "Deploy scripts" in
 [AGENTS.md](../AGENTS.md)).
 
@@ -166,9 +166,9 @@ a platform admin presses **Request a new app** on the launcher with the same fie
 budget, plus a reason, **Send request**; a platform admin approves it from the inbox on **Platform**, and the
 app starts with the platform's default memory budget, 512 MB unless changed in **Platform** > **Settings**.)
 
-**3. Update: make release 1.** Open the app (**Apps** > the app) and press **Update** in the header
+**3. Deploy: make release 1.** Open the app (**Apps** > the app) and press **Deploy** in the header
 of the **Status** section. appmux reads the folder with your token, snapshots it and creates release
-1. Pressing Update on an app that was stopped also starts it. Watch the release on the **Releases**
+1. Pressing Deploy on an app that was stopped also starts it. Watch the release on the **Releases**
 section: it builds, starts, passes the health check and becomes the active release, and only then
 does `/<slug>/` open. A failed release (a typo in `app.yaml`, for example) stays visible with its
 reason and changes nothing for a running release.
@@ -176,13 +176,13 @@ reason and changes nothing for a running release.
 **4. Open it.** `https://<your-appmux-url>/<slug>/`, with the trailing slash. The launcher's
 **Open** button goes there.
 
-**5. Update again: release 2.** Edit `VERSION` in `app.py` (`server.js` for the Node app; `"1.0.0"` to `"2.0.0"`), run the
-`import-dir` command from step 1 again, press **Update**. Release 2 starts beside release 1 on a
+**5. Deploy again: release 2.** Edit `VERSION` in `app.py` (`server.js` for the Node app; `"1.0.0"` to `"2.0.0"`), run the
+`import-dir` command from step 1 again, press **Deploy**. Release 2 starts beside release 1 on a
 private route, must pass the health check, and only then does the route swap; release 1 drains. Keep
 `/<slug>/` open in a tab and reload it through the update: it should never error. The page then shows
 `2.0.0`, and anything the app kept in memory (notes, the visit counter, the Flask session key, the
-Streamlit session count, the Node stream count) is gone, because a new process replaced the old one. Pressing **Update**
-with no change to the folder answers "already up to date" and creates no release.
+Streamlit session count, the Node stream count) is gone, because a new process replaced the old one. Pressing **Deploy**
+with no change to the folder answers "nothing to deploy" and creates no release.
 
 **6. Roll back.** On **Releases**, press **Activate** on release 1. It goes through the same
 health-gated swap with release 1's stored snapshot and config; no folder or token is read. The page
@@ -211,13 +211,13 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/j
 
 The answer is `{"config_version": N, "release_no": M}`: a config change makes a **new release with
 the same snapshot**, so it appears on **Releases**, goes through the health-gated swap, and the page
-shows the new greeting with the same `VERSION`. A later **Update** copies the target release's
+shows the new greeting with the same `VERSION`. A later **Deploy** copies the target release's
 config, so the override stays; **Activate** on release 1 brings back the greeting from `app.yaml`.
 Do not paste the token anywhere: it is a bearer credential for your account.
 
 **8. Sharing and control.** On the app's **Sharing** section, add an **Email address** with **Can
 use** (or **Everyone**: anyone who signs in to the workspace) to let someone open it; **Can manage**
-also lets them Update and configure it. In the header, **Stop** and **Start** change whether it runs
+also lets them Deploy and configure it. In the header, **Stop** and **Start** change whether it runs
 and **Restart** replaces the process with a new copy beside the old one. After a Restart the
 in-memory state resets, with no change of release.
 
@@ -247,7 +247,7 @@ Open `https://<your-appmux-url>/_appmux/` (or `/`): the launcher lists the apps 
 1. The address bar ends in `/<slug>/` and the page loads fully (styles, scripts, links).
 2. **You are** shows your own workspace email, not `anonymous`. That email is the Databricks proxy's
    `X-Forwarded-Email`, forwarded by appmux; a header you set yourself is dropped.
-3. The greeting and `VERSION` match what the admin did: reload after each Update, Activate or config
+3. The greeting and `VERSION` match what the admin did: reload after each Deploy, Activate or config
    change and see them move.
 4. The links on the page (`api/whoami`, `healthz`, and so on) stay under `/<slug>/`. They are
    relative on purpose, because appmux never rewrites a response body.
@@ -322,10 +322,10 @@ rewrite of `Set-Cookie`, the `Location` rewrite, the WebSocket relay carrying St
 every UI label above as rendered (they are quoted from the web source and the admin API contract).
 For `node-stream` also: Node 22 itself (it ran on v24.12.0 and uses no API newer than 22, which is a
 reading, not a run), the Server-Sent Events stream through the edge (the 120 second idle wait, the
-64 places per app that an open stream holds, and any buffering), what happens to a stream that is open during an Update or a
+64 places per app that an open stream holds, and any buffering), what happens to a stream that is open during a Deploy or a
 Restart, and the release failing to start under a 512 MB budget (shown here only as a local `ulimit`).
-`import-dir`, Register, Update and the config call have not been run for the first four apps. For
-`mcp-tools` and `a2a-agent`, Register, Update, the config call, the delegation and the grants ran
+`import-dir`, Register, Deploy and the config call have not been run for the first four apps. For
+`mcp-tools` and `a2a-agent`, Register, Deploy, the config call, the delegation and the grants ran
 through the admin API with the CLI's token, not through the UI, so the UI labels in their READMEs
 are quoted, not seen; the reference lists what else was not measured under
 [Not measured](../docs/reference/mcp-and-a2a.md#not-measured) (a call near the 300 s limit, OBO, load,

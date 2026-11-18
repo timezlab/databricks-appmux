@@ -64,7 +64,7 @@ SUBMITTED_MARKER: Final = "marker-value-from-the-client"
 LEAK_MARKERS: Final = (VISITOR_TOKEN, "Traceback", "SELECT")
 UNREADABLE_FOLDER: Final = (
     "the folder is empty, or you cannot read it with your own access; ask its owner for read "
-    "access, then press Update again"
+    "access, then press Deploy again"
 )
 FAILURE_REASON: Final = "health check did not pass within 60 s (last error: connection refused)"
 
@@ -218,12 +218,14 @@ def seed_release(
     )
 
 
-def set_target(registry: StubRegistry, release_no: int | None) -> None:
+def set_target(
+    registry: StubRegistry, release_no: int | None, *, desired_state: str = "running"
+) -> None:
     registry.seed(
         "app_config",
         {
             "app_slug": "sales",
-            "desired_state": "running",
+            "desired_state": desired_state,
             "target_release_no": release_no,
             "updated_by": DANA,
             "updated_at": NOW,
@@ -708,6 +710,45 @@ async def test_an_update_whose_folder_equals_a_live_release_is_200_and_creates_n
     assert harness.is_untouched()  # no write, no audit row, no wake-up
     assert [r.release_no for r in harness.registry.snapshot.releases_for("sales")] == [3]
     assert config_of(harness.registry, "sales").target_release_no == 3
+
+
+async def test_a_deploy_of_an_unchanged_folder_leaves_a_running_app_as_it_is() -> None:
+    harness = Harness()
+    seed_release(harness.registry, 3, "active")
+    set_target(harness.registry, 3)
+    harness.updater.mode = "up_to_date"
+    harness.updater.live_release_no = 3
+
+    reply = await harness.update(CAROL)
+
+    assert ReleaseUnchanged.model_validate_json(reply.body).started is False
+
+
+async def test_a_deploy_of_an_unchanged_folder_starts_an_app_that_was_stopped() -> None:
+    # Pressing Deploy asks for the app to run (a new release already sets desired_state), so the
+    # "nothing to deploy" answer must not leave a stopped app stopped. The person was told
+    # "up to date" while the app stayed down (owner's test, 2026-11-06).
+    harness = Harness()
+    seed_release(harness.registry, 3, "active")
+    set_target(harness.registry, 3, desired_state="stopped")
+    harness.updater.mode = "up_to_date"
+    harness.updater.live_release_no = 3
+
+    reply = await harness.update(CAROL)
+
+    assert reply.status == 200
+    unchanged = ReleaseUnchanged.model_validate_json(reply.body)
+    assert (unchanged.status, unchanged.release_no, unchanged.started) == ("up_to_date", 3, True)
+    config = config_of(harness.registry, "sales")
+    assert (config.desired_state, config.updated_by, config.target_release_no) == (
+        "running",
+        CAROL,
+        3,
+    )
+    assert [r.release_no for r in harness.registry.snapshot.releases_for("sales")] == [3]
+    (row,) = harness.registry.audit_rows
+    assert (row.action, row.actor, row.app_slug) == ("app.start", CAROL, "sales")
+    assert harness.woken == ["sales"]
 
 
 @pytest.mark.parametrize(

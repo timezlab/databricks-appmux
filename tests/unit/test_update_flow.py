@@ -446,7 +446,7 @@ async def test_an_update_that_keeps_meeting_other_changes_is_a_conflict_after_th
         await flow.press()
 
     assert refusal.value.kind == "conflict"
-    assert "press Update again" in refusal.value.message
+    assert "press Deploy again" in refusal.value.message
     assert len(flow.writer.calls) == 3
 
 

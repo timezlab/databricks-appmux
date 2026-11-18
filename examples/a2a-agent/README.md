@@ -4,7 +4,7 @@ An **Agent2Agent (A2A) server** on Starlette whose agent is a **free Databricks 
 that can call the tools of an MCP server such as [mcp-tools](../mcp-tools/README.md). It is the
 example for an app that makes calls to other Apps and to a serving endpoint with its **own**
 identity, and for checking MCP and A2A between Apps inside appmux and outside it. The general
-walkthrough (upload, register, Update, roll back, config, share, and what an end user checks) is in
+walkthrough (upload, register, Deploy, roll back, config, share, and what an end user checks) is in
 [../README.md](../README.md#admin-walkthrough-in-order); this file holds what is specific to this
 app. Which calls between Apps work, and what each failure looks like, is in
 [docs/reference/mcp-and-a2a.md](../../docs/reference/mcp-and-a2a.md).
@@ -152,7 +152,7 @@ databricks workspace import-dir examples/a2a-agent \
 
 Then **Platform** > **Register an app**: Slug `agent`, Display name `Agent (A2A)`, Source folder
 `/Workspace/Users/<your-email>/appmux-examples/a2a-agent`, Memory budget (MB) `256`, Owner
-`<your-email>`; then open the app and press **Update**. The card is at
+`<your-email>`; then open the app and press **Deploy**. The card is at
 `https://<your-appmux-url>/agent/.well-known/agent-card.json` and the endpoint is
 `https://<your-appmux-url>/agent/`. The agent ran under a 256 MB budget; the smallest budget that
 works was not looked for.
@@ -179,8 +179,9 @@ so only the `CAN USE` grants (on appmux for a child target, on the target App ot
 
 ## As an admin, try
 
-1. `GET /agent/api/status` as yourself: `configured`, the auth type (`databricks-cli` under appmux,
-   `oauth-m2m` standalone), `mcp_server_configured`, and `access_token_header_present: false`.
+1. `GET /agent/api/status` as yourself: `configured`, the auth type (`oauth-m2m`, standalone or
+   under appmux with the shared or an own service principal), `mcp_server_configured`, and
+   `access_token_header_present: false`.
 2. Send the `call-tool` message above to `https://<your-appmux-url>/agent/` with your token (the
    header file of the [mcp-tools README](../mcp-tools/README.md#calling-it) works the same):
    `TASK_STATE_COMPLETED` with `42`.

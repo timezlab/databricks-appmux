@@ -10,10 +10,9 @@ tries other apps' secrets and the registry:
   token belongs to that service principal and its reach is exactly what that service principal
   was granted;
 * **a shared-SP child**: the platform admin turns the master switch on and delegates ``shared_sp``.
-  appmux mints the token and keeps a file in the child's run directory current; the child gets
-  ``DATABRICKS_AUTH_TYPE=databricks-cli`` and ``DATABRICKS_CLI_PATH`` and never a static token. The
-  token lives an hour, so a child that kept working past that hour proves the file was renewed
-  (spike 10: a static ``DATABRICKS_TOKEN`` failed from the first call after the expiry).
+  The child gets appmux's own ``DATABRICKS_CLIENT_ID`` and ``DATABRICKS_CLIENT_SECRET`` (ADR 0023),
+  as if it were deployed alone, and never a static token. The SDK signs in and renews by itself, so
+  a child that kept working past the hour a token lives proves that renewal works in the sandbox.
 
 What the tests assert, and what they leave to a person:
 

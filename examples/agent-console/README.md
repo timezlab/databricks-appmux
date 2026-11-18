@@ -3,7 +3,7 @@
 A web page that calls [agent-hub](../agent-hub/README.md) over **MCP** and over **A2A**, once with
 **your own token** and once with **its own identity**, and shows what the hub saw each time. It is
 the example for one question: **when an App calls another App, does the called App know who is
-behind the call?** The general walkthrough (upload, register, Update, roll back, config, share) is
+behind the call?** The general walkthrough (upload, register, Deploy, roll back, config, share) is
 in [../README.md](../README.md#admin-walkthrough-in-order); this file holds what is specific to this
 app. Which calls between Apps work, and what each failure looks like, is in
 [docs/reference/mcp-and-a2a.md](../../docs/reference/mcp-and-a2a.md).
@@ -72,9 +72,9 @@ databricks workspace import-dir examples/agent-console \
 
 **Platform** > **Register an app**: Slug `console`, Display name `Agent console`, Source folder
 `/Workspace/Users/<your-email>/appmux-examples/agent-console`, Memory budget (MB) `256`, Owner
-`<your-email>`; **Update**. Then, in order:
+`<your-email>`; **Deploy**. Then, in order:
 
-1. Register and Update [agent-hub](../agent-hub/README.md#upload-and-register) as `hub`.
+1. Register and Deploy [agent-hub](../agent-hub/README.md#upload-and-register) as `hub`.
 2. Set the console's `PROVIDER_URL` to `https://<your-appmux-url>/hub` with the config call in the
    [main walkthrough](../README.md#admin-walkthrough-in-order) (step 7). The release it creates
    restarts the console.

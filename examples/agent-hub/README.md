@@ -5,7 +5,7 @@ foundation model as its agent. Its tools run **as the caller**: they report the 
 received and make a Databricks call with the caller's own token when one arrived. It is the callee
 of [agent-console](../agent-console/README.md), and together they answer one question: when an App
 calls another App over MCP or A2A, can the called App tell who is behind the call, and act as them?
-The general walkthrough (upload, register, Update, roll back, config, share) is in
+The general walkthrough (upload, register, Deploy, roll back, config, share) is in
 [../README.md](../README.md#admin-walkthrough-in-order); this file holds what is specific to this
 app. Which calls between Apps work, and what each failure looks like, is in
 [docs/reference/mcp-and-a2a.md](../../docs/reference/mcp-and-a2a.md).
@@ -86,7 +86,7 @@ databricks workspace import-dir examples/agent-hub \
 
 Then **Platform** > **Register an app**: Slug `hub`, Display name `Agent hub`, Source folder
 `/Workspace/Users/<your-email>/appmux-examples/agent-hub`, Memory budget (MB) `256`, Owner
-`<your-email>`; then open the app and press **Update**.
+`<your-email>`; then open the app and press **Deploy**.
 
 What the hub needs from the platform, in order (the API calls are in
 [the reference](../../docs/reference/mcp-and-a2a.md#setting-up-the-shared-sp-for-a-child)):

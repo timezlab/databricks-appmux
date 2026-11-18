@@ -152,9 +152,9 @@ appmux's.
 
 | Section | What it holds | Replaces |
 |---|---|---|
-| Overview | state lamp, route strip with Open app, active release, runtime, memory budget, source folder, owner, what needs attention (failed release, missing requirements), Start, Stop, Restart, Update | Status |
+| Overview | state lamp, route strip with Open app, active release, runtime, memory budget, source folder, owner, what needs attention (failed release, missing requirements), Start, Stop, Restart, Deploy | Status |
 | Authorization | Permissions: who can open and who can manage (add a user, group or service principal from one combobox with a level select; change a level in place; remove), then Identity: whether the app acts as the visitor (OBO) or as a shared service principal, and the request to ask for it | Sharing and the delegation part of Platform > Access |
-| Deployments | the releases as a list with state, number, name, tags, lock, when and by whom; Update; a row menu for Activate (roll back), Rename, Tag, Lock, Delete, View source; the failure reason and the child's last output for a failed one | Releases |
+| Deployments | the releases as a list with state, number, name, tags, lock, when and by whom; Deploy; a row menu for Activate (roll back), Rename, Tag, Lock, Delete, View source; the failure reason and the child's last output for a failed one | Releases |
 | Logs | the child's output (see below) | new |
 | Security | the app's egress rules (read-only for an app admin, editable for a platform admin) and what the sandbox forbids, in words | Platform > Egress per app |
 | Environment | Structured and JSON views; a Runtime block (Python and Node versions); Variables (name, value, where it comes from: the release config, a resource, or the platform) and Packages (declared by the release, resolved wheels, and what the platform provides), each with search and copy; a secret value is shown as `***` | new |
@@ -164,6 +164,13 @@ appmux's.
 | Settings | display name, slug, source folder (with the folder browser), memory budget, owner, delete app; an app admin who may not change a field sees it read-only with "Request a change" | the platform fields of Status |
 
 Platform keeps its five areas (Overview, Apps, Access, Egress, Settings) as a sidebar of the same kind.
+
+**A deploy under way** is a banner above every section of the app, not a notice on Overview alone: "Deploying
+release N", the steps Pending, Building, Starting, Healthy and Active with the current one marked, a line on what the
+route does meanwhile, and links to the other places that follow it (the release, the logs). It is drawn from the polled
+app, so a reload brings it back. The log holds no build output (nothing is recorded before the new copy starts), and the
+banner says so on the Logs section until the copy starts. A failed release is not a deploy under way; Overview keeps its
+notice.
 
 ## Components
 

@@ -54,7 +54,7 @@ from appmux.packages.store import (
 )
 
 EMPTY_FOLDER_REASON: Final = "empty, or you cannot read it"
-SESSION_EXPIRED_REASON: Final = "session expired during the snapshot; press Update again"
+SESSION_EXPIRED_REASON: Final = "session expired during the snapshot; press Deploy again"
 # Reading is one file at a time (parallel calls get 429s), measured at roughly ten files a second,
 # so a folder of thousands of files would hold an Update for minutes. A source folder of an app is
 # its code and assets, not its dependencies; this bounds the mistake of pointing at a larger tree.

@@ -86,7 +86,9 @@ A child has no SP of its own. To let one call the model or another App:
    (`PUT /apps/<slug>/delegation/shared_sp`, body `{"version": <the app's version>, "reason": "..."}`).
 3. **Restart the child** (`POST /apps/<slug>/restart`). The delegation does not restart it; until it
    restarts, the child reads as having no credentials. The Databricks SDK then finds the identity
-   through `Config()` with no change to the child's source (auth type `databricks-cli`).
+   through `Config()` with no change to the child's source: the child gets appmux's own
+   `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, so the auth type is `oauth-m2m`, as for an
+   App deployed alone ([ADR 0023](../decisions/0023-give-a-shared-sp-child-the-appmux-service-principal-pair.md)).
 4. `CAN USE` for appmux's own SP (the one the shared SP is) on every other App the child calls,
    including appmux itself: `databricks apps update-permissions <target> --json` with the SP's
    application ID.

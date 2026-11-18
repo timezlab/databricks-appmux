@@ -11,9 +11,10 @@ chosen credential cannot be given:
   ``DATABRICKS_CLIENT_ID`` and ``DATABRICKS_CLIENT_SECRET``. The child can reach only what that
   service principal was granted, so it wins over a delegation: its reach is smaller;
 * **the shared service principal** (delegated by a platform admin, and only while the platform
-  master switch is on): the child gets ``DATABRICKS_AUTH_TYPE=databricks-cli`` and
-  ``DATABRICKS_CLI_PATH``, never a token. appmux mints the token, ``shared_sp_token`` keeps it in a
-  file the command prints, and the SDK renews through the command (spike 10).
+  master switch is on): the same two variables, set to the pair appmux itself runs as, so the child
+  is as if deployed alone and its SDK signs in and renews by itself (ADR 0023). The child holds
+  appmux's client secret: revoking the delegation takes it away from the next start, and does not
+  take back a copy the child kept. An own service principal wins over this.
 
 A personal access token is not a mode: none of the variables here is ``DATABRICKS_TOKEN``, and a
 secret that looks like one is refused where it would be used as a client secret.
@@ -29,12 +30,13 @@ import re
 from collections.abc import Callable, Collection, Mapping
 from typing import Final, Protocol
 
+from pydantic import SecretStr
+
 from appmux.registry.models import App, AppConfig
 from appmux.registry.resources import SECRET_TYPE
 from appmux.registry.snapshot import RegistrySnapshot
 from appmux.sandbox.environment import ChildVariables
 from appmux.secrets.resolver import MissingResourceKeys, SecretUnreadable
-from appmux.secrets.shared_sp_token import TOKEN_COMMAND_PATH, SharedSpTokens, TokenMintFailed
 from appmux.settings import PlatformSettings
 
 _SHARED_SP_SWITCH_KEY: Final = "shared_sp_delegation_allowed"
@@ -72,8 +74,8 @@ class ChildCredentials:
     """The credential variables of the child of an app, read from the registry when it starts.
 
     ``snapshot`` is called on each ``credentials_for`` so a change since the last start is seen.
-    ``tokens`` is ``None`` in a process that cannot mint (no OAuth client for appmux's own service
-    principal); an app that needs the shared credential is then refused, not started without it.
+    ``appmux_client_id`` and ``appmux_client_secret`` are the pair appmux itself runs as (the
+    Databricks Apps platform sets them for the App); only a shared-SP child is given them.
     """
 
     def __init__(
@@ -81,11 +83,13 @@ class ChildCredentials:
         *,
         snapshot: Callable[[], RegistrySnapshot],
         resources: ResourceReader,
-        tokens: SharedSpTokens | None = None,
+        appmux_client_id: str,
+        appmux_client_secret: SecretStr,
     ) -> None:
         self._snapshot = snapshot
         self._resources = resources
-        self._tokens = tokens
+        self._appmux_client_id = appmux_client_id
+        self._appmux_client_secret = appmux_client_secret
 
     async def credentials_for(self, app_slug: str) -> Mapping[str, str]:
         """The variables for ``app_slug``'s mode; empty when it has no credential or is unknown."""
@@ -96,7 +100,7 @@ class ChildCredentials:
         if config.own_sp_client_id_key is not None or config.own_sp_client_secret_key is not None:
             return await self._own_service_principal(snapshot, app, config)
         if app.shared_sp_delegated and _shared_sp_allowed(snapshot):
-            return await self._shared_service_principal(snapshot, app)
+            return self._shared_service_principal(snapshot, app)
         return ChildVariables()
 
     async def _own_service_principal(
@@ -150,15 +154,7 @@ class ChildCredentials:
             {_CLIENT_ID_VARIABLE: client_id, _CLIENT_SECRET_VARIABLE: client_secret}
         )
 
-    async def _shared_service_principal(
-        self, snapshot: RegistrySnapshot, app: App
-    ) -> Mapping[str, str]:
-        if self._tokens is None:
-            raise CredentialsRefused(
-                "the app is delegated the shared service principal, but this appmux process "
-                "cannot mint its token; ask a platform admin to check the OAuth settings of the "
-                "appmux service principal, then start the release again"
-            )
+    def _shared_service_principal(self, snapshot: RegistrySnapshot, app: App) -> Mapping[str, str]:
         for resource in snapshot.resources_for(app.slug):
             if resource.access_as == "shared_sp" and resource.check_result != "ok":
                 raise CredentialsRefused(
@@ -167,16 +163,9 @@ class ChildCredentials:
                     "give the shared service principal access to it and attach it again, then "
                     "start the release again"
                 )
-        try:
-            await self._tokens.current()
-        except TokenMintFailed as failure:
-            raise CredentialsRefused(
-                "the app cannot start with the shared service principal: its token could not be "
-                f"minted ({failure.reason}); {failure.advice}, then start the release again"
-            ) from failure
         return ChildVariables(
             {
-                "DATABRICKS_AUTH_TYPE": "databricks-cli",
-                "DATABRICKS_CLI_PATH": TOKEN_COMMAND_PATH,
+                _CLIENT_ID_VARIABLE: self._appmux_client_id,
+                _CLIENT_SECRET_VARIABLE: self._appmux_client_secret.get_secret_value(),
             }
         )

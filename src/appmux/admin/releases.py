@@ -91,6 +91,7 @@ from appmux.reconciler.start_failure import failure_hint
 from appmux.registry.audit import AuditAction, AuditDetail, AuditEntry
 from appmux.registry.errors import RegistryUnavailable
 from appmux.registry.models import Release, RowModel
+from appmux.registry.operations import desired_state_change
 from appmux.registry.protocol import Change
 from appmux.registry.releases import label_and_tags_change
 from appmux.registry.writers import WriteKind
@@ -252,8 +253,9 @@ class ReleaseRoutes:
     """The route provider of the release routes.
 
     ``updater`` is the Update flow. ``on_release_created`` receives the app's slug after a release
-    was written (the parent wires it to ``Reconciler.wake``); by default nothing is signalled and
-    the reconciler finds the release on its next pass. ``now`` stamps locks and deletions.
+    was written, or after a Deploy of an unchanged folder asked a stopped app to run (the parent
+    wires it to ``Reconciler.wake``); by default nothing is signalled and the reconciler finds the
+    change on its next pass. ``now`` stamps locks and deletions.
     """
 
     def __init__(
@@ -267,6 +269,23 @@ class ReleaseRoutes:
         self._on_release_created = on_release_created
         self._now = now
 
+    async def _start_if_stopped(self, context: AdminContext, request: Request, slug: str) -> bool:
+        """Pressing Deploy asks for the app to run, also when the folder has nothing new.
+
+        A new release already sets ``desired_state`` to ``running`` (``target_release_change``);
+        answering "nothing to deploy" and leaving a stopped app stopped made the button look broken
+        (owner's test, 2026-11-06). The write is the same one Start makes, audited as ``app.start``.
+        Returns whether the app was stopped and has been asked to run.
+        """
+        config = context.registry.snapshot.app_config(slug)
+        if config is None or config.desired_state != "stopped":
+            return False
+        entry = context.audit_entry(request, "app.start", app_slug=slug)
+        change = desired_state_change(config, "running", updated_by=context.actor(request).email)
+        await context.write(request, [change], [entry])
+        self._on_release_created(slug)
+        return True
+
     def routes(self, context: AdminContext) -> Sequence[Route]:
         async def update(request: Request) -> Response:
             slug = request.path_params["app"]
@@ -276,7 +295,7 @@ class ReleaseRoutes:
                 raise Forbidden(
                     "appmux did not receive your Databricks access token, so it cannot read the "
                     "app's folder as you; ask a platform admin to turn on user authorization for "
-                    "the appmux App, then press Update again",
+                    "the appmux App, then press Deploy again",
                     code="user_token_missing",
                 )
 
@@ -307,11 +326,16 @@ class ReleaseRoutes:
             if result.is_up_to_date:
                 if written:
                     raise ValueError("the flow wrote a release and reported the folder up to date")
-                context.skip_audit(
-                    request,
-                    f"the folder equals live release {result.release_no}; no release was written",
+                started = await self._start_if_stopped(context, request, slug)
+                if not started:
+                    context.skip_audit(
+                        request,
+                        f"the folder equals live release {result.release_no}; "
+                        "no release was written",
+                    )
+                unchanged = ReleaseUnchanged(
+                    status="up_to_date", release_no=result.release_no, started=started
                 )
-                unchanged = ReleaseUnchanged(status="up_to_date", release_no=result.release_no)
                 return JSONResponse(unchanged.model_dump(mode="json"))
 
             if written != [result.release_no]:

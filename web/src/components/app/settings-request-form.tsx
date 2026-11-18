@@ -150,7 +150,7 @@ export function SettingsRequestForm({
       </Field>
       <Field
         label="Source folder"
-        hint="The workspace folder the app is read from, starting with /Workspace/. Type it, or pick it with Browse. A new folder is read at the next Update."
+        hint="The workspace folder the app is read from, starting with /Workspace/. Type it, or pick it with Browse. A new folder is read at the next Deploy."
         error={errors.sourcePath}
       >
         {(control) => (

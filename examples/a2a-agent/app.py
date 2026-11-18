@@ -31,8 +31,8 @@ HTTP paths
 
 Calls this App makes use its **own** identity, never the caller's: the Databricks SDK finds it
 (``Config()``). A standalone App has its service principal; a child under appmux has none unless a
-platform admin delegates the shared one (design 8.1), which appmux hands over as a token command
-that the same SDK call uses. A redirect from a peer is reported, never followed: the Databricks
+platform admin delegates the shared one (design 8.1), which appmux hands over as the same two
+variables a standalone App has. A redirect from a peer is reported, never followed: the Databricks
 proxy answers 302 to its sign-in page (or 401 ``{}`` when the request accepts JSON) when it does not
 accept the token it was given, or when that identity lacks CAN USE on the App it calls.
 
@@ -173,9 +173,10 @@ class DatabricksCredentials:
     """The App's own identity, found by the Databricks SDK the way it finds it for any App.
 
     Standalone: the App's service principal (``DATABRICKS_CLIENT_ID`` and ``..._SECRET``). Under
-    appmux: the shared service principal's token command, only when it was delegated. On a laptop:
-    ``DATABRICKS_CONFIG_PROFILE`` or ``DATABRICKS_HOST`` with ``DATABRICKS_TOKEN``. The SDK renews
-    a token itself; this class only asks it for the headers at the moment of each call.
+    appmux: the appmux service principal's client id and secret, only when the shared one was
+    delegated. On a laptop: ``DATABRICKS_CONFIG_PROFILE`` or ``DATABRICKS_HOST`` with
+    ``DATABRICKS_TOKEN``. The SDK renews a token itself; this class only asks it for the headers at
+    the moment of each call.
     """
 
     def __init__(self) -> None:
@@ -187,7 +188,7 @@ class DatabricksCredentials:
             from databricks.sdk.core import Config
 
             try:
-                # Config() resolves the credentials at once and may run the token command.
+                # Config() resolves the credentials at once.
                 self._config = await asyncio.to_thread(Config)
             except ValueError as problem:
                 # The SDK's message lists the settings it saw, including the workspace address.

@@ -223,7 +223,7 @@ export function identityModes(app: AppDetail): IdentityMode[] {
             ? "Switched off by the platform"
             : "Not delegated",
       description:
-        "The app borrows the identity appmux itself runs as, as a token that lasts an hour; it works without a visitor.",
+        "The app signs in as the identity appmux itself runs as, with the same client ID and secret; it works without a visitor.",
       howToGet:
         sharedSpState === "delegated"
           ? null

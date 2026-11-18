@@ -97,7 +97,7 @@ export interface FolderHint {
 /**
  * The sentence about a folder that looks like an app. Only Node.js comes with
  * a memory figure: the server sends `suggested_memory_mb` for it, the smallest
- * budget it builds and starts with. The runtime is a hint; the Update decides
+ * budget it builds and starts with. The runtime is a hint; the Deploy decides
  * it from the snapshot.
  */
 export function folderHint(listing: WorkspaceListing): FolderHint | null {

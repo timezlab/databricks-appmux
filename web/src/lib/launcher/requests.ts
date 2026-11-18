@@ -50,7 +50,8 @@ const FIELD_ORDER = ["slug", "display_name", "source_path", "memory_budget_mb"];
 
 const DELEGATION_DETAIL: Readonly<Record<string, string>> = {
   obo: "OBO: pass each visitor's token to the app",
-  shared_sp: "Shared service principal: lend its token to the app",
+  shared_sp:
+    "Shared service principal: give the app the appmux client ID and secret",
 };
 
 /** A payload value as text. An object or a null is "unknown": its dump is neither readable nor needed. */

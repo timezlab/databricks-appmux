@@ -22,13 +22,14 @@ over, and so the time it holds the loop, because masking takes time linear in th
 credential shape runs in linear time (``registry.audit``), and a long line is masked only as far
 as its cut (``output.py``).
 
-A child whose environment names the shared service principal's token command also gets a *host*
-run directory, ``<scratch>/run``, bound read-write at ``/run/appmux`` instead of the tmpfs (the
-launcher's ``SandboxSpec.host_run_dir``): appmux has to put the token files where the child sees
-them, and a tmpfs inside the sandbox cannot be reached from outside it. The cap of the tmpfs is
-then gone, so the size watchdog of ``sandbox.run_dir`` (the fallback TD-004 names) runs for that
-child and stops it when the directory passes its limit. The files and their renewal are the
-``RunDirFiles`` seam; the keeper it returns is stopped when the child ends.
+A child whose environment a ``RunDirFiles`` says needs files also gets a *host* run directory,
+``<scratch>/run``, bound read-write at ``/run/appmux`` instead of the tmpfs (the launcher's
+``SandboxSpec.host_run_dir``): appmux has to put the files where the child sees them, and a tmpfs
+inside the sandbox cannot be reached from outside it. The cap of the tmpfs is then gone, so the
+size watchdog of ``sandbox.run_dir`` (the fallback TD-004 names) runs for that child and stops it
+when the directory passes its limit. The keeper the seam returns is stopped when the child ends.
+Nothing wires the seam since ADR 0023 (the shared service principal's token files were its one
+user), so every child's run directory is the tmpfs; TD-004 says what is left to decide.
 """
 
 from __future__ import annotations

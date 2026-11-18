@@ -61,7 +61,7 @@ The request and response bodies are in [Schemas](#schemas), with one valid examp
 
 | Route | Needs | Request | Response | Returns / does |
 |---|---|---|---|---|
-| `POST /apps/{app}/releases` | `app.update` | — | `ReleaseCreated` (`202`) or `ReleaseUnchanged` (`200`) | starts an Update with the presser's token; `202` returns the new release id and progress is read from `GET …/releases/{id}`; `200` means the folder's digest equals a live release's, so it is "already up to date" and no release is created and no audit row is written; without the presser's token (`403` `user_token_missing`) the folder cannot be read and the flow does not run; the flow's own refusals keep its message and answer `404`, `400`, `409` (code `conflict`) or `503`; a created release writes `release.create` with the release number and the snapshot digest |
+| `POST /apps/{app}/releases` | `app.update` | — | `ReleaseCreated` (`202`) or `ReleaseUnchanged` (`200`) | starts an Update with the presser's token; `202` returns the new release id and progress is read from `GET …/releases/{id}`; `200` means the folder's digest equals a live release's, so there is "nothing to deploy" and no release is created; an app that was running or starting writes no audit row, while an app that was stopped is asked to run exactly as `POST …/start` does (`desired_state` `running`, `updated_by` the presser, one `app.start` audit row, the reconciler woken) and the answer says `started: true`; without the presser's token (`403` `user_token_missing`) the folder cannot be read and the flow does not run; the flow's own refusals keep its message and answer `404`, `400`, `409` (code `conflict`) or `503`; a created release writes `release.create` with the release number and the snapshot digest |
 | `GET /apps/{app}/releases/{id}` | `CAN_MANAGE` | — | `ReleaseDetail` | status, name, tags, lock, reason and build-log tail, detected manifest, wheel list, warnings; a deleted or unknown release is `404` |
 | `POST /apps/{app}/releases/{id}/activate` | `release.activate` | — | `ReleaseDetail` | any live release; goes through the health-gated swap; the answer is `pending` until the reconciler has swapped to it; `409` `requirements_missing` (checked before anything is written, every missing key named in the message; not asked of the active release), `409` `release_in_progress` while the release is `building`, `starting` or `healthy`; a deleted or unknown release is `404` |
 | `PUT /apps/{app}/releases/{id}` | `release.label`, `release.tag`, `release.untag` | `UpdateReleaseRequest` | `ReleaseDetail` | body: `name`, `tags`; a blank name or tag is `400`; a repeated tag counts once; one audit row per kind of change (`release.label`, `release.tag`, `release.untag`), and a request that changes nothing answers the current release and records nothing |
@@ -488,12 +488,13 @@ Sent with `202`.
 
 #### ReleaseUnchanged
 
-Returned with `200` by `POST /apps/{app}/releases` when the folder's digest equals a live release's digest: appmux reports "already up to date" and creates no release ([spec US1 scenario 5](../spec.md)). A created release answers `202` with `ReleaseCreated`.
+Returned with `200` by `POST /apps/{app}/releases` when the folder's digest equals a live release's digest: appmux reports "nothing to deploy" and creates no release ([spec US1 scenario 5](../spec.md)). Pressing Deploy still asks for the app to run, so a stopped app is started (`started: true`) instead of being left stopped behind a "nothing to deploy" answer. A created release answers `202` with `ReleaseCreated`.
 
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
 | `status` | string | always | `up_to_date` |
 | `release_no` | integer | always | The live release whose digest equals the folder's: the active release, unless an older live release is the one that matches. No release is created and `config.target_release_no` does not change |
+| `started` | boolean | always | `true` when the app was stopped and this call asked it to run (the same write as Start, audited as `app.start`); `false` when the app was not stopped and nothing was written |
 
 #### ReleaseSourceListing
 
@@ -593,7 +594,7 @@ Held in `AppDetail.delegation`, which `PUT` and `DELETE /apps/{app}/delegation/{
 | Field | Type | Presence | Meaning |
 |---|---|---|---|
 | `obo_delegated` | boolean | always | The visitor's token may be passed down to this app |
-| `shared_sp_delegated` | boolean | always | The appmux service principal's token may be lent to this app |
+| `shared_sp_delegated` | boolean | always | The appmux service principal's client ID and secret may be given to this app, from its next start |
 | `shared_sp_delegation_allowed` | boolean | always | The platform master switch; while `false` a `shared_sp` delegation has no effect and no request for it is accepted |
 
 #### RequestRow
@@ -670,7 +671,7 @@ One app on the platform page; held in `PlatformView.apps`. It carries the platfo
 | `memory_budget_mb` | integer | always | 64 to 16384: the floor of a new budget is 256, and an app saved under the older floor of 64 keeps what it has |
 | `owner` | string | always | Email of the owner |
 | `obo_delegated` | boolean | always | The visitor's token may be passed down to this app |
-| `shared_sp_delegated` | boolean | always | The appmux service principal's token may be lent to this app |
+| `shared_sp_delegated` | boolean | always | The appmux service principal's client ID and secret may be given to this app, from its next start |
 | `egress` | array<EgressRule> | always | The app's own egress rules, in order |
 | `version` | integer | always | Version of the app row; the same value as `AppDetail.version` |
 

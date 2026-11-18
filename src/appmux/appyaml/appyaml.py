@@ -87,7 +87,7 @@ def read_manifest(
     present = [name for name in APP_YAML_NAMES if name in names]
     if len(present) == 2:
         raise AppYamlInvalid(
-            "the snapshot has both app.yaml and app.yml; keep one of them and Update again"
+            "the snapshot has both app.yaml and app.yml; keep one of them and Deploy again"
         )
     runtime = _detect_runtime(names)
     if not present:

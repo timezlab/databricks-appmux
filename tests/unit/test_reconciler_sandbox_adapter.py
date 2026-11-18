@@ -379,7 +379,7 @@ class FakeKeeper:
 
 
 class FakeRunDirFiles:
-    """Stands in for ``SharedSpTokenFiles``: records the directory it was given and when."""
+    """Stands in for a ``RunDirFiles``: records the directory it was given and when."""
 
     def __init__(self, starter: FakeStarter) -> None:
         self.attached: list[Path] = []

@@ -43,6 +43,23 @@ function errorBody(code: string, message: string) {
   return { error: { code, message } };
 }
 
+/** The example app with release 9 on its way to replace the running release 7. */
+function deployingApp(status: "building" | "starting"): AppDetail {
+  const app = AppDetail.parse(readExample("AppDetail"));
+  const [base] = app.releases;
+  if (base === undefined) throw new Error("the example app has no release");
+  return {
+    ...app,
+    state: "running",
+    restart_to_apply: false,
+    restart_failure: null,
+    releases: [
+      { ...base, release_no: 9, status, status_reason: null, is_target: true },
+      { ...base, release_no: 7, status: "active", is_target: false },
+    ],
+  };
+}
+
 function setup(page: ReactElement = <AppOverviewPage />): void {
   appCalls = 0;
   stubFetch(route);
@@ -144,6 +161,52 @@ describe("AppView", () => {
     expect(
       screen.queryByRole("heading", { level: 2, name: "Overview" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the deploy under way on a freshly loaded page, with its steps and the way to the logs", async () => {
+    appAnswer = () => jsonResponse(200, deployingApp("building"));
+    setup();
+    expect(await screen.findByText("Deploying release 9")).toBeInTheDocument();
+    const steps = screen.getByRole("list", { name: "Steps of the deploy" });
+    expect(
+      within(steps)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "● Pending, done",
+      "◐ Building, in progress",
+      "○ Starting, not yet",
+      "○ Healthy, not yet",
+      "○ Active, not yet",
+    ]);
+    expect(
+      within(steps).getByRole("listitem", { current: "step" }),
+    ).toHaveTextContent("Building");
+    expect(screen.getByText(/Release 7 keeps serving/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Read the logs" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/app/logs"),
+    );
+  });
+
+  it("keeps showing the deploy on the other sections, without a link to the section on screen", async () => {
+    appAnswer = () => jsonResponse(200, deployingApp("starting"));
+    pathname = "/app/deployments/";
+    setup(<AppDeploymentsPage />);
+    expect(await screen.findByText("Deploying release 9")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "See the release" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Read the logs" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no deploy banner when no release is being built or started", async () => {
+    appAnswer = () => jsonResponse(200, readExample("AppDetail"));
+    setup();
+    await screen.findByRole("heading", { level: 1, name: "Sales dashboard" });
+    expect(screen.queryByText(/Deploying release/)).not.toBeInTheDocument();
   });
 
   it("explains a 403 as a page for admins, without an error banner", async () => {

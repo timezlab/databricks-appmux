@@ -2,7 +2,7 @@
 
 A small **Model Context Protocol (MCP) server** on Starlette, with four tools. It is the example
 for an app that other apps and agents call, and the target the [a2a-agent](../a2a-agent/README.md)
-example uses. The general walkthrough (upload, register, Update, roll back, config, share, and what
+example uses. The general walkthrough (upload, register, Deploy, roll back, config, share, and what
 an end user checks) is in [../README.md](../README.md#admin-walkthrough-in-order); this file holds
 what is specific to this app. Which calls between Apps work, and what each failure looks like, is in
 [docs/reference/mcp-and-a2a.md](../../docs/reference/mcp-and-a2a.md).
@@ -95,7 +95,7 @@ databricks workspace import-dir examples/mcp-tools \
 
 Then **Platform** > **Register an app**: Slug `tools`, Display name `Tools (MCP)`, Source folder
 `/Workspace/Users/<your-email>/appmux-examples/mcp-tools`, Memory budget (MB) `128`, Owner
-`<your-email>`; then open the app and press **Update**. Its MCP endpoint is
+`<your-email>`; then open the app and press **Deploy**. Its MCP endpoint is
 `https://<your-appmux-url>/tools/mcp`.
 
 To run it as a **standalone** Databricks App instead (the other half of the comparison), create an
@@ -129,8 +129,8 @@ grant appmux answers `404`.
 
 ## As an admin, try
 
-1. **Update** with the folder unchanged: "already up to date", no new release.
-2. Set `VERSION = "2.0.0"`, `import-dir` again and **Update**. The page shows the new version.
+1. **Deploy** with the folder unchanged: "nothing to deploy", no new release.
+2. Set `VERSION = "2.0.0"`, `import-dir` again and **Deploy**. The page shows the new version.
 3. Call `whoami` as yourself (above): `x_forwarded_email` is your email, `x_forwarded_prefix` is
    `/tools`, and `access_token_header_present` is `false` (the token is stripped unless OBO is
    delegated).

@@ -209,7 +209,7 @@ class PackageStep:
         except ContentStoreError as exc:
             raise BuildFailed(
                 f"a wheel of this release could not be read from the content store ({exc}); "
-                "add the wheel again and Update"
+                "add the wheel again and Deploy"
             ) from exc
         except OSError as exc:
             raise BuildFailed(
@@ -232,7 +232,7 @@ def _read_requirements(release_dir: Path) -> str | None:
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise BuildFailed(
-            f"{REQUIREMENTS_FILE} is not UTF-8 text; save it as UTF-8 and Update"
+            f"{REQUIREMENTS_FILE} is not UTF-8 text; save it as UTF-8 and Deploy"
         ) from exc
 
 

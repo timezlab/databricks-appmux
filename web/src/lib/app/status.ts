@@ -7,7 +7,6 @@ import type { AppDetail, ReleaseSummary } from "@/lib/api";
 import { isReleaseInProgress } from "./actions";
 import type { AppSection } from "./params";
 import { pluralize } from "@/lib/format";
-import { releaseStatusPresentation } from "@/lib/status-presentation";
 import type { Tone } from "@/lib/status-presentation";
 
 // ---------------------------------------------------------------- releases
@@ -175,25 +174,8 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
     });
   }
 
-  const inProgress = inProgressRelease(app);
-  if (inProgress !== null) {
-    const status = releaseStatusPresentation(inProgress.status).label;
-    notices.push({
-      id: "in-progress",
-      tone: "info",
-      title: `Release ${inProgress.release_no} is ${status.toLowerCase()}`,
-      detail:
-        active === null
-          ? "The route opens once its health check passes."
-          : `Release ${active.release_no} keeps serving until the new release is healthy.`,
-      action: {
-        kind: "section",
-        section: "deployments",
-        label: "Follow it in Deployments",
-      },
-      releaseNo: inProgress.release_no,
-    });
-  }
+  // A Deploy under way is not a notice: nothing is asked of the person. Every section of the app
+  // shows it as the deploy banner (`deployProgress`), which a reload brings back.
 
   if (app.releases.length === 0) {
     notices.push({
@@ -201,7 +183,7 @@ export function statusNotices(app: AppDetail): StatusNotice[] {
       tone: "info",
       title: "There is no release yet",
       detail:
-        "Press Update to fetch the source folder and build the first release.",
+        "Press Deploy to fetch the source folder and build the first release.",
       action: { kind: "control", control: "update" },
       releaseNo: null,
     });

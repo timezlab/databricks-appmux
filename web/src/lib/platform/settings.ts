@@ -71,12 +71,12 @@ export const SETTING_DESCRIPTORS: Record<SettingKey, SettingDescriptor> = {
   ),
   default_wheel_sources: describe(
     "default_wheel_sources",
-    "Folders every Update also reads wheel files from. One folder per line.",
+    "Folders every Deploy also reads wheel files from. One folder per line.",
     { kind: "list" },
   ),
   shared_sp_delegation_allowed: describe(
     "shared_sp_delegation_allowed",
-    "Master switch. When off, no app is lent the appmux service principal's token and no request for it is accepted.",
+    "Master switch. When off, no app is given the appmux service principal's client ID and secret and no request for it is accepted.",
     { kind: "boolean" },
   ),
   max_releases_per_app: describe(
@@ -311,7 +311,7 @@ export function settingSaveWarning(
   value: unknown,
 ): string | null {
   if (key === "shared_sp_delegation_allowed" && value === true) {
-    return "Turning this on lets you lend the appmux service principal's token to apps. An app that has it can use everything that service principal can reach.";
+    return "Turning this on lets you give the appmux service principal's client ID and secret to apps. An app that has them can use everything that service principal can reach, for as long as its secret stays valid.";
   }
   return null;
 }

@@ -695,6 +695,8 @@ class ReleaseCreated(_Body):
 class ReleaseUnchanged(_Body):
     status: Literal["up_to_date"]
     release_no: int
+    # True when the app was stopped and this Deploy asked it to run (same effect as Start).
+    started: bool
 
 
 class SourceFileEntry(_Body):

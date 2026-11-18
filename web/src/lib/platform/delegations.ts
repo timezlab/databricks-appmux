@@ -5,7 +5,9 @@
  *
  * Granting is a review gate, so it carries a reason. Revoking carries one too,
  * recorded in the audit log. A shared-SP grant is possible only while the
- * `shared_sp_delegation_allowed` setting is on; a revoke never is blocked.
+ * `shared_sp_delegation_allowed` setting is on; a revoke never is blocked. Both
+ * reach a running app only at its next start, because its environment is
+ * built when it starts.
  */
 import { DelegationReasonRequest } from "@/lib/api/schemas";
 import type { DelegationKind, PlatformApp } from "@/lib/api/schemas";
@@ -33,11 +35,11 @@ export const DELEGATION_INFO: Record<DelegationKind, DelegationInfo> = {
   shared_sp: {
     label: "Shared service principal",
     receives:
-      "A short-lived token of the appmux service principal, in a file in the app's run directory.",
+      "The client ID and client secret of the appmux service principal, as DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET: the same pair an app deployed on its own gets.",
     grantEffect:
-      "The app can use everything the appmux service principal can reach, including every secret scope it can read.",
+      "From its next start the app can use everything the appmux service principal can reach, including every secret scope it can read, for as long as that secret stays valid.",
     revokeEffect:
-      "A token already lent expires within its hour; the app's resources stay and are flagged on its page.",
+      "The app no longer gets the pair at its next start. A copy it already holds keeps working until the service principal's secret changes.",
   },
 };
 

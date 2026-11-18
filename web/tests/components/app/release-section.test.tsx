@@ -121,7 +121,7 @@ describe("ReleaseSection", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Deployments" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Deploy" })).toBeEnabled();
     const table = screen.getByRole("table", {
       name: "Releases of this app, newest first",
     });

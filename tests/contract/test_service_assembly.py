@@ -61,7 +61,6 @@ from appmux.packages.wheels import WheelStore
 from appmux.reconciler.admission import OVERHEAD_PER_CHILD_MB
 from appmux.reconciler.build import StoreReleaseBuilder
 from appmux.reconciler.child_env import EnvironmentRefused
-from appmux.reconciler.children import ChildStartError
 from appmux.reconciler.route_table import RouteTable
 from appmux.reconciler.sandbox_adapter import MEMORY_STOP_GRACE_S, SandboxRunningChild
 from appmux.registry.client import RegistryClient
@@ -71,13 +70,13 @@ from appmux.sandbox.launcher import LAUNCH_SOCKET_NAME, SandboxExit
 from appmux.sandbox.rootfs import TMP_PATH
 from appmux.sandbox.watchdog import RSS_HEADROOM_FACTOR
 from appmux.secrets.resolver import MissingResourceKeys, SecretUnreadable, UnreadableSecret
-from appmux.secrets.shared_sp_token import TOKEN_COMMAND_PATH
 from appmux.settings import EnvironmentSettings, PlatformSettings
 from appmux.upstream.client import UpstreamClient
 
 pytestmark = pytest.mark.anyio
 
 CLIENT_ID: Final = "client-id-placeholder"
+CLIENT_SECRET: Final = "secret-placeholder-for-tests"  # noqa: S105 - an obviously fake placeholder
 STORE_FOLDER: Final = f"/Workspace/Users/{CLIENT_ID}/appmux-store"
 SYNC_TOKEN: Final = "sync-token-placeholder"  # noqa: S105 - an obviously fake placeholder
 STOP_BUDGET_S: Final = 4.0
@@ -89,7 +88,7 @@ def environment(**overrides: str) -> EnvironmentSettings:
         {
             "DATABRICKS_HOST": "workspace.example.invalid",
             "DATABRICKS_CLIENT_ID": CLIENT_ID,
-            "DATABRICKS_CLIENT_SECRET": "secret-placeholder-for-tests",
+            "DATABRICKS_CLIENT_SECRET": CLIENT_SECRET,
             "DATABRICKS_APP_PORT": "8123",
             "DATABRICKS_WORKSPACE_ID": "1234567890",
             "DATABRICKS_APP_URL": "https://appmux.example.invalid/",
@@ -1370,28 +1369,17 @@ async def test_the_work_directories_are_short_enough_for_a_unix_socket() -> None
     assert len(str(longest).encode()) <= 107
 
 
-# --- the Databricks credential of a child, and the files the shared one needs -------------------
+# --- the Databricks credential of a child -------------------------------------------------------
 
-MINTED_TOKEN: Final = "tok-assembly-test-value"  # noqa: S105 - an obviously fake placeholder
 OWN_SP_ID: Final = "own-sp-client-id-placeholder"
 OWN_SP_SECRET: Final = "own-sp-client-secret-placeholder"  # noqa: S105 - a fake placeholder
 
 
-class MintingWorkspace(Workspace):
-    """A workspace that mints a token (or refuses) and holds an own service principal's secrets."""
-
-    def __init__(self, *, mint_status: int = 200) -> None:
-        self.mint_status = mint_status
-        super().__init__()
+class OwnSpWorkspace(Workspace):
+    """A workspace that holds an own service principal's secrets."""
 
     def _answer(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        if request.url.path == "/oidc/v1/token":
-            if self.mint_status != 200:
-                return httpx.Response(self.mint_status, json={"error": "invalid_client"})
-            return httpx.Response(
-                200, json={"access_token": MINTED_TOKEN, "token_type": "Bearer", "expires_in": 3600}
-            )
         if request.url.path == "/api/2.0/secrets/get":
             value = {"id-key": OWN_SP_ID, "secret-key": OWN_SP_SECRET}[request.url.params["key"]]
             return httpx.Response(200, json={"value": base64.b64encode(value.encode()).decode()})
@@ -1456,42 +1444,41 @@ def sales_release() -> Release:
     )
 
 
-async def test_a_child_delegated_the_shared_service_principal_is_told_to_ask_the_token_command(
+async def test_a_child_delegated_the_shared_service_principal_gets_the_pair_appmux_runs_as(
     tmp_path: Path,
 ) -> None:
     registry = registry_with_credentials(shared_sp=True)
-    workspace = MintingWorkspace()
-    service = make_service(tmp_path, registry=registry, workspace=workspace)
+    service = make_service(tmp_path, registry=registry, workspace=OwnSpWorkspace())
     await service.start_children(registry)
     (reconciler,) = RecordingReconciler.instances
 
     environment_of_child = await reconciler.kwargs["environments"].environment_for(sales_release())
 
-    assert environment_of_child["DATABRICKS_AUTH_TYPE"] == "databricks-cli"
-    assert environment_of_child["DATABRICKS_CLI_PATH"] == TOKEN_COMMAND_PATH
-    assert "DATABRICKS_TOKEN" not in environment_of_child
-    assert MINTED_TOKEN not in environment_of_child.values()
+    assert environment_of_child["DATABRICKS_CLIENT_ID"] == CLIENT_ID
+    assert environment_of_child["DATABRICKS_CLIENT_SECRET"] == CLIENT_SECRET
+    assert not [
+        name
+        for name in ("DATABRICKS_AUTH_TYPE", "DATABRICKS_CLI_PATH", "DATABRICKS_TOKEN")
+        if name in environment_of_child
+    ]
 
 
-async def test_a_token_that_databricks_refuses_to_mint_refuses_the_release_with_what_to_do(
+async def test_a_shared_delegation_gives_the_child_no_files_and_no_background_work(
     tmp_path: Path,
 ) -> None:
     registry = registry_with_credentials(shared_sp=True)
-    service = make_service(tmp_path, registry=registry, workspace=MintingWorkspace(mint_status=401))
+    service = make_service(tmp_path, registry=registry, workspace=OwnSpWorkspace())
     await service.start_children(registry)
     (reconciler,) = RecordingReconciler.instances
 
-    with pytest.raises(EnvironmentRefused, match="refused") as refusal:
-        await reconciler.kwargs["environments"].environment_for(sales_release())
-
-    assert MINTED_TOKEN not in str(refusal.value)
+    assert reconciler.kwargs["launcher"]._run_dir_files is None
 
 
 async def test_a_child_with_its_own_service_principal_gets_the_three_standard_variables(
     tmp_path: Path,
 ) -> None:
     registry = registry_with_credentials(own_sp=True)
-    service = make_service(tmp_path, registry=registry, workspace=MintingWorkspace())
+    service = make_service(tmp_path, registry=registry, workspace=OwnSpWorkspace())
     await service.start_children(registry)
     (reconciler,) = RecordingReconciler.instances
 
@@ -1499,14 +1486,14 @@ async def test_a_child_with_its_own_service_principal_gets_the_three_standard_va
 
     assert environment_of_child["DATABRICKS_CLIENT_ID"] == OWN_SP_ID
     assert environment_of_child["DATABRICKS_CLIENT_SECRET"] == OWN_SP_SECRET
-    assert "DATABRICKS_CLI_PATH" not in environment_of_child
+    assert "DATABRICKS_AUTH_TYPE" not in environment_of_child
 
 
 async def test_a_child_with_nothing_delegated_gets_no_databricks_credential(
     tmp_path: Path,
 ) -> None:
     registry = registry_with_credentials()
-    service = make_service(tmp_path, registry=registry, workspace=MintingWorkspace())
+    service = make_service(tmp_path, registry=registry, workspace=OwnSpWorkspace())
     await service.start_children(registry)
     (reconciler,) = RecordingReconciler.instances
 
@@ -1514,61 +1501,6 @@ async def test_a_child_with_nothing_delegated_gets_no_databricks_credential(
 
     assert not [name for name in environment_of_child if name.startswith("DATABRICKS_CLI")]
     assert "DATABRICKS_CLIENT_SECRET" not in environment_of_child
-
-
-async def test_a_child_that_asks_the_token_command_finds_a_token_in_its_run_directory(
-    tmp_path: Path,
-) -> None:
-    registry = registry_with_credentials(shared_sp=True)
-    service = make_service(tmp_path, registry=registry, workspace=MintingWorkspace())
-    await service.start_children(registry)
-    (reconciler,) = RecordingReconciler.instances
-    environment_of_child = await reconciler.kwargs["environments"].environment_for(sales_release())
-    files = reconciler.kwargs["launcher"]._run_dir_files
-    run_dir = tmp_path / "child-run"
-    run_dir.mkdir()
-
-    assert files.needed_by(environment_of_child)
-    keeper = await files.attach(run_dir)
-    try:
-        token_file = json.loads((run_dir / "shared-sp-token.json").read_text())
-    finally:
-        await keeper.stop()
-
-    assert token_file["access_token"] == MINTED_TOKEN
-
-
-async def test_a_child_whose_token_cannot_be_minted_at_start_does_not_start(
-    tmp_path: Path,
-) -> None:
-    registry = registry_with_credentials(shared_sp=True)
-    workspace = MintingWorkspace()
-    service = make_service(tmp_path, registry=registry, workspace=workspace)
-    await service.start_children(registry)
-    (reconciler,) = RecordingReconciler.instances
-    files = reconciler.kwargs["launcher"]._run_dir_files
-    run_dir = tmp_path / "child-run"
-    run_dir.mkdir()
-    workspace.mint_status = 401
-
-    with pytest.raises(ChildStartError, match="refused") as failure:
-        await files.attach(run_dir)
-
-    assert MINTED_TOKEN not in str(failure.value)
-    assert not (run_dir / "shared-sp-token.json").exists()
-
-
-async def test_an_app_without_the_shared_service_principal_needs_no_token_files(
-    tmp_path: Path,
-) -> None:
-    registry = registry_with_credentials()
-    service = make_service(tmp_path, registry=registry, workspace=MintingWorkspace())
-    await service.start_children(registry)
-    (reconciler,) = RecordingReconciler.instances
-    environment_of_child = await reconciler.kwargs["environments"].environment_for(sales_release())
-    files = reconciler.kwargs["launcher"]._run_dir_files
-
-    assert not files.needed_by(environment_of_child)
 
 
 # --- the egress lists reach the running sandboxes (T066, TD-016) ---------------------------------

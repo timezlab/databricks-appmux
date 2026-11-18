@@ -73,7 +73,7 @@ databricks workspace import-dir examples/streamlit-inspector \
 
 Then **Platform** > **Register an app**: Slug `inspector`, Display name `Inspector (Streamlit)`,
 Source folder `/Workspace/Users/<your-email>/appmux-examples/streamlit-inspector`, Memory budget
-(MB) `512`, Owner `<your-email>`; then open the app and press **Update**.
+(MB) `512`, Owner `<your-email>`; then open the app and press **Deploy**.
 
 The memory suggestion comes from a local run: 562 MB virtual and 47 MB resident at peak after one
 browser session, and it started under an address-space limit of 2 x 256 MB (peak 498 MB, so 256 MB
@@ -82,9 +82,9 @@ an app loads. Not measured in the container.
 
 ## As an admin, try
 
-1. **Update** with the folder unchanged: "already up to date", no new release.
+1. **Deploy** with the folder unchanged: "nothing to deploy", no new release.
 2. Open the app in a browser tab, click **Click** a few times, then set `VERSION = "2.0.0"`,
-   `import-dir` again and **Update**. The open tab's WebSocket belongs to the old process, which
+   `import-dir` again and **Deploy**. The open tab's WebSocket belongs to the old process, which
    drains: reload to reach the new one. The page shows `2.0.0` and `sessions_since_start` is `1`.
 3. **Activate** release 1: `1.0.0` again.
 4. Override `APP_GREETING` with the config call in the
@@ -105,5 +105,5 @@ an app loads. Not measured in the container.
 - Open the app in a second tab: `sessions_since_start` rises by one and the click counter starts at 0.
 - The access-token header reads **absent**, unless the admin delegated OBO and opened the app **as a
   user** ([../README.md](../README.md#obo-optional)).
-- After an **Update**, **Activate** or **Restart** by the admin, a reload shows a fresh
+- After a **Deploy**, **Activate** or **Restart** by the admin, a reload shows a fresh
   `sessions_since_start`.

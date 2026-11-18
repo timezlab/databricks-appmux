@@ -2,7 +2,7 @@
 
 A Node app on Node's own `http` module, with **no dependency**: one HTML page, one script, a JSON
 endpoint and a Server-Sent Events stream. It is the example for the Node runtime and for a response
-that stays open. The general walkthrough (upload, register, Update, roll back, config, share, and
+that stays open. The general walkthrough (upload, register, Deploy, roll back, config, share, and
 what an end user checks) is in [../README.md](../README.md#admin-walkthrough-in-order); this file
 holds what is specific to this app.
 
@@ -17,7 +17,7 @@ holds what is specific to this app.
 - **A response that stays open**: the **Start a 15 second stream** button opens `events`, which sends
   one Server-Sent Event per second for 15 seconds and then `event: done`. The other apps answer and
   finish; this one holds the connection. Streams started since the process began are counted in
-  memory, so an Update, an Activate, a config change or a Restart resets the count.
+  memory, so a Deploy, an Activate, a config change or a Restart resets the count.
 - **Relative URLs under a prefix**: the page loads `app.js` and opens `events` without a leading
   `/`, so both resolve under `/<slug>/`. appmux never rewrites a response body, so a link like
   `/app.js` would leave the app.
@@ -89,23 +89,23 @@ databricks workspace import-dir examples/node-stream \
 
 Then **Platform** > **Register an app**: Slug `stream`, Display name `Stream (Node)`, Source folder
 `/Workspace/Users/<your-email>/appmux-examples/node-stream`, Memory budget (MB) `768`, Owner
-`<your-email>`; then open the app and press **Update**.
+`<your-email>`; then open the app and press **Deploy**.
 
 ## As an admin, try
 
-1. **Update** with the folder unchanged: "already up to date", no new release.
-2. Set `VERSION = '2.0.0'`, `import-dir` again and **Update**. Reload: the version moves and the
+1. **Deploy** with the folder unchanged: "nothing to deploy", no new release.
+2. Set `VERSION = '2.0.0'`, `import-dir` again and **Deploy**. Reload: the version moves and the
    stream count is back to 0 (a new process).
 3. **Activate** release 1: version `1.0.0` again.
 4. Override `APP_GREETING` with the config call in the
    [main walkthrough](../README.md#admin-walkthrough-in-order) (step 7): same version, new greeting,
    a new release number.
-5. Start the stream and press **Update** (or **Restart**) while it runs. The design says the old
+5. Start the stream and press **Deploy** (or **Restart**) while it runs. The design says the old
    release drains and the new one takes over. What happens to a stream that is open at that moment
    is **not observed**: look at it and write down what you see.
-6. Register the app with a Memory budget of `512` and press **Update**. The release should fail to
+6. Register the app with a Memory budget of `512` and press **Deploy**. The release should fail to
    start; the reason shown for it is the thing to read. (Not run in the container.) Then raise the
-   budget to `768` as a platform admin and Update again.
+   budget to `768` as a platform admin and Deploy again.
 
 ## As an end user, check that
 

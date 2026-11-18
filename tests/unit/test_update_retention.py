@@ -331,7 +331,7 @@ async def test_a_clean_up_that_keeps_losing_asks_the_person_to_press_again() -> 
         await flow.press()
 
     assert refusal.value.kind == "conflict"
-    assert "press Update again" in refusal.value.message
+    assert "press Deploy again" in refusal.value.message
     assert flow.release(1).deleted_at is None
 
 

@@ -10,7 +10,10 @@ import { requestKindLabel } from "./requests";
 
 export function updateOutcomeMessage(outcome: ReleaseOutcome): string {
   if (outcome.status === "up_to_date") {
-    return `Already up to date: the source folder has the same files as release ${outcome.release_no}, so no new release was created.`;
+    const same = `Nothing to deploy: the source folder has the same files as release ${outcome.release_no}`;
+    return outcome.started
+      ? `${same}. The app was stopped, so it is starting that release now. The route opens once its health check passes.`
+      : `${same}, so no new release was created.`;
   }
   return `Release ${outcome.release_no} was created and is being built. The current release keeps serving until it is healthy.`;
 }

@@ -96,7 +96,7 @@ function ReleaseName({ release }: { release: ReleaseSummary }) {
 }
 
 /**
- * The Deployments section: the releases with a row menu each, Update, and the
+ * The Deployments section: the releases with a row menu each, Deploy, and the
  * panels a menu choice opens under the table (edit, delete question, source).
  * A failed release explains itself on its row; the one the app was moving to
  * opens with its output.
@@ -120,7 +120,7 @@ export function ReleaseSection({
   const source = useSourceViewer(app.slug, releaseNos);
   const update = appActionAvailability("update", app, actor);
   const updateReasons = unavailableReasons([
-    { label: "Update", availability: update },
+    { label: "Deploy", availability: update },
   ]);
 
   // A poll can delete the release a panel is open on; the panel goes with it.
@@ -298,7 +298,7 @@ export function ReleaseSection({
           rowKey={(release) => String(release.release_no)}
           empty={
             <EmptyState title="No releases yet">
-              Press Update to fetch the source folder and build the first
+              Press Deploy to fetch the source folder and build the first
               release.
             </EmptyState>
           }

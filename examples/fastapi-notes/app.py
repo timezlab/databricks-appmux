@@ -9,7 +9,7 @@ What it shows
     The page at ``/`` and ``GET /api/whoami`` report who is calling (the identity headers the proxy
     or appmux forwards), which release is running (``VERSION`` below and ``APP_GREETING`` from the
     environment), when this process started, and which prefix the app is served under. The notes
-    are kept in memory, so they vanish when the process is replaced: an Update, a rollback, a
+    are kept in memory, so they vanish when the process is replaced: a Deploy, a rollback, a
     config change or a restart each start a new process.
 
 HTTP paths

@@ -87,7 +87,7 @@ def _require_something_to_run(snapshot: RegistrySnapshot, config: AppConfig) -> 
     )
     if not (has_active or has_target):
         raise Conflict(
-            "this app has no release that can run yet; press Update, or activate a release, "
+            "this app has no release that can run yet; press Deploy, or activate a release, "
             "then try again",
             code="no_release",
         )

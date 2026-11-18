@@ -214,7 +214,7 @@ async def test_a_session_that_ends_mid_snapshot_says_to_press_update_again(
     workspace.expire_after_calls = calls_before_expiry
     with pytest.raises(SnapshotRefused) as caught:
         await archive_of(workspace, tmp_path)
-    assert str(caught.value) == "session expired during the snapshot; press Update again"
+    assert str(caught.value) == "session expired during the snapshot; press Deploy again"
     assert str(caught.value) == SESSION_EXPIRED_REASON
 
 

@@ -15,7 +15,7 @@ What it shows
     * the cookie: Flask writes ``Path=/``; appmux forces ``Path=/<slug>/`` and drops ``Domain``;
     * the redirect: ``POST /nickname`` answers ``Location: /``; appmux makes it ``/<slug>/``.
 
-    The signing key is random per process, so every Update, rollback, config change or restart
+    The signing key is random per process, so every Deploy, rollback, config change or restart
     ends all sessions: the visit count and the nickname reset.
 
 HTTP paths

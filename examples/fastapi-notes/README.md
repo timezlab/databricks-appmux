@@ -1,7 +1,7 @@
 # fastapi-notes
 
 A FastAPI app on uvicorn: an async JSON API plus one HTML page. It is the baseline example, and the
-one to register first. The general walkthrough (upload, register, Update, roll back, config, share,
+one to register first. The general walkthrough (upload, register, Deploy, roll back, config, share,
 and what an end user checks) is in [../README.md](../README.md#admin-walkthrough-in-order); this file
 holds what is specific to this app.
 
@@ -13,7 +13,7 @@ holds what is specific to this app.
   `anonymous`.
 - **Release and config**: `VERSION` in `app.py` (`1.0.0`) and the `APP_GREETING` variable
   (`app.yaml` sets `Hello from fastapi-notes`; the release config can override it).
-- **State that dies with the process**: `POST /api/notes` stores notes in memory, so an Update, an
+- **State that dies with the process**: `POST /api/notes` stores notes in memory, so a Deploy, an
   Activate, a config change or a Restart empties them. Notes show the author's email.
 - **The prefix**: `X-Forwarded-Prefix` and `APPMUX_BASE_PATH` are shown, and `/openapi.json` carries
   the prefix in its `servers` entry because appmux sets `UVICORN_ROOT_PATH`.
@@ -67,23 +67,23 @@ databricks workspace import-dir examples/fastapi-notes \
 
 Then **Platform** > **Register an app**: Slug `notes`, Display name `Notes (FastAPI)`, Source folder
 `/Workspace/Users/<your-email>/appmux-examples/fastapi-notes`, Memory budget (MB) `128`, Owner
-`<your-email>`; then open the app and press **Update**.
+`<your-email>`; then open the app and press **Deploy**.
 
 The memory suggestion comes from a local run: 53 MB virtual and 41 MB resident at peak, and it
 started under an address-space limit of 2 x 64 MB. Not measured in the container.
 
 ## As an admin, try
 
-1. **Update** with the folder unchanged: "already up to date", no new release.
-2. Add a note, then set `VERSION = "2.0.0"`, `import-dir` again and **Update**. Reload: the version
+1. **Deploy** with the folder unchanged: "nothing to deploy", no new release.
+2. Add a note, then set `VERSION = "2.0.0"`, `import-dir` again and **Deploy**. Reload: the version
    moves and the notes are gone (a new process).
 3. **Activate** release 1: version `1.0.0` again.
 4. Override `APP_GREETING` with the config call in the
    [main walkthrough](../README.md#admin-walkthrough-in-order) (step 7): same version, new greeting,
    a new release number.
 5. Break it on purpose: change `app.yaml`'s command to `["python", "-m", "uvicorn", "nope:app"]`,
-   **Update**. The release should fail its health check and the running release should keep serving.
-   (Not run.) Put it back and Update again.
+   **Deploy**. The release should fail its health check and the running release should keep serving.
+   (Not run.) Put it back and Deploy again.
 
 ## As an end user, check that
 

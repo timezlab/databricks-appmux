@@ -109,7 +109,7 @@ const APP_STATE: Record<AppState, StatusPresentation> = {
   no_release: presentation(
     "No release",
     "warning",
-    "No release is serving, so the route is closed. Update to fetch one, or activate a release by hand.",
+    "No release is serving, so the route is closed. Deploy to fetch one, or activate a release by hand.",
   ),
 };
 

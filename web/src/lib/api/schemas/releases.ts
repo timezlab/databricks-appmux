@@ -79,6 +79,8 @@ export type ReleaseCreated = z.infer<typeof ReleaseCreated>;
 export const ReleaseUnchanged = z.object({
   status: z.literal("up_to_date"),
   release_no: z.int(),
+  /** The app was stopped and this call asked it to run, as Start does. */
+  started: z.boolean(),
 });
 
 export type ReleaseUnchanged = z.infer<typeof ReleaseUnchanged>;

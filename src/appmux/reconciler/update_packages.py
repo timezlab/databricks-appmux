@@ -17,7 +17,7 @@ list, so this module does it at Update time (design 5.3, "Wheels: declared per c
   message (design 5.3: "the Update fails and lists every requirement it could not resolve at once",
   ADR 0007: "a package with no wheel blocks the Update"). Nothing is written, so a refused Update
   also deletes no release to make room. A failure that may pass (the session ended, the workspace
-  or the content store did not answer) is ``unavailable``: press Update again.
+  or the content store did not answer) is ``unavailable``: press Deploy again.
 
 The result is a ``PackagePlan``: the wheels to record, and lines for the release page. The lines go
 in ``detected.warnings`` prefixed ``packages:`` (the one free-text list a release shows): the
@@ -68,7 +68,7 @@ OWN_WHEELS_LABEL: Final = "wheels/"
 _OWN_WHEELS_FOLDER: Final = PurePosixPath("wheels")
 DEFAULT_WHEEL_SOURCES_KEY: Final = "default_wheel_sources"
 SESSION_EXPIRED_WHILE_READING_WHEELS: Final = (
-    "session expired while the wheels were read; press Update again"
+    "session expired while the wheels were read; press Deploy again"
 )
 _WORK_FOLDER_NAME: Final = "wheel-work"
 _NOTE_PREFIX: Final = "packages: "
@@ -173,7 +173,7 @@ class UpdatePackages:
         except tarfile.TarError as exc:
             raise UpdateRefused(
                 "unavailable",
-                f"the stored snapshot's {REQUIREMENTS_FILE} could not be read; press Update again",
+                f"the stored snapshot's {REQUIREMENTS_FILE} could not be read; press Deploy again",
             ) from exc
         if requirements is None:
             return None
@@ -275,7 +275,7 @@ def _read_requirements(archive_path: Path) -> str | None:
         return data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise UpdateRefused(
-            "refused", f"{REQUIREMENTS_FILE} is not UTF-8 text; save it as UTF-8 and Update"
+            "refused", f"{REQUIREMENTS_FILE} is not UTF-8 text; save it as UTF-8 and Deploy"
         ) from exc
 
 
@@ -336,7 +336,7 @@ def _unresolved_message(resolution: Resolution) -> str:
     noun = "requirement" if count == 1 else "requirements"
     return (
         f"{count} {noun} cannot be installed: {'; '.join(resolution.unresolved)}; "
-        f"fix {REQUIREMENTS_FILE} or add the wheels, then press Update again"
+        f"fix {REQUIREMENTS_FILE} or add the wheels, then press Deploy again"
     )
 
 

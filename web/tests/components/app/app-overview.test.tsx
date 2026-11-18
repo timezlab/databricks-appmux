@@ -83,11 +83,11 @@ beforeEach(() => {
 });
 
 describe("AppOverview", () => {
-  it("offers Start, Stop, Restart and Update in one row, and says why a button is off", () => {
+  it("offers Start, Stop, Restart and Deploy in one row, and says why a button is off", () => {
     setup();
     const row = controls();
     expect(within(row).getByRole("button", { name: "Start" })).toBeDisabled();
-    for (const name of ["Stop", "Restart", "Update"]) {
+    for (const name of ["Stop", "Restart", "Deploy"]) {
       expect(within(row).getByRole("button", { name })).toBeEnabled();
     }
     expect(
@@ -104,7 +104,7 @@ describe("AppOverview", () => {
     }
     expect(
       screen.getByText(
-        `Start, Stop, Restart and Update: ${REASON_NOT_MANAGER}`,
+        `Start, Stop, Restart and Deploy: ${REASON_NOT_MANAGER}`,
       ),
     ).toBeInTheDocument();
   });

@@ -276,7 +276,7 @@ async def test_a_requirement_the_environment_no_longer_meets_fails_the_release_b
 
     assert failure.value.reason == (
         "the environment no longer provides 'uvicorn==0.30.6' (it has 0.31.0); "
-        "add a wheel and Update"
+        "add a wheel and Deploy"
     )
     assert fixture.overlays.calls == []
 
@@ -394,7 +394,7 @@ async def test_a_wheel_the_content_store_lost_fails_the_release_and_says_what_to
         await fixture.builder.build(release(wheels=[(ALPHA_SHA, ALPHA_FILE)]))
 
     assert "not in the content store" in failure.value.reason
-    assert "Update" in failure.value.reason
+    assert "Deploy" in failure.value.reason
 
 
 async def test_a_disk_error_while_building_fails_the_release_with_what_to_check(

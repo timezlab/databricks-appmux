@@ -112,8 +112,17 @@ describe("closed lists", () => {
 
     accepts(api.ReleaseCreated, { release_no: 1, status: "pending" });
     rejects(api.ReleaseCreated, { release_no: 1, status: "active" });
-    accepts(api.ReleaseUnchanged, { release_no: 1, status: "up_to_date" });
-    rejects(api.ReleaseUnchanged, { release_no: 1, status: "pending" });
+    accepts(api.ReleaseUnchanged, {
+      release_no: 1,
+      status: "up_to_date",
+      started: false,
+    });
+    rejects(api.ReleaseUnchanged, {
+      release_no: 1,
+      status: "pending",
+      started: false,
+    });
+    rejects(api.ReleaseUnchanged, { release_no: 1, status: "up_to_date" });
 
     for (const action of ["allow", "deny"]) {
       accepts(api.EgressRule, { ...rule(), action }, action);

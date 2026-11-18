@@ -122,7 +122,7 @@ async def test_the_release_route_is_served_when_an_updater_is_given() -> None:
     reply = await call(app, "POST", f"{MOUNT}/apps/sales/releases", email=ALICE)
 
     assert reply.status == 200
-    assert reply.json() == {"status": "up_to_date", "release_no": 1}
+    assert reply.json() == {"status": "up_to_date", "release_no": 1, "started": False}
 
 
 async def test_a_new_release_tells_the_reconciler_which_app_to_look_at() -> None:

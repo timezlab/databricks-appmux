@@ -170,8 +170,8 @@ class UpdateService:
                 return UpdateResult(release_no=release_no, is_up_to_date=False)
         raise UpdateRefused(
             "conflict",
-            f"'{app_slug}' was changed by someone else while this Update was saved; "
-            "press Update again",
+            f"'{app_slug}' was changed by someone else while this Deploy was saved; "
+            "press Deploy again",
         )
 
     async def _packages_of(self, archive: Path, user_token: SecretStr) -> PackageSession | None:
@@ -254,7 +254,7 @@ class UpdateService:
         except tarfile.TarError as exc:
             raise UpdateRefused(
                 "unavailable",
-                f"the stored snapshot {digest} is not a readable archive; press Update again",
+                f"the stored snapshot {digest} is not a readable archive; press Deploy again",
             ) from exc
 
 

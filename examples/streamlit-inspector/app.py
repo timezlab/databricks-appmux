@@ -12,7 +12,7 @@ What it shows
     ``APP_GREETING`` from the environment), when this process started and how many sessions it has
     served. A button and a text box show that a session stays connected: the click count and the
     text live in the session, so they survive a rerun and reset on a reload. The session count
-    resets when the process is replaced (an Update, a rollback, a config change or a restart).
+    resets when the process is replaced (a Deploy, a rollback, a config change or a restart).
 
 Health check
     ``GET /`` answers 200 with Streamlit's static shell (appmux's default health path) and

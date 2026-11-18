@@ -11,7 +11,7 @@ import { callEmpty, callJson } from "./client";
 import type { RequestOptions } from "./client";
 
 /**
- * Starts an Update. `status` tells the two answers apart: `pending` (`202`, a
+ * Starts a Deploy (the Update flow, `POST /releases`). `status` tells the two answers apart: `pending` (`202`, a
  * release was created; read `getRelease` for progress) or `up_to_date` (`200`,
  * the folder equals a live release and nothing was created).
  */

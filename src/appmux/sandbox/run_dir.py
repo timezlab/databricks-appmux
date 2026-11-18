@@ -28,7 +28,8 @@ Measured in a container (dev App, 2026-11-05, ``tests/integration/test_run_dir_c
   the host's disk), which is what keeps TD-004 open.
 
 Not run in a container: :func:`watch_run_dir` below stopping a child that overfills a host-backed
-directory (the directory itself has carried a shared-service-principal child's token file).
+directory (no child has one since ADR 0023; the directory once carried a shared-service-principal
+child's token file, T147).
 
 The second layer here is the fallback should the ``tmpfs`` fail, and the way of a child that must
 keep files the host reads: the launcher is given a host directory (``SandboxSpec.host_run_dir``),

@@ -108,7 +108,7 @@ export function EnvironmentPanel({ slug }: EnvironmentPanelProps) {
             </AppSectionLink>
           }
         >
-          The environment is read from the active release. Press Update in
+          The environment is read from the active release. Press Deploy in
           Deployments to make the first one.
         </EmptyState>
       </Section>

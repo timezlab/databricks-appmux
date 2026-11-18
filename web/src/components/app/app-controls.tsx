@@ -30,8 +30,8 @@ export interface AppControls {
 }
 
 /**
- * Update, Start, Stop and Restart as calls through the page's one write queue.
- * Overview and Deployments both offer Update; each keeps its own refusal so it
+ * Deploy, Start, Stop and Restart as calls through the page's one write queue.
+ * Overview and Deployments both offer Deploy; each keeps its own refusal so it
  * shows where the button was pressed.
  */
 export function useAppControls(
@@ -88,11 +88,11 @@ export function UpdateButton({
     <Button
       variant="primary"
       isBusy={state === "busy"}
-      busyLabel="Updating"
+      busyLabel="Deploying"
       disabled={!availability.isAllowed || state === "blocked"}
       onClick={onUpdate}
     >
-      Update
+      Deploy
     </Button>
   );
 }

@@ -202,7 +202,7 @@ export function appActionAvailability(
 }
 
 const NEEDS_RELEASE_REASON =
-  "There is no active release to run yet; use Update to fetch one.";
+  "There is no active release to run yet; use Deploy to fetch one.";
 
 /**
  * The release source viewer. The contract grants `release.view_source` to
@@ -220,7 +220,7 @@ export function canViewSource(actor: Actor | null): Availability {
  * `app_missing` for an app that is gone, `not_pending` for a request an admin
  * already closed and `request_pending` for one the list did not show yet.
  * Every other 409 (`slug_taken`, `no_release`, `release_protected`, and the
- * `conflict` of an Update that already retried on fresh data) refuses the
+ * `conflict` of a Deploy that already retried on fresh data) refuses the
  * write as it stands, and reading the app again would only bury that refusal
  * under a reload notice. The error notice offers its Reload for these codes
  * only, for the same reason (`describeError`, components/error-message.ts).

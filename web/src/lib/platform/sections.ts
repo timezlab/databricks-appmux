@@ -81,7 +81,7 @@ export interface SettingGroup {
 
 /**
  * The fourteen settings, grouped by what they govern, riskiest first: the
- * delegation switch lends a token, the rest are limits. Every setting is in
+ * delegation switch hands out a secret, the rest are limits. Every setting is in
  * exactly one group (tested), so none can go missing from the page.
  */
 export const SETTING_GROUPS: readonly SettingGroup[] = [
@@ -89,7 +89,8 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     id: "delegation",
     href: "#delegation",
     title: "Delegation",
-    summary: "Whether apps can be lent the appmux service principal's token.",
+    summary:
+      "Whether apps can be given the appmux service principal's client ID and secret.",
     keys: ["shared_sp_delegation_allowed"],
   },
   {
@@ -107,7 +108,7 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     id: "builds",
     href: "#builds",
     title: "Builds and packages",
-    summary: "How an Update installs packages and checks what it attaches.",
+    summary: "How a Deploy installs packages and checks what it attaches.",
     keys: [
       "package_mode",
       "default_wheel_sources",

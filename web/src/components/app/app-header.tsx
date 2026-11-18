@@ -83,7 +83,7 @@ interface ControlAvailability {
   update: Availability;
 }
 
-/** Start, Stop, Restart and Update in one row; the ones that are off say why under it. */
+/** Start, Stop, Restart and Deploy in one row; the ones that are off say why under it. */
 function ControlRow({
   app,
   actions,
@@ -99,7 +99,7 @@ function ControlRow({
     { label: "Start", availability: availability.start },
     { label: "Stop", availability: availability.stop },
     { label: "Restart", availability: availability.restart },
-    { label: "Update", availability: availability.update },
+    { label: "Deploy", availability: availability.update },
   ]);
   const isHeld = (key: string) => actions.stateOf(key) === "blocked";
 
@@ -229,14 +229,14 @@ function NoticeActionControl({
     <Button
       size="small"
       isBusy={actions.stateOf("update") === "busy"}
-      busyLabel="Updating"
+      busyLabel="Deploying"
       disabled={
         !availability.update.isAllowed ||
         actions.stateOf("update") === "blocked"
       }
       onClick={controls.runUpdate}
     >
-      Fetch the first release
+      Deploy the first release
     </Button>
   );
 }

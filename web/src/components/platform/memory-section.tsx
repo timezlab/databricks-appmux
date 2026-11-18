@@ -30,9 +30,10 @@ export function MemorySection({ view }: { view: PlatformView }) {
           The container allows {formatCount(memory.limitMb)} MB. appmux keeps{" "}
           {formatCount(memory.reserveMb)} MB for itself (memory_reserve_mb), so
           the apps share {formatCount(memory.availableMb)} MB. Committed is the
-          budget of each running app plus its per-child overhead and any update
-          overlap. The {formatCount(view.apps.length)} registered apps hold{" "}
-          {formatCount(registeredMb)} MB of budgets in total, running or not.
+          budget of each running app plus its per-child overhead and the overlap
+          while a deploy runs. The {formatCount(view.apps.length)} registered
+          apps hold {formatCount(registeredMb)} MB of budgets in total, running
+          or not.
         </p>
       </div>
     </Section>

@@ -54,7 +54,7 @@ const STALE_VERSION = /changed by someone else/i;
 /**
  * A 409 offers a reload only when its code says the page was stale (the codes
  * after which the app page reads the app again). Any other 409 refuses the
- * write as it stands (a taken slug, a protected release, an Update that
+ * write as it stands (a taken slug, a protected release, a Deploy that
  * already retried): fresh data would show the same refusal, so the server's
  * reason is the whole message.
  */

@@ -574,7 +574,7 @@ def test_a_requirement_the_environment_no_longer_meets_fails_the_release_before_
     )
     assert check.failure_reason() == (
         "the environment no longer provides 'uvicorn==0.30.6' (it has 0.31.0); "
-        "add a wheel and Update"
+        "add a wheel and Deploy"
     )
 
 
@@ -588,7 +588,7 @@ def test_the_recheck_lists_every_requirement_that_no_longer_holds(tmp_path: Path
     )
     assert check.failure_reason() == (
         "the environment no longer provides 'uvicorn==0.30.6' (it has 0.31.0), "
-        "'polars>=1.0' (it has no polars); add a wheel and Update"
+        "'polars>=1.0' (it has no polars); add a wheel and Deploy"
     )
 
 

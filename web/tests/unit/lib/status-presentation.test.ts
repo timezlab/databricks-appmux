@@ -87,7 +87,7 @@ describe("what each state means to the person", () => {
     const presentation = appStatePresentation("no_release");
     assert.equal(presentation.tone, "warning");
     assert.equal(presentation.label, "No release");
-    assert.match(presentation.description, /Update/);
+    assert.match(presentation.description, /Deploy/);
     assert.doesNotMatch(presentation.description, /starting/i);
   });
 

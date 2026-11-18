@@ -19,10 +19,27 @@ describe("updateOutcomeMessage", () => {
   });
 
   it("says nothing was created when the folder equals a live release", () => {
-    const text = updateOutcomeMessage({ status: "up_to_date", release_no: 7 });
-    assert.match(text, /up to date/i);
+    const text = updateOutcomeMessage({
+      status: "up_to_date",
+      release_no: 7,
+      started: false,
+    });
+    assert.match(text, /nothing to deploy/i);
     assert.match(text, /release 7/i);
     assert.match(text, /no new release/i);
+    assert.doesNotMatch(text, /starting/i);
+  });
+
+  it("says the stopped app is starting when the folder equals a live release", () => {
+    const text = updateOutcomeMessage({
+      status: "up_to_date",
+      release_no: 7,
+      started: true,
+    });
+    assert.match(text, /nothing to deploy/i);
+    assert.match(text, /release 7/i);
+    assert.match(text, /was stopped/i);
+    assert.match(text, /starting that release/i);
   });
 });
 

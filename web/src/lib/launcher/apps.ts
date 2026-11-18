@@ -56,8 +56,8 @@ const NOT_OPEN_REASON: Record<
     visitor: "Crashed. Ask the app admin to restart it.",
   },
   no_release: {
-    manager: "No release is serving. Update it from Manage.",
-    visitor: "No release is serving. Ask the app admin to update it.",
+    manager: "No release is serving. Deploy it from Manage.",
+    visitor: "No release is serving. Ask the app admin to deploy it.",
   },
 };
 const INVALID_SLUG_REASON =

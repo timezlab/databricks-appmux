@@ -122,7 +122,7 @@ def plan_config_edit(
     source = config_source_release(snapshot, config)
     if source is None and wanted != ReleaseConfig():
         raise ConfigEditRefused(
-            "this app has no release to apply env entries or wheel sources to; press Update first",
+            "this app has no release to apply env entries or wheel sources to; press Deploy first",
             code="no_release",
         )
     if source is None or source.config == wanted:
